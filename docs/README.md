@@ -301,8 +301,8 @@ This documentation is part of HLX, released under the **Apache 2.0 License**.
 
 **Version:** 1.1.0
 **Last Updated:** December 26, 2025
-**Status:** Production-ready
-**Completeness:** Comprehensive
+**Status:** Ready for external validation
+**Completeness:** Comprehensive-ish?
 
 ---
 
