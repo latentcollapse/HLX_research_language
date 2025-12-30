@@ -11,7 +11,7 @@ It's driven by a Rust implementation of the full transformer training logic (src
 There's a shell script (benchmark_hlx.sh) that handles compiling and running it, plus logging results.
 The CUDA baseline is a separate Python script (benchmark_cuda.py) using PyTorch that matches the architecture.
 
-What follows documents the HLX language, its transport guarantees, and the experimental runtimes built to test those ideas as well as complete specifications for the HLX language ecosystem, compiler, and runtimes.
+What follows documents the HLX language, its transport guarantees, and the experimental runtimes built to test those ideas as well as complete specifications for the HLX language ecosystem, compiler, and runtimes. For clarification, the runic track is for inter LLM or inter machine data transfer. The ASCII version is the more "human usable" version
 
 ---
 
