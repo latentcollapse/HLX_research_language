@@ -6,7 +6,7 @@
 
 **The Goal: Achieving lossless data transfer between LLMs and escaping CUDA lock-in**
 
-Complete specifications for the HLX language ecosystem, compiler, and runtimes.
+What follows documents the HLX language, its transport guarantees, and the experimental runtimes built to test those ideas as well as complete specifications for the HLX language ecosystem, compiler, and runtimes.
 
 ---
 
