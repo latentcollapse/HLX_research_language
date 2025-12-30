@@ -4,6 +4,8 @@
 
 # HLX Language and System Documentation
 
+**The Goal: Achieving lossless data transfer between LLMs and escaping CUDA lock-in**
+
 Complete specifications for the HLX language ecosystem, compiler, and runtimes.
 
 ---
