@@ -17,7 +17,7 @@ venv/
 .pytest_cache/
 
 # SPIR-V compiled shaders
-*.spv
+# *.spv
 
 # Benchmark results
 benchmarks/results/*.csv

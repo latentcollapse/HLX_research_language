@@ -32,6 +32,10 @@ path = "src/bin/hlx_vulkan_train.rs"
 name = "hlx_lcb_service"
 path = "src/bin/hlx_lcb_service.rs"
 
+[[bin]]
+name = "train_transformer_full"
+path = "src/bin/train_transformer_full.rs"
+
 [dependencies]
 # CLI argument parsing
 clap = { version = "4.4", features = ["derive"] }
