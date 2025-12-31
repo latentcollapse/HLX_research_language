@@ -61,6 +61,9 @@ impl VulkanTrainingContext {
         let device_name = unsafe {
             std::ffi::CStr::from_ptr(device_props.device_name.as_ptr()).to_string_lossy()
         };
+        println!("\n╔══════════════════════════════════════════════════════╗");
+        println!("║  VULKAN DEVICE: {:<36} ║", device_name);
+        println!("╚══════════════════════════════════════════════════════╝\n");
         println!("Using GPU: {}", device_name);
 
         let memory_properties = unsafe {
