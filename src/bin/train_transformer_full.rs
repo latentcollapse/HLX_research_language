@@ -388,10 +388,22 @@ pub fn create_batches(
     tokenizer: &CharTokenizer,
     batch_size: usize,
     max_seq_len: usize,
+    seed: u64,
 ) -> Vec<Batch> {
+    // Deterministic shuffle
+    let mut indices: Vec<usize> = (0..examples.len()).collect();
+    let mut rng_seed = seed;
+    // Fisher-Yates shuffle
+    for i in (1..indices.len()).rev() {
+        rng_seed = rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+        let j = (rng_seed as usize) % (i + 1);
+        indices.swap(i, j);
+    }
+
+    let shuffled_examples: Vec<&Example> = indices.iter().map(|&i| &examples[i]).collect();
     let mut batches = Vec::new();
     
-    for chunk in examples.chunks(batch_size) {
+    for chunk in shuffled_examples.chunks(batch_size) {
         let actual_batch_size = chunk.len();
         let mut all_tokens: Vec<Vec<u32>> = chunk.iter()
             .map(|ex| tokenizer.encode(&format!("{} -> {}", ex.input, ex.output)))
@@ -652,8 +664,8 @@ pub fn train_gpu(config: TrainConfig) -> Result<TrainHistory, String> {
     println!("  Parameters: {:.2}M", transformer_config.param_count() as f64 / 1e6);
     
     let batches = create_batches(&examples, &tokenizer, config.batch_size as usize, 
-        transformer_config.max_seq_len as usize);
-    println!("  Created {} batches", batches.len());
+        transformer_config.max_seq_len as usize, config.seed);
+    println!("  Created {} batches (shuffled)", batches.len());
     
     // =========================================================================
     // LOAD SHADERS
@@ -797,16 +809,36 @@ pub fn train_gpu(config: TrainConfig) -> Result<TrainHistory, String> {
         Ok(())
     };
     
-    // Xavier initialization
+    // PyTorch-style Kaiming Uniform initialization
     let mut rng_seed = config.seed;
     let mut rng = || {
         rng_seed = rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1);
         (rng_seed as f64 / u64::MAX as f64) as f32
     };
     
-    let mut xavier_init = |size: usize, fan_in: usize, fan_out: usize| -> Vec<f32> {
-        let limit = (6.0 / (fan_in + fan_out) as f32).sqrt();
-        (0..size).map(|_| (2.0 * rng() - 1.0) * limit).collect()
+    // Kaiming Uniform (fan_in, nonlinearity='leaky_relu' with a=sqrt(5) implies gain=1/sqrt(3)?? No, PyTorch default is a=sqrt(5))
+    // bound = sqrt(3) * gain / sqrt(fan_in)
+    // For PyTorch Linear: gain = 1 (approx), bound = 1 / sqrt(fan_in)
+    let mut kaiming_uniform = |size: usize, fan_in: usize| -> Vec<f32> {
+        let bound = (1.0 / (fan_in as f32)).sqrt();
+        (0..size).map(|_| (2.0 * rng() - 1.0) * bound).collect()
+    };
+
+    // Normal initialization for embeddings (mean=0, std=0.02)
+    // Box-Muller transform
+    let mut normal_init = |size: usize, std: f32| -> Vec<f32> {
+        let mut data = Vec::with_capacity(size);
+        for _ in 0..(size + 1) / 2 {
+            let u1 = rng().max(1e-7); // Avoid log(0)
+            let u2 = rng();
+            let r = (-2.0 * u1.ln()).sqrt();
+            let theta = 2.0 * std::f32::consts::PI * u2;
+            data.push(r * theta.cos() * std);
+            if data.len() < size {
+                data.push(r * theta.sin() * std);
+            }
+        }
+        data
     };
     
     // =========================================================================
@@ -835,8 +867,8 @@ pub fn train_gpu(config: TrainConfig) -> Result<TrainHistory, String> {
     let (pos_emb_m_buf, pos_emb_m_mem) = create_buffer((max_seq_len * d_model * 4) as u64)?;
     let (pos_emb_v_buf, pos_emb_v_mem) = create_buffer((max_seq_len * d_model * 4) as u64)?;
     
-    upload_f32(token_emb_mem, &xavier_init(vocab_size * d_model, vocab_size, d_model))?;
-    upload_f32(pos_emb_mem, &xavier_init(max_seq_len * d_model, max_seq_len, d_model))?;
+    upload_f32(token_emb_mem, &normal_init(vocab_size * d_model, 0.02))?;
+    upload_f32(pos_emb_mem, &normal_init(max_seq_len * d_model, 0.02))?;
     upload_f32(token_emb_m_mem, &vec![0.0f32; vocab_size * d_model])?;
     upload_f32(token_emb_v_mem, &vec![0.0f32; vocab_size * d_model])?;
     upload_f32(token_emb_grad_mem, &vec![0.0f32; vocab_size * d_model])?;
@@ -850,7 +882,7 @@ pub fn train_gpu(config: TrainConfig) -> Result<TrainHistory, String> {
     let (output_proj_m_buf, output_proj_m_mem) = create_buffer((d_model * vocab_size * 4) as u64)?;
     let (output_proj_v_buf, output_proj_v_mem) = create_buffer((d_model * vocab_size * 4) as u64)?;
     
-    upload_f32(output_proj_mem, &xavier_init(d_model * vocab_size, d_model, vocab_size))?;
+    upload_f32(output_proj_mem, &kaiming_uniform(d_model * vocab_size, d_model))?;
     upload_f32(output_proj_m_mem, &vec![0.0f32; d_model * vocab_size])?;
     upload_f32(output_proj_v_mem, &vec![0.0f32; d_model * vocab_size])?;
     
@@ -896,16 +928,16 @@ pub fn train_gpu(config: TrainConfig) -> Result<TrainHistory, String> {
         let ffn_w2 = create_buffer(ffn2_size)?;
         
         // Initialize weights
-        upload_f32(q_proj.1, &xavier_init(d_model * d_model, d_model, d_model))?;
-        upload_f32(k_proj.1, &xavier_init(d_model * d_model, d_model, d_model))?;
-        upload_f32(v_proj.1, &xavier_init(d_model * d_model, d_model, d_model))?;
-        upload_f32(o_proj.1, &xavier_init(d_model * d_model, d_model, d_model))?;
+        upload_f32(q_proj.1, &kaiming_uniform(d_model * d_model, d_model))?;
+        upload_f32(k_proj.1, &kaiming_uniform(d_model * d_model, d_model))?;
+        upload_f32(v_proj.1, &kaiming_uniform(d_model * d_model, d_model))?;
+        upload_f32(o_proj.1, &kaiming_uniform(d_model * d_model, d_model))?;
         upload_f32(ln1_gamma.1, &vec![1.0f32; d_model])?;
         upload_f32(ln1_beta.1, &vec![0.0f32; d_model])?;
         upload_f32(ln2_gamma.1, &vec![1.0f32; d_model])?;
         upload_f32(ln2_beta.1, &vec![0.0f32; d_model])?;
-        upload_f32(ffn_w1.1, &xavier_init(d_model * ffn_dim, d_model, ffn_dim))?;
-        upload_f32(ffn_w2.1, &xavier_init(ffn_dim * d_model, ffn_dim, d_model))?;
+        upload_f32(ffn_w1.1, &kaiming_uniform(d_model * ffn_dim, d_model))?;
+        upload_f32(ffn_w2.1, &kaiming_uniform(ffn_dim * d_model, ffn_dim))?;
         
         // Gradients
         let q_proj_grad = create_buffer(attn_size)?;
