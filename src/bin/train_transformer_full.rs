@@ -616,12 +616,29 @@ pub fn train_gpu(config: TrainConfig) -> Result<TrainHistory, String> {
     println!("╚══════════════════════════════════════════════════════╝\n");
     
     // Initialize Vulkan
-    let ctx = VulkanTrainingContext::new()?;
+    println!("Checking Vulkan environment...");
+    let ctx = match VulkanTrainingContext::new() {
+        Ok(c) => c,
+        Err(e) => {
+            println!("❌ VULKAN ERROR: {}", e);
+            println!("Suggestion: Ensure NVIDIA Vulkan ICD is installed and /dev/nvidiactl is mapped.");
+            return Err(e);
+        }
+    };
     let device = ctx.device.clone();
     
     // Load corpus
-    println!("Loading corpus from {:?}...", config.corpus_path);
-    let examples = load_corpus(&config.corpus_path)?;
+    let corpus_path = if config.corpus_path.exists() {
+        config.corpus_path.clone()
+    } else if std::path::Path::new("test_corpus.jsonl").exists() {
+        println!("  corpus.jsonl not found, falling back to test_corpus.jsonl");
+        std::path::PathBuf::from("test_corpus.jsonl")
+    } else {
+        return Err(format!("Could not find corpus.jsonl or test_corpus.jsonl in {:?}", std::env::current_dir()));
+    };
+
+    println!("Loading corpus from {:?}...", corpus_path);
+    let examples = load_corpus(&corpus_path)?;
     println!("  Loaded {} examples", examples.len());
     
     let tokenizer = CharTokenizer::new();
@@ -640,9 +657,23 @@ pub fn train_gpu(config: TrainConfig) -> Result<TrainHistory, String> {
     // =========================================================================
     
     println!("\nLoading shaders...");
-    let shader_dir = PathBuf::from("shader/spv");
+    
+    // Robust shader directory resolution
+    let shader_dir = if std::path::Path::new("shader/spv").exists() {
+        std::path::PathBuf::from("shader/spv")
+    } else if std::path::Path::new("hlx-compiler/shader/spv").exists() {
+        std::path::PathBuf::from("hlx-compiler/shader/spv")
+    } else {
+        println!("❌ ERROR: Could not find shader/spv directory.");
+        println!("Current directory: {:?}", std::env::current_dir().unwrap_or_default());
+        return Err("Missing shader/spv directory".to_string());
+    };
+
+    println!("Using shader directory: {:?}", shader_dir);
+
     let load_shader = |name: &str| -> Result<Vec<u8>, String> {
-        std::fs::read(shader_dir.join(name)).map_err(|e| format!("Failed to load {}: {}", name, e))
+        let full_path = shader_dir.join(name);
+        std::fs::read(&full_path).map_err(|e| format!("Failed to load {:?}: {}", full_path, e))
     };
     
     let gemm_spv = load_shader("gemm.spv")?;
