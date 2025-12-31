@@ -810,27 +810,23 @@ pub fn train_gpu(config: TrainConfig) -> Result<TrainHistory, String> {
     };
     
     // PyTorch-style Kaiming Uniform initialization
-    let mut rng_seed = config.seed;
-    let mut rng = || {
-        rng_seed = rng_seed.wrapping_mul(6364136223846793005).wrapping_add(1);
-        (rng_seed as f64 / u64::MAX as f64) as f32
-    };
+    fn rng(seed: &mut u64) -> f32 {
+        *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+        (*seed as f64 / u64::MAX as f64) as f32
+    }
     
-    // Kaiming Uniform (fan_in, nonlinearity='leaky_relu' with a=sqrt(5) implies gain=1/sqrt(3)?? No, PyTorch default is a=sqrt(5))
-    // bound = sqrt(3) * gain / sqrt(fan_in)
-    // For PyTorch Linear: gain = 1 (approx), bound = 1 / sqrt(fan_in)
-    let mut kaiming_uniform = |size: usize, fan_in: usize| -> Vec<f32> {
+    // Kaiming Uniform
+    fn kaiming_uniform(size: usize, fan_in: usize, seed: &mut u64) -> Vec<f32> {
         let bound = (1.0 / (fan_in as f32)).sqrt();
-        (0..size).map(|_| (2.0 * rng() - 1.0) * bound).collect()
-    };
+        (0..size).map(|_| (2.0 * rng(seed) - 1.0) * bound).collect()
+    }
 
-    // Normal initialization for embeddings (mean=0, std=0.02)
-    // Box-Muller transform
-    let mut normal_init = |size: usize, std: f32| -> Vec<f32> {
+    // Normal initialization
+    fn normal_init(size: usize, std: f32, seed: &mut u64) -> Vec<f32> {
         let mut data = Vec::with_capacity(size);
         for _ in 0..(size + 1) / 2 {
-            let u1 = rng().max(1e-7); // Avoid log(0)
-            let u2 = rng();
+            let u1 = rng(seed).max(1e-7); // Avoid log(0)
+            let u2 = rng(seed);
             let r = (-2.0 * u1.ln()).sqrt();
             let theta = 2.0 * std::f32::consts::PI * u2;
             data.push(r * theta.cos() * std);
@@ -839,7 +835,9 @@ pub fn train_gpu(config: TrainConfig) -> Result<TrainHistory, String> {
             }
         }
         data
-    };
+    }
+
+    let mut rng_seed = config.seed;
     
     // =========================================================================
     // ALLOCATE BUFFERS
@@ -867,8 +865,8 @@ pub fn train_gpu(config: TrainConfig) -> Result<TrainHistory, String> {
     let (pos_emb_m_buf, pos_emb_m_mem) = create_buffer((max_seq_len * d_model * 4) as u64)?;
     let (pos_emb_v_buf, pos_emb_v_mem) = create_buffer((max_seq_len * d_model * 4) as u64)?;
     
-    upload_f32(token_emb_mem, &normal_init(vocab_size * d_model, 0.02))?;
-    upload_f32(pos_emb_mem, &normal_init(max_seq_len * d_model, 0.02))?;
+    upload_f32(token_emb_mem, &normal_init(vocab_size * d_model, 0.02, &mut rng_seed))?;
+    upload_f32(pos_emb_mem, &normal_init(max_seq_len * d_model, 0.02, &mut rng_seed))?;
     upload_f32(token_emb_m_mem, &vec![0.0f32; vocab_size * d_model])?;
     upload_f32(token_emb_v_mem, &vec![0.0f32; vocab_size * d_model])?;
     upload_f32(token_emb_grad_mem, &vec![0.0f32; vocab_size * d_model])?;
@@ -882,7 +880,7 @@ pub fn train_gpu(config: TrainConfig) -> Result<TrainHistory, String> {
     let (output_proj_m_buf, output_proj_m_mem) = create_buffer((d_model * vocab_size * 4) as u64)?;
     let (output_proj_v_buf, output_proj_v_mem) = create_buffer((d_model * vocab_size * 4) as u64)?;
     
-    upload_f32(output_proj_mem, &kaiming_uniform(d_model * vocab_size, d_model))?;
+    upload_f32(output_proj_mem, &kaiming_uniform(d_model * vocab_size, d_model, &mut rng_seed))?;
     upload_f32(output_proj_m_mem, &vec![0.0f32; d_model * vocab_size])?;
     upload_f32(output_proj_v_mem, &vec![0.0f32; d_model * vocab_size])?;
     
@@ -928,16 +926,16 @@ pub fn train_gpu(config: TrainConfig) -> Result<TrainHistory, String> {
         let ffn_w2 = create_buffer(ffn2_size)?;
         
         // Initialize weights
-        upload_f32(q_proj.1, &kaiming_uniform(d_model * d_model, d_model))?;
-        upload_f32(k_proj.1, &kaiming_uniform(d_model * d_model, d_model))?;
-        upload_f32(v_proj.1, &kaiming_uniform(d_model * d_model, d_model))?;
-        upload_f32(o_proj.1, &kaiming_uniform(d_model * d_model, d_model))?;
+        upload_f32(q_proj.1, &kaiming_uniform(d_model * d_model, d_model, &mut rng_seed))?;
+        upload_f32(k_proj.1, &kaiming_uniform(d_model * d_model, d_model, &mut rng_seed))?;
+        upload_f32(v_proj.1, &kaiming_uniform(d_model * d_model, d_model, &mut rng_seed))?;
+        upload_f32(o_proj.1, &kaiming_uniform(d_model * d_model, d_model, &mut rng_seed))?;
         upload_f32(ln1_gamma.1, &vec![1.0f32; d_model])?;
         upload_f32(ln1_beta.1, &vec![0.0f32; d_model])?;
         upload_f32(ln2_gamma.1, &vec![1.0f32; d_model])?;
         upload_f32(ln2_beta.1, &vec![0.0f32; d_model])?;
-        upload_f32(ffn_w1.1, &kaiming_uniform(d_model * ffn_dim, d_model))?;
-        upload_f32(ffn_w2.1, &kaiming_uniform(ffn_dim * d_model, ffn_dim))?;
+        upload_f32(ffn_w1.1, &kaiming_uniform(d_model * ffn_dim, d_model, &mut rng_seed))?;
+        upload_f32(ffn_w2.1, &kaiming_uniform(ffn_dim * d_model, ffn_dim, &mut rng_seed))?;
         
         // Gradients
         let q_proj_grad = create_buffer(attn_size)?;
