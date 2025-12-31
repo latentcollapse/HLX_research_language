@@ -76,5 +76,7 @@ validation = []  # Enable Vulkan validation layers by default
 validate_determinism = []  # Runtime determinism testing (5-run bitwise comparison)
 
 [profile.release]
-lto = true
-codegen-units = 1
+lto = false
+codegen-units = 16
+debug = false
+panic = "abort"
