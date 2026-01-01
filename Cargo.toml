@@ -1,82 +1,55 @@
-[package]
-name = "hlx_vulkan"
+[workspace]
+resolver = "2"
+members = [
+    "hlx_core",
+    "hlx_compiler",
+    "hlx_runtime",
+    "hlx_cli",
+]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["Matt <matt@example.com>"]
-description = "HLX Vulkan compute backend with PyO3 bindings"
-license = "MIT"
-readme = "README.md"
-repository = "https://github.com/matt/hlx-vulkan"
+authors = ["HLX Contributors"]
+license = "Apache-2.0"
+repository = "https://github.com/latentcollapse/hlx-compiler"
 
-[lib]
-name = "hlx_vulkan"
-crate-type = ["cdylib", "rlib"]  # cdylib for PyO3, rlib for binaries
+[workspace.dependencies]
+# Core serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+bincode = "1.3"
+blake3 = "1.5"
+hex = "0.4"
 
-[[bin]]
-name = "hlx_shader_compiler"
-path = "src/bin/hlx_shader_compiler.rs"
-
-[[bin]]
-name = "hlx_pipeline_cli"
-path = "src/bin/hlx_pipeline_cli.rs"
-
-[[bin]]
-name = "hlx_demo_cube"
-path = "src/bin/hlx_demo_cube.rs"
-
-[[bin]]
-name = "hlx_vulkan_train"
-path = "src/bin/hlx_vulkan_train.rs"
-
-[[bin]]
-name = "hlx_lcb_service"
-path = "src/bin/hlx_lcb_service.rs"
-
-[[bin]]
-name = "train_transformer_full"
-path = "src/bin/train_transformer_full.rs"
-
-[dependencies]
-# CLI argument parsing
-clap = { version = "4.4", features = ["derive"] }
-# Vulkan bindings - thin wrapper, full control
-ash = "0.38"
-
-# Window management and Vulkan surface creation
-winit = "0.28"
-raw-window-handle = "0.6"
-ash-window = "0.13"
-
-# PyO3 for Python bindings
-pyo3 = { version = "0.22", features = ["extension-module"] }
+# Parsing
+nom = "7.1"
 
 # Error handling
-thiserror = "2.0"
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Numerics (CPU backend)
+ndarray = "0.15"
+
+# Vulkan (GPU backend)
+ash = "0.37"
+gpu-allocator = "0.25"
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+
+# Testing & Benchmarks
+criterion = "0.5"
 
 # Logging
-log = "0.4"
-env_logger = "0.11"
-
-# JSON parsing
-serde_json = "1.0"
-
-# Cryptographic hashing (content addressing)
-sha2 = "0.10"
-
-# Signal handling for graceful shutdown
-ctrlc = "3.4"
-
-[dev-dependencies]
-# Testing
-pretty_assertions = "1.4"
-
-[features]
-default = []
-validation = []  # Enable Vulkan validation layers by default
-validate_determinism = []  # Runtime determinism testing (5-run bitwise comparison)
+tracing = "0.1"
+tracing-subscriber = "0.3"
 
 [profile.release]
-lto = false
-codegen-units = 16
-debug = false
+lto = true
+codegen-units = 1
 panic = "abort"
+
+[profile.bench]
+lto = true

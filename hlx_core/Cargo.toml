@@ -1,0 +1,17 @@
+[package]
+name = "hlx_core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Core types and IR for the HLX deterministic ML substrate"
+
+[dependencies]
+serde.workspace = true
+bincode.workspace = true
+blake3.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
