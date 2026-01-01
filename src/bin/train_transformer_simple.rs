@@ -256,7 +256,7 @@ impl Default for TrainConfig {
         Self {
             corpus_path: PathBuf::from("corpus.jsonl"),
             model_size: "tiny".to_string(),
-            num_epochs: 100,
+            num_epochs: 10,
             batch_size: 4,
             learning_rate: 3e-4,  // Higher LR with cosine decay
             warmup_steps: 10,  // Short warmup before decay
