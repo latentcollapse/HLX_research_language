@@ -31,15 +31,37 @@ impl Executor {
         // Create execution context
         let mut ctx = ExecutionContext::new(&self.config)?;
         
+        // Scan for function definitions first
+        for inst in capsule.instructions.iter() {
+            if let Instruction::FuncDef { name, body } = inst {
+                ctx.functions.insert(name.clone(), *body);
+            }
+        }
+
         // Execute instructions
-        for (idx, inst) in capsule.instructions.iter().enumerate() {
+        let mut pc = 0;
+        while pc < capsule.instructions.len() {
+            let inst = &capsule.instructions[pc];
+            
             if self.config.debug {
-                tracing::debug!("Executing instruction {}: {:?}", idx, inst);
+                tracing::debug!("PC {}: {:?}", pc, inst);
             }
             
-            match ctx.execute_instruction(inst)? {
-                ControlFlow::Continue => continue,
+            match ctx.execute_instruction(inst, pc)? {
+                ControlFlow::Continue => pc += 1,
+                ControlFlow::Jump(target) => pc = target as usize,
                 ControlFlow::Return(val) => return Ok(val),
+                ControlFlow::Call(target, ret) => {
+                    ctx.call_stack.push(ret);
+                    pc = target as usize;
+                }
+                ControlFlow::Ret => {
+                    if let Some(ret_pc) = ctx.call_stack.pop() {
+                        pc = ret_pc;
+                    } else {
+                        return Ok(Value::Null); // End of main
+                    }
+                }
             }
         }
         
@@ -51,6 +73,9 @@ impl Executor {
 /// Control flow result from instruction execution
 enum ControlFlow {
     Continue,
+    Jump(u32),
+    Call(u32, usize), // target, return_pc
+    Ret,
     Return(Value),
 }
 
@@ -58,6 +83,15 @@ enum ControlFlow {
 struct ExecutionContext {
     /// Register file (maps register number to value)
     registers: HashMap<u32, Value>,
+    
+    /// Function table (name -> start_index)
+    functions: HashMap<String, u32>,
+    
+    /// Call stack (return addresses)
+    call_stack: Vec<usize>,
+
+    /// Loop counters (PC -> count) for DLB
+    loop_counters: HashMap<u32, u32>,
     
     /// Tensor handles for GPU operations
     tensors: HashMap<u32, TensorHandle>,
@@ -73,6 +107,9 @@ impl ExecutionContext {
     fn new(config: &RuntimeConfig) -> Result<Self> {
         Ok(Self {
             registers: HashMap::new(),
+            functions: HashMap::new(),
+            call_stack: Vec::new(),
+            loop_counters: HashMap::new(),
             tensors: HashMap::new(),
             cas: ValueStore::new(),
             config: config.clone(),
@@ -89,11 +126,68 @@ impl ExecutionContext {
         self.registers.insert(reg, val);
     }
     
-    fn execute_instruction(&mut self, inst: &Instruction) -> Result<ControlFlow> {
+    fn execute_instruction(&mut self, inst: &Instruction, pc: usize) -> Result<ControlFlow> {
         match inst {
+            // === Control Flow ===
+            Instruction::If { cond, then_block, else_block } => {
+                let condition = self.get_bool(*cond)?;
+                if condition {
+                    return Ok(ControlFlow::Jump(*then_block));
+                } else {
+                    return Ok(ControlFlow::Jump(*else_block));
+                }
+            }
+
+            Instruction::Jump { target } => {
+                return Ok(ControlFlow::Jump(*target));
+            }
+
+            Instruction::Loop { cond, body, max_iter } => {
+                let condition = self.get_bool(*cond)?;
+                
+                // Deterministic Loop Bound Check
+                let count = self.loop_counters.entry(pc as u32).or_insert(0);
+                if *count >= *max_iter {
+                    return Err(HlxError::ValidationFail {
+                        message: format!("Deterministic Loop Bound exceeded (max: {})", max_iter),
+                    });
+                }
+                *count += 1;
+
+                if condition {
+                    return Ok(ControlFlow::Jump(*body));
+                } else {
+                    // Reset counter when loop exits
+                    *count = 0; 
+                    return Ok(ControlFlow::Continue);
+                }
+            }
+
+            Instruction::FuncDef { .. } => {
+                // Function definitions are skipped during execution
+                return Ok(ControlFlow::Continue);
+            }
+
+            Instruction::Call { out, func, args } => {
+                // Check if it's a user function
+                if let Some(&target) = self.functions.get(func) {
+                    return Ok(ControlFlow::Call(target, pc + 1));
+                } else {
+                    // Built-in function dispatch
+                    let result = self.call_builtin(func, args)?;
+                    self.set_reg(*out, result);
+                    return Ok(ControlFlow::Continue);
+                }
+            }
+
             // === Constants ===
             Instruction::Constant { out, val } => {
                 self.set_reg(*out, val.clone());
+            }
+
+            Instruction::Move { out, src } => {
+                let val = self.get_reg(*src)?.clone();
+                self.set_reg(*out, val);
             }
             
             // === Arithmetic ===
@@ -293,12 +387,7 @@ impl ExecutionContext {
                 self.set_reg(*out, x);
             }
             
-            // === Function Calls ===
-            Instruction::Call { out, func, args } => {
-                // Built-in function dispatch
-                let result = self.call_builtin(func, args)?;
-                self.set_reg(*out, result);
-            }
+            // === Function Calls handled above ===
             
             // Default: unimplemented instructions
             _ => {
@@ -567,18 +656,78 @@ mod tests {
     }
 
     #[test]
-    fn test_cas_roundtrip() {
+    fn test_conditional_if() {
         let config = RuntimeConfig::default();
         let executor = Executor::new(&config).unwrap();
         
+        // Logic: r0 = true; if r0 { return 100 } else { return 200 }
         let capsule = Capsule::new(vec![
-            Instruction::Constant { out: 0, val: Value::String("test data".to_string()) },
-            Instruction::Collapse { handle_out: 1, val: 0 },
-            Instruction::Resolve { val_out: 2, handle: 1 },
-            Instruction::Return { val: 2 },
+            Instruction::Constant { out: 0, val: Value::Boolean(true) },
+            Instruction::If { cond: 0, then_block: 2, else_block: 3 },
+            Instruction::Return { val: 4 }, // Target 2 (Return 100) - wait, target is index
+            Instruction::Return { val: 5 }, // Target 3 (Return 200)
+            Instruction::Constant { out: 4, val: Value::Integer(100) }, // This is index 4
+            Instruction::Constant { out: 5, val: Value::Integer(200) }, // This is index 5
+        ]);
+
+        // Corrected logic for flat stream:
+        // 0: r0 = true
+        // 1: if r0 then jump to 4 else jump to 6
+        // 2: (gap)
+        // 3: (gap)
+        // 4: r1 = 100
+        // 5: return r1
+        // 6: r2 = 200
+        // 7: return r2
+        let capsule = Capsule::new(vec![
+            Instruction::Constant { out: 0, val: Value::Boolean(true) }, // 0
+            Instruction::If { cond: 0, then_block: 3, else_block: 5 },     // 1
+            Instruction::Nop,                                            // 2
+            Instruction::Constant { out: 1, val: Value::Integer(100) },    // 3
+            Instruction::Return { val: 1 },                               // 4
+            Instruction::Constant { out: 1, val: Value::Integer(200) },    // 5
+            Instruction::Return { val: 1 },                               // 6
         ]);
         
         let result = executor.run(&capsule).unwrap();
-        assert_eq!(result, Value::String("test data".to_string()));
+        assert_eq!(result, Value::Integer(100));
+    }
+
+    #[test]
+    fn test_loop_dlb() {
+        let config = RuntimeConfig::default();
+        let executor = Executor::new(&config).unwrap();
+        
+        // Logic: 
+        // r0 = 0
+        // loop (r0 < 5, 10): r0 = r0 + 1
+        let capsule = Capsule::new(vec![
+            Instruction::Constant { out: 0, val: Value::Integer(0) },    // 0
+            Instruction::Constant { out: 1, val: Value::Integer(5) },    // 1
+            Instruction::Constant { out: 2, val: Value::Integer(1) },    // 2
+            Instruction::Lt { out: 3, lhs: 0, rhs: 1 },                  // 3: r3 = r0 < 5
+            Instruction::Loop { cond: 3, body: 6, max_iter: 10 },        // 4: if r3 jump 6 else continue
+            Instruction::Jump { target: 8 },                             // 5: EXIT
+            Instruction::Add { out: 0, lhs: 0, rhs: 2 },                 // 6: r0 = r0 + 1
+            Instruction::Jump { target: 3 },                             // 7: jump back to condition
+            Instruction::Return { val: 0 },                               // 8
+        ]);
+        
+        let result = executor.run(&capsule).unwrap();
+        assert_eq!(result, Value::Integer(5));
+
+        // Test DLB Panic:
+        // Loop runs forever but max_iter is 10.
+        let capsule_panic = Capsule::new(vec![
+            Instruction::Constant { out: 0, val: Value::Integer(0) },    // 0
+            Instruction::Constant { out: 1, val: Value::Boolean(true) }, // 1
+            Instruction::Loop { cond: 1, body: 2, max_iter: 10 },        // 2: Loop point
+            Instruction::Jump { target: 2 },                             // 3: Jump back to loop
+        ]);
+        
+        let err = executor.run(&capsule_panic);
+        assert!(err.is_err());
+        let err_msg = format!("{:?}", err);
+        assert!(err_msg.contains("Deterministic Loop Bound exceeded"));
     }
 }

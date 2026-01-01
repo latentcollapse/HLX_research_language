@@ -83,10 +83,11 @@ pub enum Statement {
         else_branch: Option<Vec<Spanned<Statement>>>,
     },
     
-    /// while (cond) { ... }
+    /// while (cond, max_iter) { ... }
     While {
         condition: Spanned<Expr>,
         body: Vec<Spanned<Statement>>,
+        max_iter: u32,
     },
     
     /// for (x in expr) { ... }

@@ -159,21 +159,14 @@ impl RunicEmitter {
                 }
             }
             
-            Statement::While { condition, body } => {
+            Statement::While { condition, body, max_iter: _ } => {
                 out.push_str(glyphs::WHILE);
-                out.push_str(" (");
                 self.emit_expr(&condition.node, out)?;
-                out.push_str(") {\n");
-                
-                self.indent += 1;
-                for s in body {
-                    self.emit_stmt(&s.node, out)?;
-                    out.push('\n');
+                out.push_str(" { ");
+                for stmt in body {
+                    self.emit_stmt(&stmt.node, out)?;
                 }
-                self.indent -= 1;
-                
-                out.push_str(&self.indent_str());
-                out.push('}');
+                out.push_str(" }");
             }
             
             Statement::For { variable, iterator, body } => {
@@ -479,9 +472,10 @@ impl HlxlEmitter {
                 }
             }
             
-            Statement::While { condition, body } => {
+            Statement::While { condition, body, max_iter } => {
                 out.push_str("while (");
                 self.emit_expr(&condition.node, out)?;
+                out.push_str(&format!(", {}", max_iter));
                 out.push_str(") {\n");
                 
                 self.indent += 1;

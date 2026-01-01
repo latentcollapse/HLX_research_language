@@ -85,6 +85,31 @@ fn statement(input: &str) -> ParseResult<Statement> {
     alt((
         map(tuple((keyword("let"), ws1, ident, ws, char('='), ws, spanned_expr)), |(_, _, n, _, _, _, v)| Statement::Let { name: n, value: v }),
         map(tuple((keyword("return"), ws1, spanned_expr)), |(_, _, v)| Statement::Return { value: v }),
+        // If
+        map(tuple((
+            keyword("if"), ws, spanned_expr, ws, char('{'), ws, many0(terminated(spanned_stmt, ws)), char('}'),
+            opt(tuple((ws, keyword("else"), ws, char('{'), ws, many0(terminated(spanned_stmt, ws)), char('}'))))
+        )), |(_, _, cond, _, _, _, then_body, _, els)| {
+            Statement::If {
+                condition: cond,
+                then_branch: then_body,
+                else_branch: els.map(|(_, _, _, _, _, body, _)| body),
+            }
+        }),
+        // While/Loop
+        map(tuple((
+            keyword("while"), ws, char('('), ws, spanned_expr, opt(tuple((ws, char(','), ws, digit1))), ws, char(')'), ws,
+            char('{'), ws, many0(terminated(spanned_stmt, ws)), char('}')
+        )), |(_, _, _, _, cond, max_iter_opt, _, _, _, _, _, body, _)| {
+            let max_iter = max_iter_opt
+                .map(|(_, _, _, d)| d.parse().unwrap())
+                .unwrap_or(1000); // Default for legacy HLXL
+            Statement::While {
+                condition: cond,
+                body,
+                max_iter,
+            }
+        }),
     ))(input)
 }
 

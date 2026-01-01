@@ -40,6 +40,7 @@ pub mod config;
 pub mod backend;
 pub mod executor;
 pub mod value_store;
+pub mod tuning;
 
 #[cfg(feature = "cpu")]
 pub mod backends;

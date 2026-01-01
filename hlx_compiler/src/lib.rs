@@ -7,6 +7,7 @@ pub mod parser;
 pub mod emitter;
 pub mod hlxl;
 pub mod runic;
+pub mod hlxc;
 pub mod lower;
 
 pub use ast::*;

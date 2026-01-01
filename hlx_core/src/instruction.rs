@@ -309,7 +309,34 @@ pub enum Instruction {
 
     // === Control Flow ===
     
-    /// Call a function
+    /// Conditional branch
+    /// If cond is true, execute then_block (capsule index), else execute else_block (capsule index)
+    If {
+        cond: Register,
+        then_block: u32,
+        else_block: u32,
+    },
+
+    /// Unconditional jump to instruction index
+    Jump {
+        target: u32,
+    },
+
+    /// Bounded loop
+    /// While cond is true, execute body (capsule index) up to max_iter times
+    Loop {
+        cond: Register,
+        body: u32,
+        max_iter: u32,
+    },
+
+    /// Define a function (metadata instruction, usually at top level)
+    FuncDef {
+        name: String,
+        body: u32, // Capsule index
+    },
+
+    /// Call a function by name
     Call {
         out: Register,
         func: String,
@@ -422,6 +449,10 @@ impl Instruction {
             Instruction::Resolve { val_out, .. } => Some(*val_out),
             Instruction::Snapshot { handle_out } => Some(*handle_out),
             // These don't produce output registers
+            Instruction::If { .. } => None,
+            Instruction::Jump { .. } => None,
+            Instruction::Loop { .. } => None,
+            Instruction::FuncDef { .. } => None,
             Instruction::AdamUpdate { .. } => None,
             Instruction::Return { .. } => None,
             Instruction::Store { .. } => None,
@@ -469,6 +500,10 @@ impl Instruction {
             Instruction::ReduceMax { input, .. } => vec![*input],
             Instruction::Embedding { indices, weight, .. } => vec![*indices, *weight],
             Instruction::AdamUpdate { param, grad, m, v, .. } => vec![*param, *grad, *m, *v],
+            Instruction::If { cond, .. } => vec![*cond],
+            Instruction::Jump { .. } => vec![],
+            Instruction::Loop { cond, .. } => vec![*cond],
+            Instruction::FuncDef { .. } => vec![],
             Instruction::Call { args, .. } => args.clone(),
             Instruction::Return { val } => vec![*val],
             Instruction::ArrayLen { array, .. } => vec![*array],
@@ -490,7 +525,12 @@ impl Instruction {
             Instruction::Print { .. } |
             Instruction::AdamUpdate { .. } |
             Instruction::Collapse { .. } |
-            Instruction::Snapshot { .. }
+            Instruction::Snapshot { .. } |
+            Instruction::Call { .. } |
+            Instruction::Return { .. } |
+            Instruction::If { .. } |
+            Instruction::Loop { .. } |
+            Instruction::Jump { .. }
         )
     }
 

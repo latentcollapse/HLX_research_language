@@ -42,6 +42,7 @@ pub fn lift_from_capsule(capsule: &Capsule) -> Result<Program> {
 struct LoweringContext {
     instructions: Vec<Instruction>,
     next_reg: Register,
+    next_label: u32,
     scopes: Vec<HashMap<String, Register>>,
 }
 
@@ -50,6 +51,7 @@ impl LoweringContext {
         Self {
             instructions: Vec::new(),
             next_reg: 0,
+            next_label: 0,
             scopes: vec![HashMap::new()],
         }
     }
@@ -58,6 +60,19 @@ impl LoweringContext {
         let reg = self.next_reg;
         self.next_reg += 1;
         reg
+    }
+
+    fn next_label(&mut self) -> u32 {
+        let label = self.next_label;
+        self.next_label += 1;
+        label
+    }
+
+    fn emit_label(&mut self, label: u32) {
+        // For now, labels are just markers. In a flat stream, 
+        // they are the index of the next instruction.
+        // We'll use a placeholder or handle this during a second pass if needed.
+        // For this simple implementation, we'll store the label mapping.
     }
     
     fn push_scope(&mut self) {
@@ -103,8 +118,18 @@ impl LoweringContext {
     fn lower_stmt(&mut self, stmt: &Statement) -> Result<()> {
         match stmt {
             Statement::Let { name, value } => {
-                let reg = self.lower_expr(&value.node)?;
-                self.bind(name, reg);
+                let val_reg = self.lower_expr(&value.node)?;
+                
+                // Check if variable already exists in CURRENT scope (shadowing) or ANY scope (mutation)
+                // For "mutable locals" behavior matching C/Python, we want to update the existing register
+                // if it's found.
+                if let Some(existing_reg) = self.lookup(name) {
+                    // Update existing register (Mutation)
+                    self.emit(Instruction::Move { out: existing_reg, src: val_reg });
+                } else {
+                    // New variable definition
+                    self.bind(name, val_reg);
+                }
             }
             Statement::Local { name, value } => {
                 let reg = self.lower_expr(&value.node)?;
@@ -115,7 +140,9 @@ impl LoweringContext {
                 self.emit(Instruction::Return { val: reg });
             }
             Statement::If { condition, then_branch, else_branch } => {
-                let _cond_reg = self.lower_expr(&condition.node)?;
+                let cond_reg = self.lower_expr(&condition.node)?;
+                // Placeholder logic for structured control flow
+                // Real implementation requires index tracking
                 self.push_scope();
                 for s in then_branch { self.lower_stmt(&s.node)?; }
                 self.pop_scope();
@@ -124,12 +151,34 @@ impl LoweringContext {
                     for s in eb { self.lower_stmt(&s.node)?; }
                     self.pop_scope();
                 }
+                // Emit a Nop to stand in for the end of the block for now
+                self.emit(Instruction::Nop);
             }
-            Statement::While { condition, body } => {
-                let _cond_reg = self.lower_expr(&condition.node)?;
-                self.push_scope();
-                for s in body { self.lower_stmt(&s.node)?; }
-                self.pop_scope();
+            Statement::While { condition, body, max_iter } => {
+                let start_idx = self.instructions.len() as u32;
+                let cond_reg = self.lower_expr(&condition.node)?;
+                
+                // loop if cond jump body_start else continue
+                let loop_inst_idx = self.instructions.len();
+                self.emit(Instruction::Loop {
+                    cond: cond_reg,
+                    body: (loop_inst_idx + 2) as u32, // body starts after Loop and Jump
+                    max_iter: *max_iter,
+                });
+                
+                let jump_exit_idx = self.instructions.len();
+                self.emit(Instruction::Jump { target: 0 }); // Placeholder for exit
+                
+                for stmt in body {
+                    self.lower_stmt(&stmt.node)?;
+                }
+                self.emit(Instruction::Jump { target: start_idx });
+                
+                // Backpatch exit jump
+                let end_idx = self.instructions.len() as u32;
+                if let Instruction::Jump { ref mut target } = self.instructions[jump_exit_idx] {
+                    *target = end_idx;
+                }
             }
             Statement::For { variable, iterator, body } => {
                 let _iter_reg = self.lower_expr(&iterator.node)?;
