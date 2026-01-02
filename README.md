@@ -62,7 +62,6 @@ All compile bijectively to **LC-B**.
 ## 📄 Documentation
 
 *   [HLX-C Specification](docs/HLXC_SPECIFICATION.md)
-*   [Research Paper: HLX Native Tongue](https://github.com/latentcollapse/hlx-research/blob/main/papers/HLX_NATIVE_TONGUE_ARXIV.md) (Link to be updated)
 
 ---
 
