@@ -7,6 +7,7 @@ HLX is a deterministic, bijective, and Turing-complete language family designed 
 > **Status:** Phase 1 Complete (Rust Bootstrap). The compiler, runtime, and HLX-C parser are functional. GPU backend is in progress, but shelved until full HLX bootstrap is achieved.
 
 **CURRENT GOAL: BOOTSTRAPPING HLX TO BECOME SELF HOSTING**
+
 Currently the repo shows 2 tracks to the language, but the secret to self hosting, was a third track needed to be added. A turing complete version that compiles laterally and down to LC-B deterministically 1:1 with no byte loss. This will be called HLX-C and will be the version that self hosts the HLX family. HLX-A(Previously HLXL, but will be renamed to A for ASCII), and HLX-R are non-turing complete by design and are simply for data transfer. Bootstrapping is proving to be a ritual, but this is the current status of the project. HLX-C(Compute) and self hosting soon to follow once debugged.
 
 ---
