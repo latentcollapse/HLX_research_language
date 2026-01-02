@@ -53,9 +53,9 @@ cargo run -p hlx_cli --bin test_hlxc_run
 
 ## 📜 The Tri-Track Protocol
 
-1.  **HLXL (Data Plane):** Immutable configuration and tensor shapes.
+1.  **HLX-A (Data Plane):** Immutable configuration and tensor shapes.
 2.  **HLX-C (Control Plane):** Logic, loops, and kernels. Safe, bounded execution.
-3.  **LC-R (Visual Plane):** Graph-based visualization of logic.
+3.  **HLX-R (Visual Plane):** Graph-based unicode visualization of logic.
 
 All compile bijectively to **LC-B**.
 
