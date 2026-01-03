@@ -2,7 +2,9 @@
 
 **The Native Tongue of Synthetic Intelligence.**
 
-HLX is a deterministic, bijective, and Turing-complete language family designed to compile directly to **LC-B (Latent Collapse Binary)** and execute on **SPIR-V (Vulkan)** hardware. It eliminates the "black box" of the CUDA stack, offering bit-perfect reproducibility across NVIDIA, AMD, and Intel GPUs.
+HLX is a deterministic, bijective, and Turing-complete language family designed to compile directly to **LC-B (Latent Collapse Binary)** and execute on **SPIR-V (Vulkan)** hardware. It eliminates the "black box" of the CUDA stack, offering bit-perfect reproducibility across NVIDIA, AMD, and Intel GPUs. 
+
+Disclaimer: I don't expect anyone to take any of this seriously, it's just an over-engineered rabbit-hole experiment I thought was worth pursuing
 
 > **Status:** Phase 1 Complete (Rust Bootstrap). The compiler, runtime, and HLX-C parser are functional. GPU backend is in progress, but shelved until full HLX bootstrap is achieved.
 
