@@ -201,6 +201,14 @@ impl Value {
                 if *y == 0.0 { return Err(HlxError::ValidationFail { message: "Division by zero".to_string() }); }
                 Value::float(x / y)
             }
+            (Value::Integer(x), Value::Float(y)) => {
+                if *y == 0.0 { return Err(HlxError::ValidationFail { message: "Division by zero".to_string() }); }
+                Value::float(*x as f64 / y)
+            }
+            (Value::Float(x), Value::Integer(y)) => {
+                if *y == 0 { return Err(HlxError::ValidationFail { message: "Division by zero".to_string() }); }
+                Value::float(x / *y as f64)
+            }
             _ => Err(HlxError::TypeError {
                 expected: "numeric".to_string(),
                 got: format!("{} / {}", self.type_name(), other.type_name()),
