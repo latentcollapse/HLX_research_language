@@ -14,6 +14,11 @@ Processors: 36 × Intel® Xeon® CPU E5-2699 v3 @ 2.30GHz
 Memory: 32 GiB of RAM (31.2 GiB usable)
 Graphics Processor: NVIDIA GeForce RTX 5060
 
+**FLAME GRAPHS**
+<https://github.com/latentcollapse/hlx-compiler/blob/main/hlx/flamegraph-stage1.svg>
+<https://github.com/latentcollapse/hlx-compiler/blob/main/hlx/flamegraph-stage2.svg>
+<https://github.com/latentcollapse/hlx-compiler/blob/main/hlx/flamegraph-stage3.svg>
+
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status: Self-Hosting](https://img.shields.io/badge/Status-Self--Hosting-success.svg)](https://github.com/latentcollapse/hlx-compiler)
 
