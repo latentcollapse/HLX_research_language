@@ -1,0 +1,28 @@
+// Test file for LSP - mix of valid and invalid syntax
+
+program test_lsp {
+    // Valid function
+    fn valid_function() {
+        let x = 42;
+        print(x);
+        return x;
+    }
+
+    // Invalid: missing closing brace
+    fn missing_brace() {
+        let y = 10;
+        print(y)
+
+    // Invalid: syntax error - random garbage
+    fn syntax_error() {
+        let z = @#$%
+    }
+
+    // Valid: main function
+    fn main() {
+        let result = valid_function();
+        print("Result:");
+        print(result);
+        return 0;
+    }
+}

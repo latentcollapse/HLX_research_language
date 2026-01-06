@@ -32,6 +32,11 @@ benchmarks/results/*.json
 *.swp
 *~
 
+# Node.js / VS Code Extension
+node_modules/
+vscode-hlx/node_modules/
+vscode-hlx/out/
+
 # OS
 .DS_Store
 Thumbs.db
