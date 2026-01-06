@@ -1,0 +1,140 @@
+// HLX Math Library Showcase
+// Demonstrates pure HLX implementation of mathematical functions
+// NOTE: Functions using division blocked by type coercion bug (int/int -> float)
+
+program math_showcase {
+    // === Math Library Functions (Pure HLX) ===
+
+    fn abs(x) {
+        if x < 0 { return 0 - x; }
+        return x;
+    }
+
+    fn min(a, b) {
+        if a < b { return a; }
+        return b;
+    }
+
+    fn max(a, b) {
+        if a > b { return a; }
+        return b;
+    }
+
+    fn pow(base, exp) {
+        if exp == 0 { return 1; }
+
+        let result = 1;
+        let i = 0;
+
+        loop(i < exp, 1000) {
+            result = result * base;
+            i = i + 1;
+        }
+
+        return result;
+    }
+
+    fn clamp(x, min_val, max_val) {
+        if x < min_val { return min_val; }
+        if x > max_val { return max_val; }
+        return x;
+    }
+
+    fn sign(x) {
+        if x > 0 { return 1; }
+        if x < 0 { return 0 - 1; }
+        return 0;
+    }
+
+    // === Demo Functions ===
+
+    fn test_abs() {
+        print("abs(-5) =");
+        print(abs(0 - 5));
+
+        print("abs(7) =");
+        print(abs(7));
+
+        print("abs(-100) =");
+        print(abs(0 - 100));
+    }
+
+    fn test_minmax() {
+        print("min(3, 7) =");
+        print(min(3, 7));
+
+        print("max(3, 7) =");
+        print(max(3, 7));
+
+        print("min(-5, -2) =");
+        print(min(0 - 5, 0 - 2));
+    }
+
+    fn test_pow() {
+        print("pow(2, 8) =");
+        print(pow(2, 8));
+
+        print("pow(3, 4) =");
+        print(pow(3, 4));
+
+        print("pow(5, 3) =");
+        print(pow(5, 3));
+
+        print("pow(10, 6) =");
+        print(pow(10, 6));
+    }
+
+    fn test_clamp() {
+        print("clamp(5, 0, 10) =");
+        print(clamp(5, 0, 10));
+
+        print("clamp(15, 0, 10) =");
+        print(clamp(15, 0, 10));
+
+        print("clamp(-5, 0, 10) =");
+        print(clamp(0 - 5, 0, 10));
+    }
+
+    fn test_sign() {
+        print("sign(42) =");
+        print(sign(42));
+
+        print("sign(-17) =");
+        print(sign(0 - 17));
+
+        print("sign(0) =");
+        print(sign(0));
+    }
+
+    // === Main Entry Point ===
+
+    fn main() {
+        print("=== HLX Math Library Showcase ===");
+        print("Pure HLX implementation - no Rust runtime calls");
+        print("");
+
+        print("--- Absolute Value ---");
+        test_abs();
+        print("");
+
+        print("--- Min/Max ---");
+        test_minmax();
+        print("");
+
+        print("--- Power ---");
+        test_pow();
+        print("");
+
+        print("--- Clamp ---");
+        test_clamp();
+        print("");
+
+        print("--- Sign ---");
+        test_sign();
+        print("");
+
+        print("=== All functions work! ===");
+        print("NOTE: sqrt() blocked by type coercion bug (int/int -> float)");
+        return 0;
+    }
+}
