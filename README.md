@@ -2,7 +2,18 @@
 
 **A self-hosting, deterministic programming language designed for seamless communication between humans and AI systems.**
 
-The bootstrapper has been tested, broken, and retested until it compiled perfectly every time. It's ready for open validation
+The bootstrapper has been tested, broken, and retested until it compiled perfectly every time. It was built and tested on Arch Linux, but has not yet been forked to my knowledge. It's ready for open validation
+
+Operating System: Arch Linux 
+KDE Plasma Version: 6.5.4
+KDE Frameworks Version: 6.21.0
+Qt Version: 6.10.1
+Kernel Version: 6.18.2-zen2-1-zen (64-bit)
+Graphics Platform: Wayland
+Processors: 36 × Intel® Xeon® CPU E5-2699 v3 @ 2.30GHz
+Memory: 32 GiB of RAM (31.2 GiB usable)
+Graphics Processor: NVIDIA GeForce RTX 5060
+Manufacturer: HUANANZHI
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status: Self-Hosting](https://img.shields.io/badge/Status-Self--Hosting-success.svg)](https://github.com/latentcollapse/hlx-compiler)
