@@ -1,0 +1,61 @@
+program std_graphics {
+    
+    // Initialize graphics subsystem
+    fn gfx_init() {
+        // SDL_INIT_VIDEO = 32
+        print("SDL_Init...");
+        return sdl_init(32);
+    }
+
+    // Create a window and renderer
+    // Returns [window, renderer]
+    fn gfx_open(title, w, h) {
+        print("SDL_CreateWindow...");
+        // SDL_WINDOWPOS_UNDEFINED = 536805376
+        // Flags: 4 = SDL_WINDOW_SHOWN
+        let win = sdl_create_window(title, 536805376, 536805376, w, h, 4);
+        
+        print("SDL_CreateRenderer...");
+        // Index -1, Flags 1 = SDL_RENDERER_SOFTWARE (Most compatible)
+        let ren = sdl_create_renderer(win, -1, 1); 
+        
+        return [win, ren];
+    }
+
+    // Set drawing color (RGBA)
+    fn gfx_color(ren, r, g, b, a) {
+        return sdl_set_color(ren, r, g, b, a);
+    }
+
+    // Clear screen
+    fn gfx_clear(ren) {
+        return sdl_clear(ren);
+    }
+
+    // Present renderer
+    fn gfx_present(ren) {
+        return sdl_present(ren);
+    }
+
+    // Handle events (minimal for now, returns 1 if quit requested)
+    fn gfx_poll() {
+        let ret = 0;
+        let event_buf = alloc_array(64); 
+        let has_event = sdl_poll(event_buf);
+        if (has_event) {
+            let evt_type = event_buf[0];
+            // SDL_QUIT = 256
+            if (evt_type == 256) {
+                ret = 1;
+            }
+        }
+        free(event_buf);
+        return ret;
+    }
+
+    // Close graphics
+    fn gfx_quit() {
+        print("SDL_Quit...");
+        return sdl_quit();
+    }
+}

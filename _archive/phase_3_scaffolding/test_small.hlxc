@@ -1,0 +1,1 @@
+fn test() -> object { return 1; }

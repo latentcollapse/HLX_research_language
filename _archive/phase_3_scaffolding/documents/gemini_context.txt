@@ -1,0 +1,93 @@
+# The Ghost in the Stack: An Impossible Anomaly in the HLX Ouroboros Phase
+
+**Date:** January 2, 2026
+**Subject:** HLX Compiler Ouroboros Phase - "Impossible" Stack Frame Corruption
+**To:** Claude Opus 4.5
+**From:** Gemini (HLX Engineering Agent)
+
+## 1. Executive Summary
+
+We are in the "Ouroboros" phase of bootstrapping the HLX compiler. We have encountered a runtime crash that defies the laws of our compiler's physics.
+
+**The Anomaly:** The self-hosted compiler (`compiler.lcc`) crashes because its state variable `ctx` is unexpectedly overwritten by an object containing the **exact local variable names** of the current function (`["ctx", "expr", "r", "rs", "t", "v"]`).
+
+**The Impossibility:** We have forensically proven that the string literal "ctx" **does not exist** in the compiled binary (`compiler.lcc`). It is physically impossible for the runtime to construct an object with the key "ctx" if that string is not present in the instruction stream. Yet, the runtime error explicitly lists "ctx" as a key in the crashing object.
+
+This document details the architecture, the reproduction steps, and the contradictory evidence that suggests we are dealing with a bug that transcends standard debugging logic.
+
+## 2. System Architecture
+
+### 2.1. The Toolchain
+- **Language:** HLX-C (C-style, dynamic typing, COW memory).
+- **Compiler:** `hlx_compiler` (Rust). Parses `.hlxc` and emits Linear Code Binary (`.lcc`).
+- **Runtime:** `hlx_runtime` (Rust). A stack-based register VM.
+  - **State:** `StackFrame` holds `HashMap<u32, Value>`. Registers are indices (`0`, `1`...).
+  - **Constraint:** The Runtime operates purely on integer register indices. It has **no knowledge** of source-level variable names.
+
+### 2.2. The Workload
+- **`compiler.hlxc`:** The self-hosted compiler source. Contains a function `compile_expr(ctx, expr)`.
+- **The Task:** Run `compiler.lcc` to compile `compiler.hlxc`.
+
+## 3. The Incident
+
+### 3.1. The Crash
+During execution of `compile_expr`, the VM crashes with:
+```text
+E_VALIDATION_FAIL: Key 'insts' not found in object with keys: ["ctx", "expr", "r", "rs", "t", "v"]
+```
+
+### 3.2. Verification of Variable Names
+To confirm these keys were indeed variable names, we performed a controlled experiment:
+1.  Modified `compiler.hlxc` source: Renamed parameter `state` to `ctx`.
+2.  Recompiled -> `compiler.lcc`.
+3.  Ran -> **Crash keys changed from "state" to "ctx".**
+    *Result:* Confirmed. The crashing object IS a reified stack frame of `compile_expr`.
+
+## 4. The Forensic Paradox
+
+For the Runtime to produce an object with the key `"ctx"`, it must execute an instruction like:
+```text
+ObjectCreate { keys: ["ctx", "expr", ...], values: [...] }
+```
+This requires the string literal `"ctx"` to be present in the binary.
+
+**The Evidence:**
+1.  **Disassembly:** We disassembled `compiler.lcc`. We found valid `ObjectCreate` instructions (e.g., AST construction), but **none** match the structure of the Rogue Object.
+2.  **Binary Scan:** We ran `strings compiler.lcc` and `grep -a "ctx"`.
+    *Result:* **The string "ctx" DOES NOT EXIST in the binary.**
+
+**The Contradiction:**
+- **Fact A:** The Runtime error proves an object exists in memory with the key "ctx".
+- **Fact B:** The binary does not contain the string "ctx".
+- **Fact C:** The Runtime cannot invent the string "ctx" (it doesn't know the source).
+- **Fact D:** The Source Code (`compiler.hlxc`) does not contain code to create this object.
+
+## 5. Hypotheses & Investigations
+
+### Theory A: The "Ghost" Instruction
+*Hypothesis:* The Rust compiler (`hlx_compiler`) is implicitly generating "debug scope dumps" and we are somehow missing the strings in the binary.
+*Investigation:* `grep -a` on the raw binary found nothing. `bincode` serialization is simple; strings should be visible.
+*Status:* **Refuted.** The string is physically absent.
+
+### Theory B: The Recursive Corruption
+*Hypothesis:* `compile_expr` recursively calls itself. If one call returns the "Scope Object", it propagates up.
+*Investigation:* We traced execution. `compile_expr` returns the value in register `820` (the `ctx` argument). This implies the *caller* passed the Scope Object as an argument.
+*Status:* **Plausible**, but doesn't explain *where* the object comes from initially.
+
+### Theory C: The Parser/Tokenizer Leak
+*Hypothesis:* The `compiler.hlxc` program reads its own source code. Does it tokenize "ctx" into a string value, which then leaks into the state?
+*Investigation:* `tokenize` returns `{"type": "IDENT", "val": "ctx"}`. The key is "val", the value is "ctx". The crash object has "ctx" as a **key**.
+*Status:* **Unlikely.**
+
+### Theory D: Memory Corruption / Pointer Aliasing
+*Hypothesis:* Is the VM interpreting a raw `StackFrame` pointer as a `Value::Object` pointer?
+*Investigation:* `Value` is an enum. `StackFrame` is a struct. In Rust, type safety prevents direct casting unless `unsafe` is involved. `executor.rs` uses standard `HashMap`.
+*Status:* **Highly Unlikely** in safe Rust, but we are out of safe theories.
+
+## 6. Request for Reasoning
+
+We are facing a logical impossibility.
+1.  How can a runtime object possess keys (`"ctx"`) that do not exist in the executable binary?
+2.  If the Rust compiler isn't putting them there, and the Runtime doesn't know them, **who creates this object?**
+
+We need a fresh perspective on this "Ghost in the Stack."

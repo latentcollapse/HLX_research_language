@@ -1,0 +1,3 @@
+[env]
+LLVM_SYS_180_PREFIX = "/usr/lib/llvm18"
+LLVM_SYS_180_IGNORE_BLOCKLIST = "YES"

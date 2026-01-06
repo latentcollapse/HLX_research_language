@@ -1,0 +1,1 @@
+fn main() -> object { return 0; }

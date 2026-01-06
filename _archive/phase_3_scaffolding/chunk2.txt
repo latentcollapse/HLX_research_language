@@ -1,0 +1,71 @@
+                    if _t == "Index" {
+                        _context = compile_expr(_context, _expr.object);
+                        _context = {
+                            "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx, "z_sym": _context.z_sym,
+                            "z_bc": _context.z_bc, "node": _context.node, "result_reg": _context.result_reg,
+                            "stack": append(_context.stack, _context.result_reg)
+                        };
+                        _context = compile_expr(_context, _expr.index);
+                        _context = {
+                            "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx + 1, "z_sym": _context.z_sym,
+                            "z_bc": append(_context.z_bc, {"op": "Index", "out": _context.z_idx, "container": _context.stack[len(_context.stack)-1], "index": _context.result_reg}),
+                            "node": _context.node, "result_reg": _context.z_idx,
+                            "stack": slice(_context.stack, 0, len(_context.stack)-1)
+                        };
+                    } else {
+                        if _t == "Field" {
+                            _context = compile_expr(_context, _expr.object);
+                            _context = {
+                                "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx + 2, "z_sym": _context.z_sym,
+                                "z_bc": append(
+                                    append(_context.z_bc, {"op": "Constant", "out": _context.z_idx, "val": _expr.field}),
+                                    {"op": "Index", "out": _context.z_idx + 1, "container": _context.result_reg, "index": _context.z_idx}
+                                ),
+                                "node": _context.node, "result_reg": _context.z_idx + 1, "stack": _context.stack
+                            };
+                        } else {
+                            if _t == "Array" {
+                                let _j = 0;
+                                loop (_j < len(_expr.elements), 100000) {
+                                    _context = compile_expr(_context, _expr.elements[_j]);
+                                    _context = {
+                                        "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx, "z_sym": _context.z_sym,
+                                        "z_bc": _context.z_bc, "node": _context.node, "result_reg": _context.result_reg,
+                                        "stack": append(_context.stack, _context.result_reg)
+                                    };
+                                    _j = _j + 1;
+                                }
+                                _context = {
+                                    "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx + 1, "z_sym": _context.z_sym,
+                                    "z_bc": append(_context.z_bc, {"op": "ArrayCreate", "out": _context.z_idx, "elements": slice(_context.stack, len(_context.stack) - len(_expr.elements), len(_expr.elements))}),
+                                    "node": _context.node, "result_reg": _context.z_idx,
+                                    "stack": slice(_context.stack, 0, len(_context.stack) - len(_expr.elements))
+                                };
+                            } else {
+                                if _t == "Object" {
+                                    let _j = 0;
+                                    loop (_j < len(_expr.values), 100000) {
+                                        _context = compile_expr(_context, _expr.values[_j]);
+                                        _context = {
+                                            "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx, "z_sym": _context.z_sym,
+                                            "z_bc": _context.z_bc, "node": _context.node, "result_reg": _context.result_reg,
+                                            "stack": append(_context.stack, _context.result_reg)
+                                        };
+                                        _j = _j + 1;
+                                    }
+                                    _context = {
+                                        "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx + 1, "z_sym": _context.z_sym,
+                                        "z_bc": append(_context.z_bc, {"op": "ObjectCreate", "out": _context.z_idx, "keys": _expr.keys, "values": slice(_context.stack, len(_context.stack) - len(_expr.values), len(_expr.values))}),
+                                        "node": _context.node, "result_reg": _context.z_idx,
+                                        "stack": slice(_context.stack, 0, len(_context.stack) - len(_expr.values))
+                                    };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return _context;
+}

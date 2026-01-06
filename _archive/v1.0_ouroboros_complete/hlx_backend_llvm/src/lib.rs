@@ -1,0 +1,604 @@
+//! HLX LLVM Backend (Iron)
+//! 
+//! Compiles HLX IR (LC-B) to Native Machine Code via LLVM.
+
+use hlx_core::{HlxCrate, Instruction, Value, Register};
+use inkwell::context::Context;
+use inkwell::builder::Builder;
+use inkwell::module::{Module, Linkage};
+use inkwell::values::{FunctionValue, IntValue, PointerValue};
+use inkwell::basic_block::BasicBlock;
+use inkwell::IntPredicate;
+use inkwell::OptimizationLevel;
+use inkwell::targets::{Target, InitializationConfig, TargetMachine};
+use std::collections::{HashMap, HashSet};
+use anyhow::{Result, anyhow};
+
+pub struct CodeGen<'ctx> {
+    context: &'ctx Context,
+    module: Module<'ctx>,
+    builder: Builder<'ctx>,
+    functions: HashMap<String, FunctionValue<'ctx>>,
+    reg_map: HashMap<Register, PointerValue<'ctx>>,
+    block_map: HashMap<u32, BasicBlock<'ctx>>,
+}
+
+use std::env;
+
+impl<'ctx> CodeGen<'ctx> {
+    pub fn new(context: &'ctx Context, module_name: &str) -> Self {
+        Target::initialize_native(&InitializationConfig::default()).unwrap();
+        
+        // Load symbols from current executable so JIT can find printf, malloc, etc.
+        if let Ok(exe) = env::current_exe() {
+            let _ = inkwell::support::load_library_permanently(&exe);
+        }
+
+        // Load SDL2 library for graphics support
+        let _ = inkwell::support::load_library_permanently(std::path::Path::new("/usr/lib/libSDL2.so"));
+        
+        let module = context.create_module(module_name);
+        let builder = context.create_builder();
+        
+        let triple = TargetMachine::get_default_triple();
+        let target = Target::from_triple(&triple).unwrap();
+        let cpu = TargetMachine::get_host_cpu_name().to_string();
+        let features = TargetMachine::get_host_cpu_features().to_string();
+        let target_machine = target.create_target_machine(
+            &triple,
+            &cpu,
+            &features,
+            OptimizationLevel::Default,
+            inkwell::targets::RelocMode::Default,
+            inkwell::targets::CodeModel::Default,
+        ).unwrap();
+        
+        module.set_data_layout(&target_machine.get_target_data().get_data_layout());
+        module.set_triple(&triple);
+        
+        let i64_type = context.i64_type();
+        let i32_type = context.i32_type();
+        let ptr_type = context.ptr_type(inkwell::AddressSpace::default());
+        
+        let mut functions = HashMap::new();
+
+        // libc
+        functions.insert("malloc".to_string(), module.add_function("malloc", ptr_type.fn_type(&[i64_type.into()], false), Some(Linkage::External)));
+        functions.insert("free".to_string(), module.add_function("free", context.void_type().fn_type(&[ptr_type.into()], false), Some(Linkage::External)));
+        functions.insert("printf".to_string(), module.add_function("printf", i32_type.fn_type(&[ptr_type.into()], true), Some(Linkage::External)));
+        functions.insert("strlen".to_string(), module.add_function("strlen", i64_type.fn_type(&[ptr_type.into()], false), Some(Linkage::External)));
+        functions.insert("strcpy".to_string(), module.add_function("strcpy", ptr_type.fn_type(&[ptr_type.into(), ptr_type.into()], false), Some(Linkage::External)));
+        functions.insert("strcat".to_string(), module.add_function("strcat", ptr_type.fn_type(&[ptr_type.into(), ptr_type.into()], false), Some(Linkage::External)));
+        functions.insert("strcmp".to_string(), module.add_function("strcmp", i32_type.fn_type(&[ptr_type.into(), ptr_type.into()], false), Some(Linkage::External)));
+        functions.insert("fopen".to_string(), module.add_function("fopen", ptr_type.fn_type(&[ptr_type.into(), ptr_type.into()], false), Some(Linkage::External)));
+        functions.insert("fclose".to_string(), module.add_function("fclose", i32_type.fn_type(&[ptr_type.into()], false), Some(Linkage::External)));
+        functions.insert("fread".to_string(), module.add_function("fread", i64_type.fn_type(&[ptr_type.into(), i64_type.into(), i64_type.into(), ptr_type.into()], false), Some(Linkage::External)));
+        functions.insert("fwrite".to_string(), module.add_function("fwrite", i64_type.fn_type(&[ptr_type.into(), i64_type.into(), i64_type.into(), ptr_type.into()], false), Some(Linkage::External)));
+        functions.insert("fseek".to_string(), module.add_function("fseek", i32_type.fn_type(&[ptr_type.into(), i64_type.into(), i32_type.into()], false), Some(Linkage::External)));
+        functions.insert("ftell".to_string(), module.add_function("ftell", i64_type.fn_type(&[ptr_type.into()], false), Some(Linkage::External)));
+
+        // SDL2
+        let sdl_init = module.add_function("SDL_Init", i32_type.fn_type(&[i32_type.into()], false), Some(Linkage::External));
+        let sdl_create_window = module.add_function("SDL_CreateWindow", ptr_type.fn_type(&[ptr_type.into(), i32_type.into(), i32_type.into(), i32_type.into(), i32_type.into(), i32_type.into()], false), Some(Linkage::External));
+        let sdl_create_renderer = module.add_function("SDL_CreateRenderer", ptr_type.fn_type(&[ptr_type.into(), i32_type.into(), i32_type.into()], false), Some(Linkage::External));
+        let sdl_set_color = module.add_function("SDL_SetRenderDrawColor", i32_type.fn_type(&[ptr_type.into(), context.i8_type().into(), context.i8_type().into(), context.i8_type().into(), context.i8_type().into()], false), Some(Linkage::External));
+        let sdl_clear = module.add_function("SDL_RenderClear", i32_type.fn_type(&[ptr_type.into()], false), Some(Linkage::External));
+        let sdl_present = module.add_function("SDL_RenderPresent", context.void_type().fn_type(&[ptr_type.into()], false), Some(Linkage::External));
+        let sdl_poll = module.add_function("SDL_PollEvent", i32_type.fn_type(&[ptr_type.into()], false), Some(Linkage::External));
+        let sdl_delay = module.add_function("SDL_Delay", context.void_type().fn_type(&[i32_type.into()], false), Some(Linkage::External));
+        let sdl_quit = module.add_function("SDL_Quit", context.void_type().fn_type(&[], false), Some(Linkage::External));
+
+        // Register both PascalCase and snake_case variants
+        functions.insert("SDL_Init".to_string(), sdl_init);
+        functions.insert("sdl_init".to_string(), sdl_init);
+        functions.insert("SDL_CreateWindow".to_string(), sdl_create_window);
+        functions.insert("sdl_create_window".to_string(), sdl_create_window);
+        functions.insert("SDL_CreateRenderer".to_string(), sdl_create_renderer);
+        functions.insert("sdl_create_renderer".to_string(), sdl_create_renderer);
+        functions.insert("SDL_SetRenderDrawColor".to_string(), sdl_set_color);
+        functions.insert("sdl_set_color".to_string(), sdl_set_color);
+        functions.insert("SDL_RenderClear".to_string(), sdl_clear);
+        functions.insert("sdl_clear".to_string(), sdl_clear);
+        functions.insert("SDL_RenderPresent".to_string(), sdl_present);
+        functions.insert("sdl_present".to_string(), sdl_present);
+        functions.insert("SDL_PollEvent".to_string(), sdl_poll);
+        functions.insert("sdl_poll".to_string(), sdl_poll);
+        functions.insert("SDL_Delay".to_string(), sdl_delay);
+        functions.insert("sdl_delay".to_string(), sdl_delay);
+        functions.insert("SDL_Quit".to_string(), sdl_quit);
+        functions.insert("sdl_quit".to_string(), sdl_quit);
+
+        let mut codegen = Self {
+            context,
+            module,
+            builder,
+            functions,
+            reg_map: HashMap::new(),
+            block_map: HashMap::new(),
+        };
+        
+        codegen.define_tensor_utils().unwrap();
+        
+        let helpers = ["__hlx_tensor_create", "__hlx_matmul", "__hlx_tensor_add", "__hlx_tensor_transpose"];
+        for h in helpers {
+            codegen.functions.insert(h.to_string(), codegen.module.get_function(h).unwrap());
+        }
+        codegen
+    }
+    
+    fn define_tensor_utils(&mut self) -> Result<()> {
+        let i64_type = self.context.i64_type();
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+        let malloc = *self.functions.get("malloc").unwrap();
+
+        let create_func = self.module.add_function("__hlx_tensor_create", ptr_type.fn_type(&[i64_type.into(), i64_type.into()], false), Some(Linkage::Internal));
+        let bb = self.context.append_basic_block(create_func, "entry");
+        self.builder.position_at_end(bb);
+        let rows = create_func.get_nth_param(0).unwrap().into_int_value();
+        let cols = create_func.get_nth_param(1).unwrap().into_int_value();
+        let s_ptr = self.builder.build_call(malloc, &[i64_type.const_int(24, false).into()], "s_ptr")?.try_as_basic_value().left().unwrap().into_pointer_value();
+        let count = self.builder.build_int_mul(rows, cols, "cnt")?;
+        let d_ptr = self.builder.build_call(malloc, &[self.builder.build_int_mul(count, i64_type.const_int(8, false), "db")?.into()], "d_ptr")?.try_as_basic_value().left().unwrap().into_pointer_value();
+        unsafe {
+            self.builder.build_store(self.builder.build_gep(i64_type, s_ptr, &[i64_type.const_int(0, false)], "r")?, rows)?;
+            self.builder.build_store(self.builder.build_gep(i64_type, s_ptr, &[i64_type.const_int(1, false)], "c")?, cols)?;
+            self.builder.build_store(self.builder.build_gep(i64_type, s_ptr, &[i64_type.const_int(2, false)], "d")?, self.builder.build_ptr_to_int(d_ptr, i64_type, "di")?)?;
+        }
+        self.builder.build_return(Some(&s_ptr))?;
+        
+        let matmul_func = self.module.add_function("__hlx_matmul", ptr_type.fn_type(&[ptr_type.into(), ptr_type.into()], false), Some(Linkage::Internal));
+        let bb = self.context.append_basic_block(matmul_func, "entry");
+        self.builder.position_at_end(bb);
+        let a_ptr = matmul_func.get_nth_param(0).unwrap().into_pointer_value();
+        let b_ptr = matmul_func.get_nth_param(1).unwrap().into_pointer_value();
+        unsafe {
+            let m = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(0, false)], "ar")?, "m")?.into_int_value();
+            let k = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(1, false)], "ac")?, "k")?.into_int_value();
+            let ad_i = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(2, false)], "ad")?, "adi")?.into_int_value();
+            let ad = self.builder.build_int_to_ptr(ad_i, ptr_type, "ad")?;
+            let n = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, b_ptr, &[i64_type.const_int(1, false)], "bc")?, "n")?.into_int_value();
+            let bd_i = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, b_ptr, &[i64_type.const_int(2, false)], "bd")?, "bdi")?.into_int_value();
+            let bd = self.builder.build_int_to_ptr(bd_i, ptr_type, "bd")?;
+            let c_ptr = self.builder.build_call(create_func, &[m.into(), n.into()], "cp")?.try_as_basic_value().left().unwrap().into_pointer_value();
+            let cd_i = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, c_ptr, &[i64_type.const_int(2, false)], "cd")?, "cdi")?.into_int_value();
+            let cd = self.builder.build_int_to_ptr(cd_i, ptr_type, "cd")?;
+
+            let i_a = self.builder.build_alloca(i64_type, "i")?; self.builder.build_store(i_a, i64_type.const_int(0, false))?;
+            let c_i = self.context.append_basic_block(matmul_func, "ci");
+            let b_i = self.context.append_basic_block(matmul_func, "bi");
+            let e_i = self.context.append_basic_block(matmul_func, "ei");
+            self.builder.build_unconditional_branch(c_i)?;
+            self.builder.position_at_end(c_i);
+            let i_v = self.builder.build_load(i64_type, i_a, "iv")?.into_int_value();
+            self.builder.build_conditional_branch(self.builder.build_int_compare(IntPredicate::SLT, i_v, m, "cmpi")?, b_i, e_i)?;
+            self.builder.position_at_end(b_i);
+            let j_a = self.builder.build_alloca(i64_type, "j")?; self.builder.build_store(j_a, i64_type.const_int(0, false))?;
+            let c_j = self.context.append_basic_block(matmul_func, "cj");
+            let b_j = self.context.append_basic_block(matmul_func, "bj");
+            let e_j = self.context.append_basic_block(matmul_func, "ej");
+            self.builder.build_unconditional_branch(c_j)?;
+            self.builder.position_at_end(c_j);
+            let j_v = self.builder.build_load(i64_type, j_a, "jv")?.into_int_value();
+            self.builder.build_conditional_branch(self.builder.build_int_compare(IntPredicate::SLT, j_v, n, "cmpj")?, b_j, e_j)?;
+            self.builder.position_at_end(b_j);
+            let s_a = self.builder.build_alloca(i64_type, "s")?; self.builder.build_store(s_a, i64_type.const_int(0, false))?;
+            let k_a = self.builder.build_alloca(i64_type, "k")?; self.builder.build_store(k_a, i64_type.const_int(0, false))?;
+            let c_k = self.context.append_basic_block(matmul_func, "ck");
+            let b_k = self.context.append_basic_block(matmul_func, "bk");
+            let e_k = self.context.append_basic_block(matmul_func, "ek");
+            self.builder.build_unconditional_branch(c_k)?;
+            self.builder.position_at_end(c_k);
+            let k_v = self.builder.build_load(i64_type, k_a, "kv")?.into_int_value();
+            self.builder.build_conditional_branch(self.builder.build_int_compare(IntPredicate::SLT, k_v, k, "cmpk")?, b_k, e_k)?;
+            self.builder.position_at_end(b_k);
+            let av = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, ad, &[self.builder.build_int_add(self.builder.build_int_mul(i_v, k, "ik")?, k_v, "aidx")?], "aep")?, "av")?.into_int_value();
+            let bv = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, bd, &[self.builder.build_int_add(self.builder.build_int_mul(k_v, n, "kn")?, j_v, "bidx")?], "bep")?, "bv")?.into_int_value();
+            self.builder.build_store(s_a, self.builder.build_int_add(self.builder.build_load(i64_type, s_a, "sv")?.into_int_value(), self.builder.build_int_mul(av, bv, "pd")?, "ns")?)?;
+            self.builder.build_store(k_a, self.builder.build_int_add(k_v, i64_type.const_int(1, false), "ki")?)?;
+            self.builder.build_unconditional_branch(c_k)?;
+            self.builder.position_at_end(e_k);
+            self.builder.build_store(self.builder.build_gep(i64_type, cd, &[self.builder.build_int_add(self.builder.build_int_mul(i_v, n, "in")?, j_v, "cidx")?], "cep")?, self.builder.build_load(i64_type, s_a, "fs")?)?;
+            self.builder.build_store(j_a, self.builder.build_int_add(j_v, i64_type.const_int(1, false), "ji")?)?;
+            self.builder.build_unconditional_branch(c_j)?;
+            self.builder.position_at_end(e_j);
+            self.builder.build_store(i_a, self.builder.build_int_add(i_v, i64_type.const_int(1, false), "ii")?)?;
+            self.builder.build_unconditional_branch(c_i)?;
+            self.builder.position_at_end(e_i);
+            self.builder.build_return(Some(&c_ptr))?;
+        }
+
+        let add_func = self.module.add_function("__hlx_tensor_add", ptr_type.fn_type(&[ptr_type.into(), ptr_type.into()], false), Some(Linkage::Internal));
+        let bb = self.context.append_basic_block(add_func, "entry");
+        self.builder.position_at_end(bb);
+        let a_ptr = add_func.get_nth_param(0).unwrap().into_pointer_value();
+        let b_ptr = add_func.get_nth_param(1).unwrap().into_pointer_value();
+        unsafe {
+            let r = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(0, false)], "r")?, "rows")?.into_int_value();
+            let c = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(1, false)], "c")?, "cols")?.into_int_value();
+            let ad = self.builder.build_int_to_ptr(self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(2, false)], "ad")?, "adi")?.into_int_value(), ptr_type, "ad")?;
+            let bd = self.builder.build_int_to_ptr(self.builder.build_load(i64_type, self.builder.build_gep(i64_type, b_ptr, &[i64_type.const_int(2, false)], "bd")?, "bdi")?.into_int_value(), ptr_type, "bd")?;
+            let c_ptr = self.builder.build_call(create_func, &[r.into(), c.into()], "cp")?.try_as_basic_value().left().unwrap().into_pointer_value();
+            let cd = self.builder.build_int_to_ptr(self.builder.build_load(i64_type, self.builder.build_gep(i64_type, c_ptr, &[i64_type.const_int(2, false)], "cd")?, "cdi")?.into_int_value(), ptr_type, "cd")?;
+            let tot = self.builder.build_int_mul(r, c, "tot")?;
+            let i_a = self.builder.build_alloca(i64_type, "i")?; self.builder.build_store(i_a, i64_type.const_int(0, false))?;
+            let cond_bb = self.context.append_basic_block(add_func, "c");
+            let body_bb = self.context.append_basic_block(add_func, "b");
+            let end_bb = self.context.append_basic_block(add_func, "e");
+            self.builder.build_unconditional_branch(cond_bb)?;
+            self.builder.position_at_end(cond_bb);
+            let i_v = self.builder.build_load(i64_type, i_a, "iv")?.into_int_value();
+            self.builder.build_conditional_branch(self.builder.build_int_compare(IntPredicate::SLT, i_v, tot, "cmp")?, body_bb, end_bb)?;
+            self.builder.position_at_end(body_bb);
+            self.builder.build_store(self.builder.build_gep(i64_type, cd, &[i_v], "cep")?, self.builder.build_int_add(self.builder.build_load(i64_type, self.builder.build_gep(i64_type, ad, &[i_v], "aep")?, "av")?.into_int_value(), self.builder.build_load(i64_type, self.builder.build_gep(i64_type, bd, &[i_v], "bep")?, "bv")?.into_int_value(), "s")?)?;
+            self.builder.build_store(i_a, self.builder.build_int_add(i_v, i64_type.const_int(1, false), "ii")?)?;
+            self.builder.build_unconditional_branch(cond_bb)?;
+            self.builder.position_at_end(end_bb);
+            self.builder.build_return(Some(&c_ptr))?;
+        }
+
+        let trans_func = self.module.add_function("__hlx_tensor_transpose", ptr_type.fn_type(&[ptr_type.into()], false), Some(Linkage::Internal));
+        let bb = self.context.append_basic_block(trans_func, "entry");
+        self.builder.position_at_end(bb);
+        let a_ptr = trans_func.get_nth_param(0).unwrap().into_pointer_value();
+        unsafe {
+            let m = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(0, false)], "r")?, "m")?.into_int_value();
+            let n = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(1, false)], "c")?, "n")?.into_int_value();
+            let ad = self.builder.build_int_to_ptr(self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(2, false)], "ad")?, "adi")?.into_int_value(), ptr_type, "ad")?;
+            let c_ptr = self.builder.build_call(create_func, &[n.into(), m.into()], "cp")?.try_as_basic_value().left().unwrap().into_pointer_value();
+            let cd = self.builder.build_int_to_ptr(self.builder.build_load(i64_type, self.builder.build_gep(i64_type, c_ptr, &[i64_type.const_int(2, false)], "cd")?, "cdi")?.into_int_value(), ptr_type, "cd")?;
+            let i_a = self.builder.build_alloca(i64_type, "i")?; self.builder.build_store(i_a, i64_type.const_int(0, false))?;
+            let c_i = self.context.append_basic_block(trans_func, "ci");
+            let b_i = self.context.append_basic_block(trans_func, "bi");
+            let end_i = self.context.append_basic_block(trans_func, "ei");
+            self.builder.build_unconditional_branch(c_i)?;
+            self.builder.position_at_end(c_i);
+            let i_v = self.builder.build_load(i64_type, i_a, "iv")?.into_int_value();
+            self.builder.build_conditional_branch(self.builder.build_int_compare(IntPredicate::SLT, i_v, m, "cmpi")?, b_i, end_i)?;
+            self.builder.position_at_end(b_i);
+            let j_a = self.builder.build_alloca(i64_type, "j")?; self.builder.build_store(j_a, i64_type.const_int(0, false))?;
+            let c_j = self.context.append_basic_block(trans_func, "cj");
+            let b_j = self.context.append_basic_block(trans_func, "bj");
+            let end_j = self.context.append_basic_block(trans_func, "ej");
+            self.builder.build_unconditional_branch(c_j)?;
+            self.builder.position_at_end(c_j);
+            let j_v = self.builder.build_load(i64_type, j_a, "jv")?.into_int_value();
+            self.builder.build_conditional_branch(self.builder.build_int_compare(IntPredicate::SLT, j_v, n, "cmpj")?, b_j, end_j)?;
+            self.builder.position_at_end(b_j);
+            let val = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, ad, &[self.builder.build_int_add(self.builder.build_int_mul(i_v, n, "in")?, j_v, "sidx")?], "sp")?, "v")?.into_int_value();
+            self.builder.build_store(self.builder.build_gep(i64_type, cd, &[self.builder.build_int_add(self.builder.build_int_mul(j_v, m, "jm")?, i_v, "didx")?], "dp")?, val)?;
+            self.builder.build_store(j_a, self.builder.build_int_add(j_v, i64_type.const_int(1, false), "ji")?)?;
+            self.builder.build_unconditional_branch(c_j)?;
+            self.builder.position_at_end(end_j);
+            self.builder.build_store(i_a, self.builder.build_int_add(i_v, i64_type.const_int(1, false), "ii")?)?;
+            self.builder.build_unconditional_branch(c_i)?;
+            self.builder.position_at_end(end_i);
+            self.builder.build_return(Some(&c_ptr))?;
+        }
+        Ok(())
+    }
+    
+    pub fn compile_crate(&mut self, krate: &HlxCrate) -> Result<()> {
+        let i64_type = self.context.i64_type();
+        for inst in &krate.instructions {
+            if let Instruction::FuncDef { name, params, .. } = inst {
+                if self.functions.contains_key(name) { continue; }
+                let param_types = vec![i64_type.into(); params.len()];
+                let function = self.module.add_function(name, i64_type.fn_type(&param_types, false), None);
+                self.functions.insert(name.clone(), function);
+            }
+        }
+        let mut targets = HashSet::new();
+        for inst in &krate.instructions {
+            match inst {
+                Instruction::Jump { target } => { targets.insert(*target); },
+                Instruction::If { then_block, else_block, .. } => {
+                    targets.insert(*then_block);
+                    targets.insert(*else_block);
+                },
+                Instruction::Loop { body, .. } => { targets.insert(*body); },
+                _ => {} 
+            }
+        }
+        for inst in &krate.instructions {
+            if let Instruction::FuncDef { name, params, body } = inst {
+                self.compile_function(name, params, *body, &krate.instructions, &targets)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn compile_function(&mut self, name: &str, params: &[Register], start_pc: u32, instructions: &[Instruction], all_targets: &HashSet<u32>) -> Result<()> {
+        let function = *self.functions.get(name).ok_or_else(|| anyhow!("Fn missing"))?;
+        self.reg_map.clear();
+        self.block_map.clear();
+        let entry_bb = self.context.append_basic_block(function, "entry");
+        self.builder.position_at_end(entry_bb);
+        let mut pc = start_pc as usize;
+        let mut used_regs = HashSet::new();
+        for &r in params { used_regs.insert(r); }
+        while pc < instructions.len() {
+            let inst = &instructions[pc];
+            if pc > start_pc as usize && matches!(inst, Instruction::FuncDef { .. }) { break; }
+            if let Some(r) = inst.output_register() { used_regs.insert(r); }
+            for &r in &inst.input_registers() { used_regs.insert(r); }
+            if all_targets.contains(&(pc as u32)) || pc == start_pc as usize {
+                let bb = self.context.append_basic_block(function, &format!("pc_{}", pc));
+                self.block_map.insert(pc as u32, bb);
+            }
+            pc += 1;
+        }
+        for &r in &used_regs {
+            let ptr = self.builder.build_alloca(self.context.i64_type(), &format!("r{}", r))?;
+            self.reg_map.insert(r, ptr);
+        }
+        for (i, &reg) in params.iter().enumerate() {
+            let val = function.get_nth_param(i as u32).unwrap().into_int_value();
+            self.store_reg(reg, val)?;
+        }
+        self.builder.build_unconditional_branch(*self.block_map.get(&start_pc).unwrap())?;
+        pc = start_pc as usize;
+        while pc < instructions.len() {
+            if let Some(bb) = self.builder.get_insert_block() {
+                if bb.get_terminator().is_some() {
+                    if let Some(new_bb) = self.block_map.get(&(pc as u32)) {
+                        self.builder.position_at_end(*new_bb);
+                    } else {
+                        pc += 1;
+                        if pc >= instructions.len() { break; }
+                        let inst = &instructions[pc];
+                        if matches!(inst, Instruction::FuncDef { .. }) { break; }
+                        continue;
+                    }
+                }
+            }
+            let inst = &instructions[pc];
+            if pc > start_pc as usize && matches!(inst, Instruction::FuncDef { .. }) { break; }
+            if let Some(bb) = self.block_map.get(&(pc as u32)) {
+                if self.builder.get_insert_block().unwrap() != *bb {
+                    if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+                        self.builder.build_unconditional_branch(*bb)?;
+                    }
+                    self.builder.position_at_end(*bb);
+                }
+            }
+            self.compile_inst(inst)?;
+            pc += 1;
+        }
+        if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+            self.builder.build_return(Some(&self.context.i64_type().const_int(0, false)))?;
+        }
+        Ok(())
+    }
+    
+    fn compile_inst(&mut self, inst: &Instruction) -> Result<()> {
+        let i64_t = self.context.i64_type();
+        let ptr_t = self.context.ptr_type(inkwell::AddressSpace::default());
+        match inst {
+            Instruction::Constant { out, val } => {
+                let v = self.compile_constant(val)?;
+                self.store_reg(*out, v)?;
+            }
+            Instruction::Add { out, lhs, rhs } => {
+                let l = self.load_reg(*lhs)?;
+                let r = self.load_reg(*rhs)?;
+                let res = self.builder.build_int_add(l, r, "add")?;
+                self.store_reg(*out, res)?;
+            }
+            Instruction::Sub { out, lhs, rhs } => {
+                let l = self.load_reg(*lhs)?;
+                let r = self.load_reg(*rhs)?;
+                let res = self.builder.build_int_sub(l, r, "sub")?;
+                self.store_reg(*out, res)?;
+            }
+            Instruction::Mul { out, lhs, rhs } => {
+                let l = self.load_reg(*lhs)?;
+                let r = self.load_reg(*rhs)?;
+                let res = self.builder.build_int_mul(l, r, "mul")?;
+                self.store_reg(*out, res)?;
+            }
+            Instruction::Neg { out, src } => {
+                let val = self.load_reg(*src)?;
+                let res = self.builder.build_int_neg(val, "neg")?;
+                self.store_reg(*out, res)?;
+            }
+            Instruction::Lt { out, lhs, rhs } => {
+                let l = self.load_reg(*lhs)?;
+                let r = self.load_reg(*rhs)?;
+                let res = self.builder.build_int_compare(IntPredicate::SLT, l, r, "lt")?;
+                let ext = self.builder.build_int_z_extend(res, self.context.i64_type(), "bool_ext")?;
+                self.store_reg(*out, ext)?;
+            }
+            Instruction::Gt { out, lhs, rhs } => {
+                let l = self.load_reg(*lhs)?;
+                let r = self.load_reg(*rhs)?;
+                let res = self.builder.build_int_compare(IntPredicate::SGT, l, r, "gt")?;
+                let ext = self.builder.build_int_z_extend(res, self.context.i64_type(), "bool_ext")?;
+                self.store_reg(*out, ext)?;
+            }
+            Instruction::Eq { out, lhs, rhs } => {
+                let l = self.load_reg(*lhs)?;
+                let r = self.load_reg(*rhs)?;
+                let res = self.builder.build_int_compare(IntPredicate::EQ, l, r, "eq")?;
+                let ext = self.builder.build_int_z_extend(res, self.context.i64_type(), "bool_ext")?;
+                self.store_reg(*out, ext)?;
+            }
+            Instruction::Call { out, func, args } => {
+                let f = *self.functions.get(func).ok_or_else(|| anyhow!("Fn missing"))?;
+                let mut llvm_args = Vec::new();
+                let param_types = f.get_type().get_param_types();
+                for (i, &a) in args.iter().enumerate() {
+                    let val = self.load_reg(a)?;
+                    let param_type = param_types.get(i).ok_or_else(|| anyhow!("Too many args"))?;
+                    
+                    if param_type.is_pointer_type() {
+                        let ptr = self.builder.build_int_to_ptr(val, param_type.into_pointer_type(), "ptr_cast")?;
+                        llvm_args.push(ptr.into());
+                    } else if param_type.is_int_type() {
+                        let target_width = param_type.into_int_type().get_bit_width();
+                        if target_width < 64 {
+                            let trunc = self.builder.build_int_truncate(val, param_type.into_int_type(), "int_trunc")?;
+                            llvm_args.push(trunc.into());
+                        } else {
+                            llvm_args.push(val.into());
+                        }
+                    } else {
+                        llvm_args.push(val.into());
+                    }
+                }
+                let call = self.builder.build_call(f, &llvm_args, "call_tmp")?;
+                if let Some(res) = call.try_as_basic_value().left() {
+                    if res.is_pointer_value() {
+                        let int_val = self.builder.build_ptr_to_int(res.into_pointer_value(), self.context.i64_type(), "ptr_ret")?;
+                        self.store_reg(*out, int_val)?;
+                    } else if res.is_int_value() {
+                        let int_val = res.into_int_value();
+                        if int_val.get_type().get_bit_width() == 32 {
+                             let ext = self.builder.build_int_z_extend(int_val, self.context.i64_type(), "i32_ext")?;
+                             self.store_reg(*out, ext)?;
+                        } else {
+                             self.store_reg(*out, int_val)?;
+                        }
+                    }
+                }
+            }
+            Instruction::Return { val } => {
+                let v = self.load_reg(*val)?;
+                self.builder.build_return(Some(&v))?;
+            }
+            Instruction::Jump { target } => {
+                let bb = self.get_block(*target)?;
+                self.builder.build_unconditional_branch(bb)?;
+            }
+            Instruction::If { cond, then_block, else_block } => {
+                let c = self.load_reg(*cond)?;
+                let zero = self.context.i64_type().const_int(0, false);
+                let is_nonzero = self.builder.build_int_compare(IntPredicate::NE, c, zero, "is_nonzero")?;
+                let t = self.get_block(*then_block)?;
+                let e = self.get_block(*else_block)?;
+                self.builder.build_conditional_branch(is_nonzero, t, e)?;
+            }
+            Instruction::Move { out, src } => {
+                let v = self.load_reg(*src)?;
+                self.store_reg(*out, v)?;
+            }
+            Instruction::ArrayCreate { out, elements } => {
+                let malloc = *self.functions.get("malloc").unwrap();
+                let ptr = self.builder.build_call(malloc, &[i64_t.const_int(elements.len() as u64 * 8, false).into()], "malloc_call")?
+                    .try_as_basic_value().left().unwrap().into_pointer_value();
+                for (i, &reg) in elements.iter().enumerate() {
+                    let val = self.load_reg(reg)?;
+                    let idx = self.context.i64_type().const_int(i as u64, false);
+                    unsafe {
+                        let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
+                        self.builder.build_store(elem_ptr, val)?;
+                    }
+                }
+                let int_ptr = self.builder.build_ptr_to_int(ptr, self.context.i64_type(), "ptr_to_int")?;
+                self.store_reg(*out, int_ptr)?;
+            }
+            Instruction::ArrayAlloc { out, size } => {
+                let size_val = self.load_reg(*size)?;
+                let bytes = self.builder.build_int_mul(size_val, i64_t.const_int(8, false), "bytes")?;
+                let malloc = *self.functions.get("malloc").unwrap();
+                let ptr = self.builder.build_call(malloc, &[bytes.into()], "malloc_call")?
+                    .try_as_basic_value().left().unwrap().into_pointer_value();
+                let int_ptr = self.builder.build_ptr_to_int(ptr, self.context.i64_type(), "ptr_to_int")?;
+                self.store_reg(*out, int_ptr)?;
+            }
+            Instruction::Index { out, container, index } => {
+                let ptr_int = self.load_reg(*container)?;
+                let idx = self.load_reg(*index)?;
+                let ptr = self.builder.build_int_to_ptr(ptr_int, self.context.ptr_type(inkwell::AddressSpace::default()), "int_to_ptr")?;
+                unsafe {
+                    let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
+                    let val = self.builder.build_load(self.context.i64_type(), elem_ptr, "elem_load")?;
+                    self.store_reg(*out, val.into_int_value())?;
+                }
+            }
+            Instruction::Store { container, index, value } => {
+                let ptr_int = self.load_reg(*container)?;
+                let idx = self.load_reg(*index)?;
+                let val = self.load_reg(*value)?;
+                let ptr = self.builder.build_int_to_ptr(ptr_int, self.context.ptr_type(inkwell::AddressSpace::default()), "int_to_ptr")?;
+                unsafe {
+                    let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
+                    self.builder.build_store(elem_ptr, val)?;
+                }
+            }
+            Instruction::TensorCreate { out, shape, .. } => {
+                let ptr = self.builder.build_call(self.module.get_function("__hlx_tensor_create").unwrap(), &[i64_t.const_int(shape[0] as u64, false).into(), i64_t.const_int(shape[1] as u64, false).into()], "ta")?.try_as_basic_value().left().unwrap().into_pointer_value();
+                self.store_reg(*out, self.builder.build_ptr_to_int(ptr, i64_t, "pi")?)?;
+            }
+            Instruction::MatMul { out, lhs, rhs } => {
+                let a = self.builder.build_int_to_ptr(self.load_reg(*lhs)?, ptr_t, "ap")?;
+                let b = self.builder.build_int_to_ptr(self.load_reg(*rhs)?, ptr_t, "bp")?;
+                let res = self.builder.build_call(self.module.get_function("__hlx_matmul").unwrap(), &[a.into(), b.into()], "mm")?.try_as_basic_value().left().unwrap().into_pointer_value();
+                self.store_reg(*out, self.builder.build_ptr_to_int(res, i64_t, "ci")?)?;
+            }
+            Instruction::Print { val } => {
+                let v = self.load_reg(*val)?;
+                let f = *self.functions.get("printf").unwrap();
+                let fmt = self.context.const_string(b"%lld\n\0", false);
+                let g = self.module.add_global(fmt.get_type(), Some(inkwell::AddressSpace::default()), "fi");
+                g.set_initializer(&fmt); g.set_constant(true); g.set_linkage(Linkage::Internal);
+                let gep = unsafe { self.builder.build_gep(fmt.get_type(), g.as_pointer_value(), &[self.context.i32_type().const_int(0, false), self.context.i32_type().const_int(0, false)], "fg")? };
+                self.builder.build_call(f, &[gep.into(), v.into()], "pc")?;
+            }
+            Instruction::PrintStr { val } => {
+                let v = self.builder.build_int_to_ptr(self.load_reg(*val)?, ptr_t, "vp")?;
+                let f = *self.functions.get("printf").unwrap();
+                let fmt = self.context.const_string(b"%s\n\0", false);
+                let g = self.module.add_global(fmt.get_type(), Some(inkwell::AddressSpace::default()), "fs");
+                g.set_initializer(&fmt); g.set_constant(true); g.set_linkage(Linkage::Internal);
+                let gep = unsafe { self.builder.build_gep(fmt.get_type(), g.as_pointer_value(), &[self.context.i32_type().const_int(0, false), self.context.i32_type().const_int(0, false)], "fg")? };
+                self.builder.build_call(f, &[gep.into(), v.into()], "pc")?;
+            }
+            _ => {} 
+        }
+        Ok(())
+    }
+    
+    fn compile_constant(&self, val: &Value) -> Result<IntValue<'ctx>> {
+        let i64_t = self.context.i64_type();
+        match val {
+            Value::Integer(i) => Ok(i64_t.const_int(*i as u64, true)),
+            Value::Boolean(b) => Ok(i64_t.const_int(if *b { 1 } else { 0 }, false)),
+            Value::Null => Ok(i64_t.const_int(0, false)),
+            Value::String(s) => {
+                let fmt = self.context.const_string(format!("{}\0", s).as_bytes(), false);
+                let g = self.module.add_global(fmt.get_type(), Some(inkwell::AddressSpace::default()), "sl");
+                g.set_initializer(&fmt); g.set_constant(true); g.set_linkage(Linkage::Internal);
+                let gep = unsafe { self.builder.build_gep(fmt.get_type(), g.as_pointer_value(), &[self.context.i32_type().const_int(0, false), self.context.i32_type().const_int(0, false)], "sg")? };
+                Ok(self.builder.build_ptr_to_int(gep, i64_t, "pi")?)
+            }
+            _ => Err(anyhow!("Unsupported constant: {:?}", val)),
+        }
+    }
+    
+    fn load_reg(&self, reg: Register) -> Result<IntValue<'ctx>> {
+        let ptr = self.reg_map.get(&reg).ok_or_else(|| anyhow!("Reg missing"))?;
+        let val = self.builder.build_load(self.context.i64_type(), *ptr, "reg_load")?;
+        Ok(val.into_int_value())
+    }
+    
+    fn store_reg(&self, reg: Register, val: IntValue<'ctx>) -> Result<()> {
+        let ptr = self.reg_map.get(&reg).ok_or_else(|| anyhow!("Reg missing"))?;
+        self.builder.build_store(*ptr, val)?;
+        Ok(())
+    }
+    
+    fn get_block(&self, target: u32) -> Result<BasicBlock<'ctx>> {
+        self.block_map.get(&target).copied().ok_or_else(|| anyhow!("Target missing"))
+    }
+
+    pub fn print_ir(&self) { self.module.print_to_stderr(); }
+
+    pub fn run_jit(&self) -> Result<i64> {
+        let ee = self.module.create_jit_execution_engine(OptimizationLevel::None)
+            .map_err(|e| anyhow!("Failed to create JIT: {:?}", e))?;
+        unsafe {
+            let func = ee.get_function::<unsafe extern "C" fn() -> i64>("main")?;
+            Ok(func.call())
+        }
+    }
+}

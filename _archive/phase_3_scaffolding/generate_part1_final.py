@@ -1,0 +1,319 @@
+
+import os
+
+quote = b'"'
+backslash = bytes([92])
+lit_quote = quote + backslash + quote + quote
+lit_backslash = quote + backslash + backslash + quote
+
+with open('part1.hlxc', 'wb') as f:
+    f.write(b"""// HLX SELF-HOSTED COMPILER (Phase 4.2: Flat Context)
+
+// ========================================== 
+// 1. TOKENIZER
+// ========================================== 
+
+fn is_digit(c) -> bool {
+    let code = ord(c);
+    return code >= 48 and code <= 57;
+}
+
+fn is_alpha(c) -> bool {
+    let code = ord(c);
+    if code >= 97 and code <= 122 { return true; }
+    if code >= 65 and code <= 90 { return true; }
+    if code == 95 { return true; }
+    return false;
+}
+
+fn tokenize(source) -> object {
+    let tokens = [];
+    let i = 0;
+    let len = len(source);
+    
+    loop (i < len, 1000000) {
+        let c = source[i];
+        
+        if c == " " or c == "\\n" or c == "\\t" or c == "\\r" {
+            i = i + 1;
+        } else {
+            if is_alpha(c) {
+                let ident = "";
+                loop (i < len and is_alpha(source[i]), 100) {
+                    ident = ident + source[i];
+                    i = i + 1;
+                }
+                let type = "IDENT";
+                if ident == "fn" { type = "KW_FN"; }
+                if ident == "let" { type = "KW_LET"; }
+                if ident == "return" { type = "KW_RETURN"; }
+                if ident == "if" { type = "KW_IF"; }
+                if ident == "else" { type = "KW_ELSE"; }
+                if ident == "loop" { type = "KW_LOOP"; }
+                if ident == "break" { type = "KW_BREAK"; }
+                if ident == "continue" { type = "KW_CONT"; }
+                if ident == "and" { type = "OP_AND"; }
+                if ident == "or" { type = "OP_OR"; }
+                if ident == "true" { type = "LIT_BOOL"; }
+                if ident == "false" { type = "LIT_BOOL"; }
+                if ident == "null" { type = "LIT_NULL"; }
+                tokens = append(tokens, {"type": type, "val": ident});
+            } else {
+                if is_digit(c) {
+                    let num = "";
+                    loop (i < len and is_digit(source[i]), 100) {
+                        num = num + source[i];
+                        i = i + 1;
+                    }
+                    tokens = append(tokens, {"type": "LIT_INT", "val": num});
+                } else {
+                    if c == """)
+    f.write(lit_quote)
+    f.write(b""" {
+                        i = i + 1;
+                        let s = "";
+                        loop (i < len and source[i] != """)
+    f.write(lit_quote)
+    f.write(b""", 1000000) {
+                            if source[i] == """)
+    f.write(lit_backslash)
+    f.write(b""" and i + 1 < len and source[i+1] == """)
+    f.write(lit_quote)
+    f.write(b""" {
+                                s = s + """)
+    f.write(lit_quote)
+    f.write(b""";
+                                i = i + 2;
+                            } else {
+                                s = s + source[i];
+                                i = i + 1;
+                            }
+                        }
+                        i = i + 1;
+                        tokens = append(tokens, {"type": "LIT_STR", "val": s});
+                    } else {
+                        let t = null;
+                        if c == "{" { t = "LBRACE"; }
+                        if c == "}" { t = "RBRACE"; }
+                        if c == "[" { t = "LBRACK"; }
+                        if c == "]" { t = "RBRACK"; }
+                        if c == "(" { t = "LPAREN"; }
+                        if c == ")" { t = "RPAREN"; }
+                        if c == ";" { t = "SEMI"; }
+                        if c == ":" { t = "COLON"; }
+                        if c == "," { t = "COMMA"; }
+                        if c == "." { t = "DOT"; }
+                        if c == "+" { t = "OP_ADD"; }
+                        if c == "-" { t = "OP_SUB"; }
+                        if c == "*" { t = "OP_MUL"; }
+                        
+                        if t != null {
+                            tokens = append(tokens, {"type": t, "val": c});
+                            i = i + 1;
+                        } else {
+                            if c == "=" {
+                                if i + 1 < len and source[i+1] == "=" {
+                                    tokens = append(tokens, {"type": "OP_EQ", "val": "=="}); i = i + 2;
+                                } else {
+                                    tokens = append(tokens, {"type": "OP_ASSIGN", "val": "="}); i = i + 1;
+                                }
+                            } else {
+                                if c == "!" {
+                                    if i + 1 < len and source[i+1] == "=" {
+                                        tokens = append(tokens, {"type": "OP_NE", "val": "!="}); i = i + 2;
+                                    } else { i = i + 1; }
+                                } else {
+                                    if c == "<" {
+                                        if i + 1 < len and source[i+1] == "=" {
+                                            tokens = append(tokens, {"type": "OP_LE", "val": "<="}); i = i + 2;
+                                        } else {
+                                            tokens = append(tokens, {"type": "OP_LT", "val": "<"}); i = i + 1;
+                                        }
+                                    } else {
+                                        if c == ">" {
+                                            if i + 1 < len and source[i+1] == "=" {
+                                                tokens = append(tokens, {"type": "OP_GE", "val": ">="}); i = i + 2;
+                                            } else {
+                                                tokens = append(tokens, {"type": "OP_GT", "val": ">"}); i = i + 1;
+                                            }
+                                        } else {
+                                            i = i + 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return tokens;
+}
+
+// ========================================== 
+// 2. PARSER
+// ========================================== 
+
+fn parse_primary(state) -> object {
+    let i = state.pos;
+    let t = state.tokens[i];
+    
+    if t.type == "LIT_INT" or t.type == "LIT_STR" or t.type == "LIT_BOOL" or t.type == "LIT_NULL" {
+        state.node = {"type": "Literal", "val": t.val, "lit_type": t.type};
+        state.pos = i + 1;
+    } else {
+        if t.type == "LBRACK" {
+            state.pos = i + 1;
+            let els = [];
+            loop (state.tokens[state.pos].type != "RBRACK", 100000) {
+                state = parse_expr(state);
+                els = append(els, state.node);
+                if state.tokens[state.pos].type == "COMMA" { state.pos = state.pos + 1; }
+            }
+            state.pos = state.pos + 1;
+            state.node = {"type": "Array", "elements": els};
+        } else {
+            if t.type == "LBRACE" {
+                state.pos = i + 1;
+                let ks = []; let vs = [];
+                loop (state.tokens[state.pos].type != "RBRACE", 100000) {
+                    let key = state.tokens[state.pos].val;
+                    state.pos = state.pos + 2;
+                    state = parse_expr(state);
+                    ks = append(ks, key); vs = append(vs, state.node);
+                    if state.tokens[state.pos].type == "COMMA" { state.pos = state.pos + 1; }
+                }
+                state.pos = state.pos + 1;
+                state.node = {"type": "Object", "keys": ks, "values": vs};
+            } else {
+                if t.type == "IDENT" {
+                    state.node = {"type": "Ident", "name": t.val};
+                    state.pos = i + 1;
+                    loop (state.pos < len(state.tokens), 100000) {
+                        let n = state.tokens[state.pos];
+                        if n.type == "LPAREN" {
+                            let name = state.node.name; state.pos = state.pos + 1;
+                            let args = [];
+                            loop (state.tokens[state.pos].type != "RPAREN", 100000) {
+                                state = parse_expr(state); args = append(args, state.node);
+                                if state.tokens[state.pos].type == "COMMA" { state.pos = state.pos + 1; }
+                            }
+                            state.pos = state.pos + 1;
+                            state.node = {"type": "Call", "func": name, "args": args};
+                        } else {
+                            if n.type == "LBRACK" {
+                                let o = state.node; state.pos = state.pos + 1;
+                                state = parse_expr(state); state.pos = state.pos + 1;
+                                state.node = {"type": "Index", "object": o, "index": state.node};
+                            } else {
+                                if n.type == "DOT" {
+                                    let o = state.node; state.pos = state.pos + 2;
+                                    state.node = {"type": "Field", "object": o, "field": state.tokens[state.pos-1].val};
+                                } else { break; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return state;
+}
+
+fn parse_expr(state) -> object {
+    state = parse_primary(state);
+    let lhs = state.node;
+    if state.pos < len(state.tokens) {
+        let op = state.tokens[state.pos];
+        let ot = null;
+        if op.type == "OP_ADD" { ot = "Add"; }
+        if op.type == "OP_SUB" { ot = "Sub"; }
+        if op.type == "OP_MUL" { ot = "Mul"; }
+        if op.type == "OP_EQ"  { ot = "Eq"; }
+        if op.type == "OP_NE"  { ot = "Ne"; }
+        if op.type == "OP_LT"  { ot = "Lt"; }
+        if op.type == "OP_GT"  { ot = "Gt"; }
+        if op.type == "OP_LE"  { ot = "Le"; }
+        if op.type == "OP_GE"  { ot = "Ge"; }
+        if op.type == "OP_AND" { ot = "And"; }
+        if op.type == "OP_OR"  { ot = "Or"; }
+        if op.type == "OP_ASSIGN" { ot = "Assign"; }
+        if ot != null {
+            state.pos = state.pos + 1;
+            state = parse_expr(state);
+            state.node = {"type": "BinOp", "op": ot, "lhs": lhs, "rhs": state.node};
+        }
+    }
+    return state;
+}
+
+fn parse_stmt(state) -> object {
+    let t = state.tokens[state.pos];
+    if t.type == "KW_LET" {
+        let name = state.tokens[state.pos+1].val; state.pos = state.pos + 3;
+        state = parse_expr(state);
+        state.node = {"type": "Let", "name": name, "value": state.node};
+        state.pos = state.pos + 1;
+    } else {
+        if t.type == "KW_RETURN" {
+            state.pos = state.pos + 1;
+            state = parse_expr(state);
+            state.node = {"type": "Return", "value": state.node};
+            state.pos = state.pos + 1;
+        } else {
+            if t.type == "KW_IF" {
+                state.pos = state.pos + 1; state = parse_expr(state);
+                let cond = state.node; state.pos = state.pos + 1;
+                let then = [];
+                loop (state.tokens[state.pos].type != "RBRACE", 100000) {
+                    state = parse_stmt(state); then = append(then, state.node);
+                }
+                state.pos = state.pos + 1;
+                let els = [];
+                if state.pos < len(state.tokens) {
+                    if state.tokens[state.pos].type == "KW_ELSE" {
+                        state.pos = state.pos + 2;
+                        loop (state.tokens[state.pos].type != "RBRACE", 100000) {
+                            state = parse_stmt(state); els = append(els, state.node);
+                        }
+                        state.pos = state.pos + 1;
+                    }
+                }
+                state.node = {"type": "If", "cond": cond, "then": then, "else": els};
+            } else {
+                if t.type == "KW_LOOP" {
+                    state.pos = state.pos + 2; state = parse_expr(state);
+                    let cond = state.node; state.pos = state.pos + 1;
+                    let mx = state.tokens[state.pos].val; state.pos = state.pos + 3;
+                    let bdy = [];
+                    loop (state.tokens[state.pos].type != "RBRACE", 100000) {
+                        state = parse_stmt(state); bdy = append(bdy, state.node);
+                    }
+                    state.pos = state.pos + 1;
+                    state.node = {"type": "Loop", "cond": cond, "body": bdy, "max": mx};
+                } else {
+                    if t.type == "KW_BREAK" {
+                        state.node = {"type": "Break"};
+                        state.pos = state.pos + 2; // break ;
+                    } else {
+                        if t.type == "KW_CONT" {
+                            state.node = {"type": "Continue"};
+                            state.pos = state.pos + 2; // continue ;
+                        } else {
+                            state = parse_expr(state);
+                            let n = state.node;
+                            if n.type == "BinOp" {
+                                if n.op == "Assign" {
+                                    state.node = {"type": "Assign", "lhs": n.lhs, "rhs": n.rhs};
+                                }
+                            }
+                            state.pos = state.pos + 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return state;
+}

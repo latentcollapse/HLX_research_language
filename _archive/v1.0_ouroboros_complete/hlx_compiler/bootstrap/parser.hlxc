@@ -1,0 +1,5 @@
+fn main() -> object {
+    let t = {"type": "IDENT", "val": "x"};
+    let node = {"type": "Ident", "name": t.val};
+    return node;
+}

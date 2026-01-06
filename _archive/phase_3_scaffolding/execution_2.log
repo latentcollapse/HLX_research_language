@@ -1,0 +1,922 @@
+warning: unused import: `Instruction`
+ --> hlx_runtime/src/backend.rs:6:31
+  |
+6 | use hlx_core::{Value, Result, Instruction};
+  |                               ^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `DType`
+ --> hlx_runtime/src/executor.rs:8:61
+  |
+8 | use crate::backend::{Backend, create_backend, TensorHandle, DType};
+  |                                                             ^^^^^
+
+warning: unused import: `Array`
+ --> hlx_runtime/src/backends/cpu.rs:9:15
+  |
+9 | use ndarray::{Array, ArrayD, IxDyn};
+  |               ^^^^^
+
+warning: unused import: `HlxError`
+  --> hlx_runtime/src/lib.rs:53:41
+   |
+53 | use hlx_core::{HlxCrate, Value, Result, HlxError};
+   |                                         ^^^^^^^^
+
+warning: unused variable: `config`
+  --> hlx_runtime/src/backends/vulkan.rs:46:16
+   |
+46 |     pub fn new(config: &RuntimeConfig) -> Result<Self> {
+   |                ^^^^^^ help: if this is intentional, prefix it with an underscore: `_config`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `type_filter`
+   --> hlx_runtime/src/backends/vulkan.rs:204:32
+    |
+204 |     fn find_memory_type(&self, type_filter: u32, properties: vk::MemoryPropertyFlags) -> Option<u32> {
+    |                                ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_type_filter`
+
+warning: unused variable: `properties`
+   --> hlx_runtime/src/backends/vulkan.rs:204:50
+    |
+204 |     fn find_memory_type(&self, type_filter: u32, properties: vk::MemoryPropertyFlags) -> Option<u32> {
+    |                                                  ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_properties`
+
+warning: unnecessary `unsafe` block
+   --> hlx_runtime/src/backends/vulkan.rs:205:9
+    |
+205 |         unsafe {
+    |         ^^^^^^ unnecessary `unsafe` block
+    |
+    = note: `#[warn(unused_unsafe)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `a`
+   --> hlx_runtime/src/backends/vulkan.rs:557:26
+    |
+557 |     fn matmul(&mut self, a: TensorHandle, b: TensorHandle, out: TensorHandle) -> Result<()> {
+    |                          ^ help: if this is intentional, prefix it with an underscore: `_a`
+
+warning: unused variable: `b`
+   --> hlx_runtime/src/backends/vulkan.rs:557:43
+    |
+557 |     fn matmul(&mut self, a: TensorHandle, b: TensorHandle, out: TensorHandle) -> Result<()> {
+    |                                           ^ help: if this is intentional, prefix it with an underscore: `_b`
+
+warning: unused variable: `out`
+   --> hlx_runtime/src/backends/vulkan.rs:557:60
+    |
+557 |     fn matmul(&mut self, a: TensorHandle, b: TensorHandle, out: TensorHandle) -> Result<()> {
+    |                                                            ^^^ help: if this is intentional, prefix it with an underscore: `_out`
+
+warning: unused variable: `a`
+   --> hlx_runtime/src/backends/vulkan.rs:562:31
+    |
+562 |     fn matmul_bias(&mut self, a: TensorHandle, b: TensorHandle, bias: TensorHandle, out: TensorHandle) -> Result<()> { Ok(()) }
+    |                               ^ help: if this is intentional, prefix it with an underscore: `_a`
+
+warning: unused variable: `b`
+   --> hlx_runtime/src/backends/vulkan.rs:562:48
+    |
+562 |     fn matmul_bias(&mut self, a: TensorHandle, b: TensorHandle, bias: TensorHandle, out: TensorHandle) -> Result<()> { Ok(()) }
+    |                                                ^ help: if this is intentional, prefix it with an underscore: `_b`
+
+warning: unused variable: `bias`
+   --> hlx_runtime/src/backends/vulkan.rs:562:65
+    |
+562 |     fn matmul_bias(&mut self, a: TensorHandle, b: TensorHandle, bias: TensorHandle, out: TensorHandle) -> Result<()> { Ok(()) }
+    |                                                                 ^^^^ help: if this is intentional, prefix it with an underscore: `_bias`
+
+warning: unused variable: `out`
+   --> hlx_runtime/src/backends/vulkan.rs:562:85
+    |
+562 |     fn matmul_bias(&mut self, a: TensorHandle, b: TensorHandle, bias: TensorHandle, out: TensorHandle) -> Result<()> { Ok(()) }
+    |                                                                                     ^^^ help: if this is intentional, prefix it with an underscore: `_out`
+
+warning: unused variable: `input`
+   --> hlx_runtime/src/backends/vulkan.rs:563:30
+    |
+563 |     fn layer_norm(&mut self, input: TensorHandle, gamma: TensorHandle, beta: TensorHandle, out: TensorHandle, eps: f64) -> Result<()> { O...
+    |                              ^^^^^ help: if this is intentional, prefix it with an underscore: `_input`
+
+warning: unused variable: `gamma`
+   --> hlx_runtime/src/backends/vulkan.rs:563:51
+    |
+563 |     fn layer_norm(&mut self, input: TensorHandle, gamma: TensorHandle, beta: TensorHandle, out: TensorHandle, eps: f64) -> Result<()> { O...
+    |                                                   ^^^^^ help: if this is intentional, prefix it with an underscore: `_gamma`
+
+warning: unused variable: `beta`
+   --> hlx_runtime/src/backends/vulkan.rs:563:72
+    |
+563 | ...orHandle, gamma: TensorHandle, beta: TensorHandle, out: TensorHandle, eps: f64) -> Result<()> { Ok(()) }
+    |                                   ^^^^ help: if this is intentional, prefix it with an underscore: `_beta`
+
+warning: unused variable: `out`
+   --> hlx_runtime/src/backends/vulkan.rs:563:92
+    |
+563 | ...nsorHandle, beta: TensorHandle, out: TensorHandle, eps: f64) -> Result<()> { Ok(()) }
+    |                                    ^^^ help: if this is intentional, prefix it with an underscore: `_out`
+
+warning: unused variable: `eps`
+   --> hlx_runtime/src/backends/vulkan.rs:563:111
+    |
+563 | ...ensorHandle, out: TensorHandle, eps: f64) -> Result<()> { Ok(()) }
+    |                                    ^^^ help: if this is intentional, prefix it with an underscore: `_eps`
+
+warning: unused variable: `input`
+   --> hlx_runtime/src/backends/vulkan.rs:564:27
+    |
+564 |     fn softmax(&mut self, input: TensorHandle, out: TensorHandle, dim: i32) -> Result<()> { Ok(()) }
+    |                           ^^^^^ help: if this is intentional, prefix it with an underscore: `_input`
+
+warning: unused variable: `out`
+   --> hlx_runtime/src/backends/vulkan.rs:564:48
+    |
+564 |     fn softmax(&mut self, input: TensorHandle, out: TensorHandle, dim: i32) -> Result<()> { Ok(()) }
+    |                                                ^^^ help: if this is intentional, prefix it with an underscore: `_out`
+
+warning: unused variable: `dim`
+   --> hlx_runtime/src/backends/vulkan.rs:564:67
+    |
+564 |     fn softmax(&mut self, input: TensorHandle, out: TensorHandle, dim: i32) -> Result<()> { Ok(()) }
+    |                                                                   ^^^ help: if this is intentional, prefix it with an underscore: `_dim`
+
+warning: unused variable: `input`
+   --> hlx_runtime/src/backends/vulkan.rs:565:24
+    |
+565 |     fn gelu(&mut self, input: TensorHandle, out: TensorHandle) -> Result<()> { Ok(()) }
+    |                        ^^^^^ help: if this is intentional, prefix it with an underscore: `_input`
+
+warning: unused variable: `out`
+   --> hlx_runtime/src/backends/vulkan.rs:565:45
+    |
+565 |     fn gelu(&mut self, input: TensorHandle, out: TensorHandle) -> Result<()> { Ok(()) }
+    |                                             ^^^ help: if this is intentional, prefix it with an underscore: `_out`
+
+warning: unused variable: `input`
+   --> hlx_runtime/src/backends/vulkan.rs:566:24
+    |
+566 |     fn relu(&mut self, input: TensorHandle, out: TensorHandle) -> Result<()> { Ok(()) }
+    |                        ^^^^^ help: if this is intentional, prefix it with an underscore: `_input`
+
+warning: unused variable: `out`
+   --> hlx_runtime/src/backends/vulkan.rs:566:45
+    |
+566 |     fn relu(&mut self, input: TensorHandle, out: TensorHandle) -> Result<()> { Ok(()) }
+    |                                             ^^^ help: if this is intentional, prefix it with an underscore: `_out`
+
+warning: unused variable: `q`
+   --> hlx_runtime/src/backends/vulkan.rs:567:29
+    |
+567 |     fn attention(&mut self, q: TensorHandle, k: TensorHandle, v: TensorHandle, out: TensorHandle, mask: Option<TensorHandle>, scale: f64)...
+    |                             ^ help: if this is intentional, prefix it with an underscore: `_q`
+
+warning: unused variable: `k`
+   --> hlx_runtime/src/backends/vulkan.rs:567:46
+    |
+567 |     fn attention(&mut self, q: TensorHandle, k: TensorHandle, v: TensorHandle, out: TensorHandle, mask: Option<TensorHandle>, scale: f64)...
+    |                                              ^ help: if this is intentional, prefix it with an underscore: `_k`
+
+warning: unused variable: `v`
+   --> hlx_runtime/src/backends/vulkan.rs:567:63
+    |
+567 |     fn attention(&mut self, q: TensorHandle, k: TensorHandle, v: TensorHandle, out: TensorHandle, mask: Option<TensorHandle>, scale: f64)...
+    |                                                               ^ help: if this is intentional, prefix it with an underscore: `_v`
+
+warning: unused variable: `out`
+   --> hlx_runtime/src/backends/vulkan.rs:567:80
+    |
+567 | ... TensorHandle, v: TensorHandle, out: TensorHandle, mask: Option<TensorHandle>, scale: f64) -> Result<()> { Ok(()) }
+    |                                    ^^^ help: if this is intentional, prefix it with an underscore: `_out`
+
+warning: unused variable: `mask`
+   --> hlx_runtime/src/backends/vulkan.rs:567:99
+    |
+567 | ...nsorHandle, out: TensorHandle, mask: Option<TensorHandle>, scale: f64) -> Result<()> { Ok(()) }
+    |                                   ^^^^ help: if this is intentional, prefix it with an underscore: `_mask`
+
+warning: unused variable: `scale`
+   --> hlx_runtime/src/backends/vulkan.rs:567:127
+    |
+567 | ..., mask: Option<TensorHandle>, scale: f64) -> Result<()> { Ok(()) }
+    |                                  ^^^^^ help: if this is intentional, prefix it with an underscore: `_scale`
+
+warning: unused variable: `logits`
+   --> hlx_runtime/src/backends/vulkan.rs:568:33
+    |
+568 |     fn cross_entropy(&mut self, logits: TensorHandle, targets: TensorHandle, loss_out: TensorHandle, probs_out: TensorHandle) -> Result<(...
+    |                                 ^^^^^^ help: if this is intentional, prefix it with an underscore: `_logits`
+
+warning: unused variable: `targets`
+   --> hlx_runtime/src/backends/vulkan.rs:568:55
+    |
+568 |     fn cross_entropy(&mut self, logits: TensorHandle, targets: TensorHandle, loss_out: TensorHandle, probs_out: TensorHandle) -> Result<(...
+    |                                                       ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_targets`
+
+warning: unused variable: `loss_out`
+   --> hlx_runtime/src/backends/vulkan.rs:568:78
+    |
+568 | ...le, targets: TensorHandle, loss_out: TensorHandle, probs_out: TensorHandle) -> Result<()> { Ok(()) }
+    |                               ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_loss_out`
+
+warning: unused variable: `probs_out`
+   --> hlx_runtime/src/backends/vulkan.rs:568:102
+    |
+568 | ..., loss_out: TensorHandle, probs_out: TensorHandle) -> Result<()> { Ok(()) }
+    |                              ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_probs_out`
+
+warning: unused variable: `input`
+   --> hlx_runtime/src/backends/vulkan.rs:569:30
+    |
+569 |     fn reduce_sum(&mut self, input: TensorHandle, out: TensorHandle, dim: Option<i32>) -> Result<()> { Ok(()) }
+    |                              ^^^^^ help: if this is intentional, prefix it with an underscore: `_input`
+
+warning: unused variable: `out`
+   --> hlx_runtime/src/backends/vulkan.rs:569:51
+    |
+569 |     fn reduce_sum(&mut self, input: TensorHandle, out: TensorHandle, dim: Option<i32>) -> Result<()> { Ok(()) }
+    |                                                   ^^^ help: if this is intentional, prefix it with an underscore: `_out`
+
+warning: unused variable: `dim`
+   --> hlx_runtime/src/backends/vulkan.rs:569:70
+    |
+569 |     fn reduce_sum(&mut self, input: TensorHandle, out: TensorHandle, dim: Option<i32>) -> Result<()> { Ok(()) }
+    |                                                                      ^^^ help: if this is intentional, prefix it with an underscore: `_dim`
+
+warning: unused variable: `indices`
+   --> hlx_runtime/src/backends/vulkan.rs:570:29
+    |
+570 |     fn embedding(&mut self, indices: TensorHandle, weight: TensorHandle, out: TensorHandle) -> Result<()> { Ok(()) }
+    |                             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_indices`
+
+warning: unused variable: `weight`
+   --> hlx_runtime/src/backends/vulkan.rs:570:52
+    |
+570 |     fn embedding(&mut self, indices: TensorHandle, weight: TensorHandle, out: TensorHandle) -> Result<()> { Ok(()) }
+    |                                                    ^^^^^^ help: if this is intentional, prefix it with an underscore: `_weight`
+
+warning: unused variable: `out`
+   --> hlx_runtime/src/backends/vulkan.rs:570:74
+    |
+570 |     fn embedding(&mut self, indices: TensorHandle, weight: TensorHandle, out: TensorHandle) -> Result<()> { Ok(()) }
+    |                                                                          ^^^ help: if this is intentional, prefix it with an underscore: `_out`
+
+warning: unused variable: `param`
+   --> hlx_runtime/src/backends/vulkan.rs:571:31
+    |
+571 |     fn adam_update(&mut self, param: TensorHandle, grad: TensorHandle, m: TensorHandle, v: TensorHandle, lr: f64, beta1: f64, beta2: f64,...
+    |                               ^^^^^ help: if this is intentional, prefix it with an underscore: `_param`
+
+warning: unused variable: `grad`
+   --> hlx_runtime/src/backends/vulkan.rs:571:52
+    |
+571 |     fn adam_update(&mut self, param: TensorHandle, grad: TensorHandle, m: TensorHandle, v: TensorHandle, lr: f64, beta1: f64, beta2: f64,...
+    |                                                    ^^^^ help: if this is intentional, prefix it with an underscore: `_grad`
+
+warning: unused variable: `m`
+   --> hlx_runtime/src/backends/vulkan.rs:571:72
+    |
+571 | ...TensorHandle, grad: TensorHandle, m: TensorHandle, v: TensorHandle, lr: f64, beta1: f64, beta2: f64, eps: f64, step: u64) -> Result<()...
+    |                                      ^ help: if this is intentional, prefix it with an underscore: `_m`
+
+warning: unused variable: `v`
+   --> hlx_runtime/src/backends/vulkan.rs:571:89
+    |
+571 | ...d: TensorHandle, m: TensorHandle, v: TensorHandle, lr: f64, beta1: f64, beta2: f64, eps: f64, step: u64) -> Result<()> { Ok(()) }
+    |                                      ^ help: if this is intentional, prefix it with an underscore: `_v`
+
+warning: unused variable: `lr`
+   --> hlx_runtime/src/backends/vulkan.rs:571:106
+    |
+571 | ...: TensorHandle, v: TensorHandle, lr: f64, beta1: f64, beta2: f64, eps: f64, step: u64) -> Result<()> { Ok(()) }
+    |                                     ^^ help: if this is intentional, prefix it with an underscore: `_lr`
+
+warning: unused variable: `beta1`
+   --> hlx_runtime/src/backends/vulkan.rs:571:115
+    |
+571 | ...le, v: TensorHandle, lr: f64, beta1: f64, beta2: f64, eps: f64, step: u64) -> Result<()> { Ok(()) }
+    |                                  ^^^^^ help: if this is intentional, prefix it with an underscore: `_beta1`
+
+warning: unused variable: `beta2`
+   --> hlx_runtime/src/backends/vulkan.rs:571:127
+    |
+571 | ...rHandle, lr: f64, beta1: f64, beta2: f64, eps: f64, step: u64) -> Result<()> { Ok(()) }
+    |                                  ^^^^^ help: if this is intentional, prefix it with an underscore: `_beta2`
+
+warning: unused variable: `eps`
+   --> hlx_runtime/src/backends/vulkan.rs:571:139
+    |
+571 | ...r: f64, beta1: f64, beta2: f64, eps: f64, step: u64) -> Result<()> { Ok(()) }
+    |                                    ^^^ help: if this is intentional, prefix it with an underscore: `_eps`
+
+warning: unused variable: `step`
+   --> hlx_runtime/src/backends/vulkan.rs:571:149
+    |
+571 | ...a1: f64, beta2: f64, eps: f64, step: u64) -> Result<()> { Ok(()) }
+    |                                   ^^^^ help: if this is intentional, prefix it with an underscore: `_step`
+
+warning: field `config` is never read
+  --> hlx_runtime/src/backends/cpu.rs:21:5
+   |
+13 | pub struct CpuBackend {
+   |            ---------- field in this struct
+...
+21 |     config: RuntimeConfig,
+   |     ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `queue_family_index`, `tuning`, and `command_pool` are never read
+  --> hlx_runtime/src/backends/vulkan.rs:23:5
+   |
+18 | pub struct VulkanBackend {
+   |            ------------- fields in this struct
+...
+23 |     queue_family_index: u32,
+   |     ^^^^^^^^^^^^^^^^^^
+24 |     allocator: Arc<Mutex<Allocator>>,
+25 |     tuning: Box<dyn BackendTuning>,
+   |     ^^^^^^
+...
+28 |     command_pool: vk::CommandPool,
+   |     ^^^^^^^^^^^^
+
+warning: method `find_memory_type` is never used
+   --> hlx_runtime/src/backends/vulkan.rs:204:8
+    |
+ 45 | impl VulkanBackend {
+    | ------------------ method in this implementation
+...
+204 |     fn find_memory_type(&self, type_filter: u32, properties: vk::MemoryPropertyFlags) -> Option<u32> {
+    |        ^^^^^^^^^^^^^^^^
+
+warning: unused imports: `map_res`, `one_of`, and `separated_list0`
+ --> hlx_compiler/src/hlxl.rs:7:67
+  |
+7 |     character::complete::{char, multispace0, multispace1, digit1, one_of},
+  |                                                                   ^^^^^^
+8 |     combinator::{opt, map, map_res, value},
+  |                            ^^^^^^^
+9 |     multi::{many0, separated_list0},
+  |                    ^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `HlxError`
+ --> hlx_compiler/src/runic.rs:9:24
+  |
+9 | use hlx_core::{Result, HlxError};
+  |                        ^^^^^^^^
+
+warning: unused import: `multispace0`
+ --> hlx_compiler/src/hlxc.rs:9:33
+  |
+9 |     character::complete::{char, multispace0, multispace1, digit1},
+  |                                 ^^^^^^^^^^^
+
+warning: unused imports: `DType` and `TensorShape`
+ --> hlx_compiler/src/lower.rs:6:42
+  |
+6 |     instruction::{Instruction, Register, TensorShape, DType},
+  |                                          ^^^^^^^^^^^  ^^^^^
+
+warning: unused import: `Result as HlxResult`
+  --> hlx_compiler/src/lib.rs:18:26
+   |
+18 | use hlx_core::{HlxCrate, Result as HlxResult};
+   |                          ^^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `c`
+   --> hlx_compiler/src/ast.rs:208:29
+    |
+208 |             Value::Contract(c) => {
+    |                             ^ help: if this is intentional, prefix it with an underscore: `_c`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `then_branch`
+   --> hlx_compiler/src/hlxl.rs:259:48
+    |
+259 | ...ion, then_branch, else_branch } => {
+    |         ^^^^^^^^^^^ help: try ignoring the field: `then_branch: _`
+
+warning: unused variable: `else_branch`
+   --> hlx_compiler/src/hlxl.rs:259:61
+    |
+259 | ...nch, else_branch } => {
+    |         ^^^^^^^^^^^ help: try ignoring the field: `else_branch: _`
+
+warning: unused variable: `body`
+   --> hlx_compiler/src/runic.rs:300:33
+    |
+300 |             Expr::Transaction { body } => {
+    |                                 ^^^^ help: try ignoring the field: `body: _`
+
+warning: unused variable: `label`
+  --> hlx_compiler/src/lower.rs:88:30
+   |
+88 |     fn emit_label(&mut self, label: u32) {
+   |                              ^^^^^ help: if this is intentional, prefix it with an underscore: `_label`
+
+warning: function `array_literal` is never used
+  --> hlx_compiler/src/hlxc.rs:95:4
+   |
+95 | fn array_literal(input: &str) -> ParseResult<Literal> {
+   |    ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `object_literal` is never used
+   --> hlx_compiler/src/hlxc.rs:103:4
+    |
+103 | fn object_literal(input: &str) -> ParseResult<Literal> {
+    |    ^^^^^^^^^^^^^^
+
+warning: field `next_label` is never read
+  --> hlx_compiler/src/lower.rs:60:5
+   |
+57 | struct LoweringContext {
+   |        --------------- field in this struct
+...
+60 |     next_label: u32,
+   |     ^^^^^^^^^^
+
+warning: methods `next_label` and `emit_label` are never used
+  --> hlx_compiler/src/lower.rs:82:8
+   |
+65 | impl LoweringContext {
+   | -------------------- methods in this implementation
+...
+82 |     fn next_label(&mut self) -> u32 {
+   |        ^^^^^^^^^^
+...
+88 |     fn emit_label(&mut self, label: u32) {
+   |        ^^^^^^^^^^
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> hlx_compiler/src/hlxl.rs:32:14
+   |
+32 | fn ws(input: &str) -> ParseResult<()> { value((), multispace0)(input) }
+   |              ^^^^     ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |              |
+   |              the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+   = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+   |
+32 | fn ws(input: &str) -> ParseResult<'_, ()> { value((), multispace0)(input) }
+   |                                   +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> hlx_compiler/src/hlxl.rs:33:15
+   |
+33 | fn ws1(input: &str) -> ParseResult<()> { value((), multispace1)(input) }
+   |               ^^^^     ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |               |
+   |               the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+33 | fn ws1(input: &str) -> ParseResult<'_, ()> { value((), multispace1)(input) }
+   |                                    +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> hlx_compiler/src/hlxl.rs:38:17
+   |
+38 | fn ident(input: &str) -> ParseResult<String> {
+   |                 ^^^^     ^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                 |
+   |                 the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+38 | fn ident(input: &str) -> ParseResult<'_, String> {
+   |                                      +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> hlx_compiler/src/hlxl.rs:55:19
+   |
+55 | fn literal(input: &str) -> ParseResult<Literal> {
+   |                   ^^^^     ^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                   |
+   |                   the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+55 | fn literal(input: &str) -> ParseResult<'_, Literal> {
+   |                                        +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> hlx_compiler/src/hlxl.rs:72:24
+   |
+72 | fn primary_expr(input: &str) -> ParseResult<Expr> {
+   |                        ^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                        |
+   |                        the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+72 | fn primary_expr(input: &str) -> ParseResult<'_, Expr> {
+   |                                             +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> hlx_compiler/src/hlxl.rs:80:19
+   |
+80 | fn op_expr(input: &str) -> ParseResult<Expr> {
+   |                   ^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                   |
+   |                   the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+80 | fn op_expr(input: &str) -> ParseResult<'_, Expr> {
+   |                                        +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxl.rs:112:16
+    |
+112 | fn expr(input: &str) -> ParseResult<Expr> {
+    |                ^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                |
+    |                the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+112 | fn expr(input: &str) -> ParseResult<'_, Expr> {
+    |                                     +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxl.rs:116:24
+    |
+116 | fn spanned_expr(input: &str) -> ParseResult<Spanned<Expr>> {
+    |                        ^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                        |
+    |                        the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+116 | fn spanned_expr(input: &str) -> ParseResult<'_, Spanned<Expr>> {
+    |                                             +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxl.rs:121:21
+    |
+121 | fn statement(input: &str) -> ParseResult<Statement> {
+    |                     ^^^^     ^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                     |
+    |                     the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+121 | fn statement(input: &str) -> ParseResult<'_, Statement> {
+    |                                          +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxl.rs:153:24
+    |
+153 | fn spanned_stmt(input: &str) -> ParseResult<Spanned<Statement>> {
+    |                        ^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                        |
+    |                        the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+153 | fn spanned_stmt(input: &str) -> ParseResult<'_, Spanned<Statement>> {
+    |                                             +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxl.rs:158:17
+    |
+158 | fn block(input: &str) -> ParseResult<Block> {
+    |                 ^^^^     ^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                 |
+    |                 the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+158 | fn block(input: &str) -> ParseResult<'_, Block> {
+    |                                      +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxl.rs:173:25
+    |
+173 | fn parse_program(input: &str) -> ParseResult<Program> {
+    |                         ^^^^     ^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                         |
+    |                         the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+173 | fn parse_program(input: &str) -> ParseResult<'_, Program> {
+    |                                              +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> hlx_compiler/src/hlxc.rs:33:14
+   |
+33 | fn ws(input: &str) -> ParseResult<()> {
+   |              ^^^^     ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |              |
+   |              the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+33 | fn ws(input: &str) -> ParseResult<'_, ()> {
+   |                                   +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> hlx_compiler/src/hlxc.rs:41:15
+   |
+41 | fn ws1(input: &str) -> ParseResult<()> {
+   |               ^^^^     ^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |               |
+   |               the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+41 | fn ws1(input: &str) -> ParseResult<'_, ()> {
+   |                                    +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> hlx_compiler/src/hlxc.rs:48:17
+   |
+48 | fn ident(input: &str) -> ParseResult<String> {
+   |                 ^^^^     ^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                 |
+   |                 the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+48 | fn ident(input: &str) -> ParseResult<'_, String> {
+   |                                      +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> hlx_compiler/src/hlxc.rs:65:19
+   |
+65 | fn literal(input: &str) -> ParseResult<Literal> {
+   |                   ^^^^     ^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                   |
+   |                   the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+65 | fn literal(input: &str) -> ParseResult<'_, Literal> {
+   |                                        +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> hlx_compiler/src/hlxc.rs:95:25
+   |
+95 | fn array_literal(input: &str) -> ParseResult<Literal> {
+   |                         ^^^^     ^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                         |
+   |                         the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+95 | fn array_literal(input: &str) -> ParseResult<'_, Literal> {
+   |                                              +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:103:26
+    |
+103 | fn object_literal(input: &str) -> ParseResult<Literal> {
+    |                          ^^^^     ^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                          |
+    |                          the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+103 | fn object_literal(input: &str) -> ParseResult<'_, Literal> {
+    |                                               +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:114:21
+    |
+114 | fn atom_expr(input: &str) -> ParseResult<Expr> {
+    |                     ^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                     |
+    |                     the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+114 | fn atom_expr(input: &str) -> ParseResult<'_, Expr> {
+    |                                          +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:135:24
+    |
+135 | fn primary_expr(input: &str) -> ParseResult<Expr> {
+    |                        ^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                        |
+    |                        the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+135 | fn primary_expr(input: &str) -> ParseResult<'_, Expr> {
+    |                                             +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:177:20
+    |
+177 | fn mul_expr(input: &str) -> ParseResult<Expr> {
+    |                    ^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                    |
+    |                    the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+177 | fn mul_expr(input: &str) -> ParseResult<'_, Expr> {
+    |                                         +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:189:20
+    |
+189 | fn add_expr(input: &str) -> ParseResult<Expr> {
+    |                    ^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                    |
+    |                    the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+189 | fn add_expr(input: &str) -> ParseResult<'_, Expr> {
+    |                                         +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:201:21
+    |
+201 | fn comp_expr(input: &str) -> ParseResult<Expr> {
+    |                     ^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                     |
+    |                     the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+201 | fn comp_expr(input: &str) -> ParseResult<'_, Expr> {
+    |                                          +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:215:19
+    |
+215 | fn eq_expr(input: &str) -> ParseResult<Expr> {
+    |                   ^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                   |
+    |                   the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+215 | fn eq_expr(input: &str) -> ParseResult<'_, Expr> {
+    |                                        +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:227:20
+    |
+227 | fn and_expr(input: &str) -> ParseResult<Expr> {
+    |                    ^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                    |
+    |                    the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+227 | fn and_expr(input: &str) -> ParseResult<'_, Expr> {
+    |                                         +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:236:19
+    |
+236 | fn or_expr(input: &str) -> ParseResult<Expr> {
+    |                   ^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                   |
+    |                   the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+236 | fn or_expr(input: &str) -> ParseResult<'_, Expr> {
+    |                                        +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:245:16
+    |
+245 | fn expr(input: &str) -> ParseResult<Expr> {
+    |                ^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                |
+    |                the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+245 | fn expr(input: &str) -> ParseResult<'_, Expr> {
+    |                                     +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:249:24
+    |
+249 | fn spanned_expr(input: &str) -> ParseResult<Spanned<Expr>> {
+    |                        ^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                        |
+    |                        the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+249 | fn spanned_expr(input: &str) -> ParseResult<'_, Spanned<Expr>> {
+    |                                             +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:256:21
+    |
+256 | fn statement(input: &str) -> ParseResult<Statement> {
+    |                     ^^^^     ^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                     |
+    |                     the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+256 | fn statement(input: &str) -> ParseResult<'_, Statement> {
+    |                                          +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:308:24
+    |
+308 | fn spanned_stmt(input: &str) -> ParseResult<Spanned<Statement>> {
+    |                        ^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                        |
+    |                        the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+308 | fn spanned_stmt(input: &str) -> ParseResult<'_, Spanned<Statement>> {
+    |                                             +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:313:24
+    |
+313 | fn function_def(input: &str) -> ParseResult<Block> {
+    |                        ^^^^     ^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                        |
+    |                        the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+313 | fn function_def(input: &str) -> ParseResult<'_, Block> {
+    |                                             +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> hlx_compiler/src/hlxc.rs:328:25
+    |
+328 | fn parse_program(input: &str) -> ParseResult<Program> {
+    |                         ^^^^     ^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                         |
+    |                         the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+328 | fn parse_program(input: &str) -> ParseResult<'_, Program> {
+    |                                              +++
+
+warning: `hlx_runtime` (lib) generated 55 warnings (run `cargo fix --lib -p hlx_runtime` to apply 4 suggestions)
+warning: `hlx_compiler` (lib) generated 46 warnings (run `cargo fix --lib -p hlx_compiler` to apply 37 suggestions)
+warning: unused import: `RuntimeConfig`
+  --> hlx_cli/src/main.rs:24:28
+   |
+24 | use hlx_runtime::{execute, RuntimeConfig};
+   |                            ^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `hlx_cli` (bin "hlx") generated 1 warning (run `cargo fix --bin "hlx"` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running `target/debug/hlx run hlx_compiler/bootstrap/compiler.hlxc`
+Error: Parse error (HLX-C)
+
+Caused by:
+    E_PARSE_ERROR: Error(VerboseError { errors: [("fn tokenize(source) -> object {\n    let tokens = [];\n    let i = 0;\n    let len = len(source);\n    \n    loop (i < len, 1000000) {\n        let c = source[i];\n        \n        if c == \" \" or c == \"\\n\" or c == \"\\t\" or c == \"\\r\" {\n            i = i + 1;\n        } else {\n            if is_alpha(c) {\n                let ident = \"\";\n                loop (i < len and is_alpha(source[i]), 100) {\n                    ident = ident + source[i];\n                    i = i + 1;\n                }\n                let type = \"IDENT\";\n                if ident == \"fn\" { type = \"KW_FN\"; }\n                if ident == \"let\" { type = \"KW_LET\"; }\n                if ident == \"return\" { type = \"KW_RETURN\"; }\n                if ident == \"if\" { type = \"KW_IF\"; }\n                if ident == \"else\" { type = \"KW_ELSE\"; }\n                if ident == \"loop\" { type = \"KW_LOOP\"; }\n                if ident == \"break\" { type = \"KW_BREAK\"; }\n                if ident == \"continue\" { type = \"KW_CONT\"; }\n                if ident == \"and\" { type = \"OP_AND\"; }\n                if ident == \"or\" { type = \"OP_OR\"; }\n                if ident == \"true\" { type = \"LIT_BOOL\"; }\n                if ident == \"false\" { type = \"LIT_BOOL\"; }\n                if ident == \"null\" { type = \"LIT_NULL\"; }\n                tokens = append(tokens, {\"type\": type, \"val\": ident});\n            } else {\n                if is_digit(c) {\n                    let num = \"\";\n                    loop (i < len and is_digit(source[i]), 100) {\n                        num = num + source[i];\n                        i = i + 1;\n                    }\n                    tokens = append(tokens, {\"type\": \"LIT_INT\", \"val\": num});\n                } else {\n                    if c == \"\\\"\" {\n                        i = i + 1;\n                        let s = \"\";\n                        loop (i < len and source[i] != \"\\\"\", 1000000) {\n                            if source[i] == \"\\\\\" and i + 1 < len and source[i+1] == \"\\\"\" {\n                                s = s + \"\\\"\";\n                                i = i + 2;\n                            } else {\n                                s = s + source[i];\n                                i = i + 1;\n                            }\n                        }\n                        i = i + 1;\n                        tokens = append(tokens, {\"type\": \"LIT_STR\", \"val\": s});\n                    } else {\n                        let t = null;\n                        if c == \"{\" { t = \"LBRACE\"; }\n                        if c == \"}\" { t = \"RBRACE\"; }\n                        if c == \"[\" { t = \"LBRACK\"; }\n                        if c == \"]\" { t = \"RBRACK\"; }\n                        if c == \"(\" { t = \"LPAREN\"; }\n                        if c == \")\" { t = \"RPAREN\"; }\n                        if c == \";\" { t = \"SEMI\"; }\n                        if c == \":\" { t = \"COLON\"; }\n                        if c == \",\" { t = \"COMMA\"; }\n                        if c == \".\" { t = \"DOT\"; }\n                        if c == \"+\" { t = \"OP_ADD\"; }\n                        if c == \"-\" { t = \"OP_SUB\"; }\n                        if c == \"*\" { t = \"OP_MUL\"; }\n                        \n                        if t != null {\n                            tokens = append(tokens, {\"type\": t, \"val\": c});\n                            i = i + 1;\n                        } else {\n                            if c == \"=\" {\n                                if i + 1 < len and source[i+1] == \"=\" {\n                                    tokens = append(tokens, {\"type\": \"OP_EQ\", \"val\": \"==\"}); i = i + 2;\n                                } else {\n                                    tokens = append(tokens, {\"type\": \"OP_ASSIGN\", \"val\": \"=\"}); i = i + 1;\n                                }\n                            } else {\n                                if c == \"!\" {\n                                    if i + 1 < len and source[i+1] == \"=\" {\n                                        tokens = append(tokens, {\"type\": \"OP_NE\", \"val\": \"!=\"}); i = i + 2;\n                                    } else { i = i + 1; }\n                                } else {\n                                    if c == \"<\" {\n                                        if i + 1 < len and source[i+1] == \"=\" {\n                                            tokens = append(tokens, {\"type\": \"OP_LE\", \"val\": \"<=\"}); i = i + 2;\n                                        } else {\n                                            tokens = append(tokens, {\"type\": \"OP_LT\", \"val\": \"<\"}); i = i + 1;\n                                        }\n                                    } else {\n                                        if c == \">\" {\n                                            if i + 1 < len and source[i+1] == \"=\" {\n                                                tokens = append(tokens, {\"type\": \"OP_GE\", \"val\": \">=\"}); i = i + 2;\n                                            } else {\n                                                tokens = append(tokens, {\"type\": \"OP_GT\", \"val\": \">\"}); i = i + 1;\n                                            }\n                                        } else {\n                                            i = i + 1;\n                                        }\n                                    }\n                                }\n                            }\n                        }\n                    }\n                }\n            }\n        }\n    }\n    return tokens;\n}\n\n// ========================================== \n// 2. PARSER\n// ========================================== \n\nfn parse_primary(state) -> object {\n    let i = state.pos;\n    let t = state.tokens[i];\n    \n    if t.type == \"LIT_INT\" or t.type == \"LIT_STR\" or t.type == \"LIT_BOOL\" or t.type == \"LIT_NULL\" {\n        state.node = {\"type\": \"Literal\", \"val\": t.val, \"lit_type\": t.type};\n        state.pos = i + 1;\n    } else {\n        if t.type == \"LBRACK\" {\n            state.pos = i + 1;\n            let els = [];\n            loop (state.tokens[state.pos].type != \"RBRACK\", 100000) {\n                state = parse_expr(state);\n                els = append(els, state.node);\n                if state.tokens[state.pos].type == \"COMMA\" { state.pos = state.pos + 1; }\n            }\n            state.pos = state.pos + 1;\n            state.node = {\"type\": \"Array\", \"elements\": els};\n        } else {\n            if t.type == \"LBRACE\" {\n                state.pos = i + 1;\n                let ks = []; let vs = [];\n                loop (state.tokens[state.pos].type != \"RBRACE\", 100000) {\n                    let key = state.tokens[state.pos].val;\n                    state.pos = state.pos + 2;\n                    state = parse_expr(state);\n                    ks = append(ks, key); vs = append(vs, state.node);\n                    if state.tokens[state.pos].type == \"COMMA\" { state.pos = state.pos + 1; }\n                }\n                state.pos = state.pos + 1;\n                state.node = {\"type\": \"Object\", \"keys\": ks, \"values\": vs};\n            } else {\n                if t.type == \"IDENT\" {\n                    state.node = {\"type\": \"Ident\", \"name\": t.val};\n                    state.pos = i + 1;\n                    loop (state.pos < len(state.tokens), 100000) {\n                        let n = state.tokens[state.pos];\n                        if n.type == \"LPAREN\" {\n                            let name = state.node.name; state.pos = state.pos + 1;\n                            let args = [];\n                            loop (state.tokens[state.pos].type != \"RPAREN\", 100000) {\n                                state = parse_expr(state); args = append(args, state.node);\n                                if state.tokens[state.pos].type == \"COMMA\" { state.pos = state.pos + 1; }\n                            }\n                            state.pos = state.pos + 1;\n                            state.node = {\"type\": \"Call\", \"func\": name, \"args\": args};\n                        } else {\n                            if n.type == \"LBRACK\" {\n                                let o = state.node; state.pos = state.pos + 1;\n                                state = parse_expr(state); state.pos = state.pos + 1;\n                                state.node = {\"type\": \"Index\", \"object\": o, \"index\": state.node};\n                            } else {\n                                if n.type == \"DOT\" {\n                                    let o = state.node; state.pos = state.pos + 2;\n                                    state.node = {\"type\": \"Field\", \"object\": o, \"field\": state.tokens[state.pos-1].val};\n                                } else { break; }\n                            }\n                        }\n                    }\n                }\n            }\n        }\n    }\n    return state;\n}\n\nfn parse_expr(state) -> object {\n    state = parse_primary(state);\n    let lhs = state.node;\n    if state.pos < len(state.tokens) {\n        let op = state.tokens[state.pos];\n        let ot = null;\n        if op.type == \"OP_ADD\" { ot = \"Add\"; }\n        if op.type == \"OP_SUB\" { ot = \"Sub\"; }\n        if op.type == \"OP_MUL\" { ot = \"Mul\"; }\n        if op.type == \"OP_EQ\"  { ot = \"Eq\"; }\n        if op.type == \"OP_NE\"  { ot = \"Ne\"; }\n        if op.type == \"OP_LT\"  { ot = \"Lt\"; }\n        if op.type == \"OP_GT\"  { ot = \"Gt\"; }\n        if op.type == \"OP_LE\"  { ot = \"Le\"; }\n        if op.type == \"OP_GE\"  { ot = \"Ge\"; }\n        if op.type == \"OP_AND\" { ot = \"And\"; }\n        if op.type == \"OP_OR\"  { ot = \"Or\"; }\n        if op.type == \"OP_ASSIGN\" { ot = \"Assign\"; }\n        if ot != null {\n            state.pos = state.pos + 1;\n            state = parse_expr(state);\n            state.node = {\"type\": \"BinOp\", \"op\": ot, \"lhs\": lhs, \"rhs\": state.node};\n        }\n    }\n    return state;\n}\n\nfn parse_stmt(state) -> object {\n    let t = state.tokens[state.pos];\n    if t.type == \"KW_LET\" {\n        let name = state.tokens[state.pos+1].val; state.pos = state.pos + 3;\n        state = parse_expr(state);\n        state.node = {\"type\": \"Let\", \"name\": name, \"value\": state.node};\n        state.pos = state.pos + 1;\n    } else {\n        if t.type == \"KW_RETURN\" {\n            state.pos = state.pos + 1;\n            state = parse_expr(state);\n            state.node = {\"type\": \"Return\", \"value\": state.node};\n            state.pos = state.pos + 1;\n        } else {\n            if t.type == \"KW_IF\" {\n                state.pos = state.pos + 1; state = parse_expr(state);\n                let cond = state.node; state.pos = state.pos + 1;\n                let then = [];\n                loop (state.tokens[state.pos].type != \"RBRACE\", 100000) {\n                    state = parse_stmt(state); then = append(then, state.node);\n                }\n                state.pos = state.pos + 1;\n                state.node = {\"type\": \"If\", \"cond\": cond, \"then\": then};\n            } else {\n                if t.type == \"KW_LOOP\" {\n                    state.pos = state.pos + 2; state = parse_expr(state);\n                    let cond = state.node; state.pos = state.pos + 1;\n                    let mx = state.tokens[state.pos].val; state.pos = state.pos + 3;\n                    let bdy = [];\n                    loop (state.tokens[state.pos].type != \"RBRACE\", 100000) {\n                        state = parse_stmt(state); bdy = append(bdy, state.node);\n                    }\n                    state.pos = state.pos + 1;\n                    state.node = {\"type\": \"Loop\", \"cond\": cond, \"body\": bdy, \"max\": mx};\n                } else {\n                    if t.type == \"KW_BREAK\" {\n                        state.node = {\"type\": \"Break\"};\n                        state.pos = state.pos + 2; // break ;\n                    } else {\n                        if t.type == \"KW_CONT\" {\n                            state.node = {\"type\": \"Continue\"};\n                            state.pos = state.pos + 2; // continue ;\n                        } else {\n                            state = parse_expr(state);\n                            let n = state.node;\n                            if n.type == \"BinOp\" {\n                                if n.op == \"Assign\" {\n                                    state.node = {\"type\": \"Assign\", \"lhs\": n.lhs, \"rhs\": n.rhs};\n                                }\n                            }\n                            state.pos = state.pos + 1;\n                        }\n                    }\n                }\n            }\n        }\n    }\n    return state;\n}\n\n// ========================================== \n// 3. LOWERER\n// ========================================== \n\nfn compile_expr(state, expr) -> object {\n    let t = expr.type;\n    if t == \"Literal\" {\n        let r = state.regs.next; let rs = state.regs; rs.next = r + 1; state.regs = rs;\n        let v = expr.val;\n        if expr.lit_type == \"LIT_BOOL\" {\n            if v == \"true\" { v = true; } else { v = false; }\n        } else {\n            if expr.lit_type == \"LIT_NULL\" { v = null; }\n        }\n        state.insts = append(state.insts, {\"op\": \"Constant\", \"out\": r, \"val\": v});\n        state.result_reg = r;\n    } else {\n        if t == \"Ident\" {\n            state.result_reg = state.regs.map[expr.name];\n        } else {\n            if t == \"BinOp\" {\n                state = compile_expr(state, expr.lhs); let l = state.result_reg;\n                state = compile_expr(state, expr.rhs); let r = state.result_reg;\n                let o = state.regs.next; let rs = state.regs; rs.next = o + 1; state.regs = rs;\n                state.insts = append(state.insts, {\"op\": expr.op, \"out\": o, \"lhs\": l, \"rhs\": r});\n                state.result_reg = o;\n            } else {\n                if t == \"Call\" {\n                    let args = []; let j = 0;\n                    loop (j < len(expr.args), 100000) {\n                        state = compile_expr(state, expr.args[j]); args = append(args, state.result_reg);\n                        j = j + 1;\n                    }\n                    let o = state.regs.next; let rs = state.regs; rs.next = o + 1; state.regs = rs;\n                    state.insts = append(state.insts, {\"op\": \"Call\", \"out\": o, \"func\": expr.func, \"args\": args});\n                    state.result_reg = o;\n                } else {\n                    if t == \"Index\" {\n                        state = compile_expr(state, expr.object); let o = state.result_reg;\n                        state = compile_expr(state, expr.index); let i = state.result_reg;\n                        let out = state.regs.next; let rs = state.regs; rs.next = out + 1; state.regs = rs;\n                        state.insts = append(state.insts, {\"op\": \"Index\", \"out\": out, \"container\": o, \"index\": i});\n                        state.result_reg = out;\n                    } else {\n                        if t == \"Field\" {\n                            state = compile_expr(state, expr.object); let o = state.result_reg;\n                            let k = state.regs.next; let rs = state.regs; rs.next = k + 1; state.regs = rs;\n                            state.insts = append(state.insts, {\"op\": \"Constant\", \"out\": k, \"val\": expr.field});\n                            let out = state.regs.next; let rs2 = state.regs; rs2.next = out + 1; state.regs = rs2;\n                            state.insts = append(state.insts, {\"op\": \"Index\", \"out\": out, \"container\": o, \"index\": k});\n                            state.result_reg = out;\n                        } else {\n                            if t == \"Array\" {\n                                let els = []; let j = 0;\n                                loop (j < len(expr.elements), 100000) {\n                                    state = compile_expr(state, expr.elements[j]); els = append(els, state.result_reg);\n                                    j = j + 1;\n                                }\n                                let o = state.regs.next; let rs = state.regs; rs.next = o + 1; state.regs = rs;\n                                state.insts = append(state.insts, {\"op\": \"ArrayCreate\", \"out\": o, \"elements\": els});\n                                state.result_reg = o;\n                            } else {\n                                if t == \"Object\" {\n                                    let vs = []; let j = 0;\n                                    loop (j < len(expr.values), 100000) {\n                                        state = compile_expr(state, expr.values[j]); vs = append(vs, state.result_reg);\n                                        j = j + 1;\n                                    }\n                                    let o = state.regs.next; let rs = state.regs; rs.next = o + 1; state.regs = rs;\n                                    state.insts = append(state.insts, {\"op\": \"ObjectCreate\", \"out\": o, \"keys\": expr.keys, \"values\": vs});\n                                    state.result_reg = o;\n                                }\n                            }\n                        }\n                    }\n                }\n            }\n        }\n    }\n    return state;\n}\n\nfn compile_stmt(state, stmt) -> object {\n    if stmt == null { return state; }\n    if stmt.type == \"Let\" {\n        state = compile_expr(state, stmt.value);\n        let m = state.regs.map; m[stmt.name] = state.result_reg;\n        let rs = state.regs; rs.map = m; state.regs = rs;\n    } else {\n        if stmt.type == \"Assign\" {\n            state = compile_expr(state, stmt.rhs); let v = state.result_reg;\n            if stmt.lhs.type == \"Ident\" {\n                state.insts = append(state.insts, {\"op\": \"Move\", \"out\": state.regs.map[stmt.lhs.name], \"src\": v});\n            } else {\n                if stmt.lhs.type == \"Index\" {\n                    state = compile_expr(state, stmt.lhs.object); let o = state.result_reg;\n                    state = compile_expr(state, stmt.lhs.index);\n                    state.insts = append(state.insts, {\"op\": \"Store\", \"container\": o, \"index\": state.result_reg, \"value\": v});\n                } else {\n                    if stmt.lhs.type == \"Field\" {\n                        state = compile_expr(state, stmt.lhs.object); let o = state.result_reg;\n                        let k = state.regs.next; let rs = state.regs; rs.next = k + 1; state.regs = rs;\n                        state.insts = append(state.insts, {\"op\": \"Constant\", \"out\": k, \"val\": stmt.lhs.field});\n                        state.insts = append(state.insts, {\"op\": \"Store\", \"container\": o, \"index\": k, \"value\": v});\n                    }\n                }\n            }\n        } else {\n            if stmt.type == \"Return\" {\n                state = compile_expr(state, stmt.value);\n                state.insts = append(state.insts, {\"op\": \"Return\", \"val\": state.result_reg});\n            } else {\n                if stmt.type == \"If\" {\n                    state = compile_expr(state, stmt.cond); let c = state.result_reg;\n                    let if_idx = len(state.insts); state.insts = append(state.insts, {\"op\": \"IfPlaceholder\"});\n                    let j = 0; loop (j < len(stmt.then), 100000) { state = compile_stmt(state, stmt.then[j]); j = j + 1; }\n                    let is = state.insts; is[if_idx] = {\"op\": \"If\", \"cond\": c, \"then\": if_idx + 1, \"else\": len(is)};\n                    state.insts = is;\n                } else {\n                    if stmt.type == \"Loop\" {\n                        let start = len(state.insts); state = compile_expr(state, stmt.cond); let c = state.result_reg;\n                        let if_idx = len(state.insts); state.insts = append(state.insts, {\"op\": \"IfPlaceholder\"});\n                        let j = 0; loop (j < len(stmt.body), 100000) { state = compile_stmt(state, stmt.body[j]); j = j + 1; }\n                        state.insts = append(state.insts, {\"op\": \"Jump\", \"target\": start});\n                        let is = state.insts; is[if_idx] = {\"op\": \"If\", \"cond\": c, \"then\": if_idx + 1, \"else\": len(is)};\n                        state.insts = is;\n                    } else {\n                        if stmt.type == \"Break\" {\n                            // Flat VM hack: Break just jumps to a placeholder?\n                            // For true break, we need loop context.\n                            // Since we are self-hosting, we'll use \"Break\" instruction.\n                            state.insts = append(state.insts, {\"op\": \"Break\"});\n                        } else {\n                            if stmt.type == \"Continue\" {\n                                state.insts = append(state.insts, {\"op\": \"Continue\"});\n                            }\n                        }\n                    }\n                }\n            }\n        }\n    }\n    return state;\n}\n\nfn compile(tokens) -> object {\n    let state = {\n        \"tokens\": tokens, \"pos\": 0, \"regs\": {\"next\": 0, \"map\": {}}, \"insts\": [],\n        \"node\": null, \"result_reg\": 0\n    };\n    let lt = len(tokens);\n    loop (state.pos < lt, 1000000) {\n        let t = tokens[state.pos];\n        if t.type == \"KW_FN\" {\n            let name = tokens[state.pos+1].val;\n            state.pos = state.pos + 3; // fn name ( \n            let params = [];\n            loop (state.tokens[state.pos].type != \"RPAREN\", 1000000) {\n                params = append(params, state.tokens[state.pos].val);\n                state.pos = state.pos + 1;\n                if state.tokens[state.pos].type == \"COMMA\" { state.pos = state.pos + 1; }\n            }\n            state.pos = state.pos + 2; // ) { \n            \n            let old_regs = state.regs;\n            state.regs = {\"next\": 0, \"map\": {}};\n            let param_regs = [];\n            let j = 0;\n            loop (j < len(params), 1000000) {\n                let r = state.regs.next;\n                let rs = state.regs; rs.next = r + 1;\n                let m = rs.map; m[params[j]] = r; rs.map = m;\n                state.regs = rs;\n                param_regs = append(param_regs, r);\n                j = j + 1;\n            }\n            \n            let start_pc = len(state.insts);\n            loop (state.tokens[state.pos].type != \"RBRACE\", 1000000) {\n                state = parse_stmt(state);\n                state = compile_stmt(state, state.node);\n            }\n            state.pos = state.pos + 1;\n            state.insts = append(state.insts, {\"op\": \"FuncDef\", \"name\": name, \"params\": param_regs, \"body\": start_pc});\n            state.regs = old_regs;\n        } else {\n            state.pos = state.pos + 1;\n        }\n    }\n    return state.insts;\n}\n\nfn main() -> object {\n    let source = read_file(\"hlx_compiler/bootstrap/compiler.hlxc\");\n    let tokens = tokenize(source);\n    let ir = compile(tokens);\n    return ir;\n}\n", Nom(Eof))] })

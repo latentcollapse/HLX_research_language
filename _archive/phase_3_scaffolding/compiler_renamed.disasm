@@ -1,0 +1,1976 @@
+Crate: compiler.lcc
+  Version: 1
+  Hash: 2b0ae4eb09ab016b8225b33e8327fdad153ec05c964059533a6df8bdf9a3bfdc
+  Instructions: 1967
+  Valid: true
+  Source: hlxc_module.hlxl
+  Compiler: 0.1.0
+
+Instructions:
+     0: Call { out: 1, func: "ord", args: [0] }
+     1: Constant { out: 2, val: Integer(48) }
+     2: Ge { out: 3, lhs: 1, rhs: 2 }
+     3: Constant { out: 4, val: Integer(57) }
+     4: Le { out: 5, lhs: 1, rhs: 4 }
+     5: And { out: 6, lhs: 3, rhs: 5 }
+     6: Return { val: 6 }
+     7: Constant { out: 7, val: Null }
+     8: Return { val: 7 }
+     9: FuncDef { name: "is_digit", params: [0], body: 0 }
+    10: Call { out: 9, func: "ord", args: [8] }
+    11: Constant { out: 10, val: Integer(97) }
+    12: Ge { out: 11, lhs: 9, rhs: 10 }
+    13: Constant { out: 12, val: Integer(122) }
+    14: Le { out: 13, lhs: 9, rhs: 12 }
+    15: And { out: 14, lhs: 11, rhs: 13 }
+    16: If { cond: 14, then_block: 17, else_block: 20 }
+    17: Constant { out: 15, val: Boolean(true) }
+    18: Return { val: 15 }
+    19: Jump { target: 20 }
+    20: Constant { out: 16, val: Integer(65) }
+    21: Ge { out: 17, lhs: 9, rhs: 16 }
+    22: Constant { out: 18, val: Integer(90) }
+    23: Le { out: 19, lhs: 9, rhs: 18 }
+    24: And { out: 20, lhs: 17, rhs: 19 }
+    25: If { cond: 20, then_block: 26, else_block: 29 }
+    26: Constant { out: 21, val: Boolean(true) }
+    27: Return { val: 21 }
+    28: Jump { target: 29 }
+    29: Constant { out: 22, val: Integer(95) }
+    30: Eq { out: 23, lhs: 9, rhs: 22 }
+    31: If { cond: 23, then_block: 32, else_block: 35 }
+    32: Constant { out: 24, val: Boolean(true) }
+    33: Return { val: 24 }
+    34: Jump { target: 35 }
+    35: Constant { out: 25, val: Boolean(false) }
+    36: Return { val: 25 }
+    37: Constant { out: 26, val: Null }
+    38: Return { val: 26 }
+    39: FuncDef { name: "is_alpha", params: [8], body: 10 }
+    40: ArrayCreate { out: 28, elements: [] }
+    41: Constant { out: 29, val: Integer(0) }
+    42: Call { out: 30, func: "len", args: [27] }
+    43: Lt { out: 31, lhs: 29, rhs: 30 }
+    44: Loop { cond: 31, body: 46, max_iter: 1000000 }
+    45: Jump { target: 445 }
+    46: Index { out: 32, container: 27, index: 29 }
+    47: Constant { out: 33, val: String(" ") }
+    48: Eq { out: 34, lhs: 32, rhs: 33 }
+    49: Constant { out: 35, val: String("\n") }
+    50: Eq { out: 36, lhs: 32, rhs: 35 }
+    51: Or { out: 37, lhs: 34, rhs: 36 }
+    52: Constant { out: 38, val: String("\t") }
+    53: Eq { out: 39, lhs: 32, rhs: 38 }
+    54: Or { out: 40, lhs: 37, rhs: 39 }
+    55: Constant { out: 41, val: String("\r") }
+    56: Eq { out: 42, lhs: 32, rhs: 41 }
+    57: Or { out: 43, lhs: 40, rhs: 42 }
+    58: If { cond: 43, then_block: 59, else_block: 63 }
+    59: Constant { out: 44, val: Integer(1) }
+    60: Add { out: 45, lhs: 29, rhs: 44 }
+    61: Move { out: 29, src: 45 }
+    62: Jump { target: 444 }
+    63: Call { out: 46, func: "is_alpha", args: [32] }
+    64: If { cond: 46, then_block: 65, else_block: 162 }
+    65: Constant { out: 47, val: String("") }
+    66: Lt { out: 48, lhs: 29, rhs: 30 }
+    67: Index { out: 49, container: 27, index: 29 }
+    68: Call { out: 50, func: "is_alpha", args: [49] }
+    69: And { out: 51, lhs: 48, rhs: 50 }
+    70: Loop { cond: 51, body: 72, max_iter: 100 }
+    71: Jump { target: 79 }
+    72: Index { out: 52, container: 27, index: 29 }
+    73: Add { out: 53, lhs: 47, rhs: 52 }
+    74: Move { out: 47, src: 53 }
+    75: Constant { out: 54, val: Integer(1) }
+    76: Add { out: 55, lhs: 29, rhs: 54 }
+    77: Move { out: 29, src: 55 }
+    78: Jump { target: 66 }
+    79: Constant { out: 56, val: String("IDENT") }
+    80: Constant { out: 57, val: String("fn") }
+    81: Eq { out: 58, lhs: 47, rhs: 57 }
+    82: If { cond: 58, then_block: 83, else_block: 86 }
+    83: Constant { out: 59, val: String("KW_FN") }
+    84: Move { out: 56, src: 59 }
+    85: Jump { target: 86 }
+    86: Constant { out: 60, val: String("let") }
+    87: Eq { out: 61, lhs: 47, rhs: 60 }
+    88: If { cond: 61, then_block: 89, else_block: 92 }
+    89: Constant { out: 62, val: String("KW_LET") }
+    90: Move { out: 56, src: 62 }
+    91: Jump { target: 92 }
+    92: Constant { out: 63, val: String("return") }
+    93: Eq { out: 64, lhs: 47, rhs: 63 }
+    94: If { cond: 64, then_block: 95, else_block: 98 }
+    95: Constant { out: 65, val: String("KW_RETURN") }
+    96: Move { out: 56, src: 65 }
+    97: Jump { target: 98 }
+    98: Constant { out: 66, val: String("if") }
+    99: Eq { out: 67, lhs: 47, rhs: 66 }
+   100: If { cond: 67, then_block: 101, else_block: 104 }
+   101: Constant { out: 68, val: String("KW_IF") }
+   102: Move { out: 56, src: 68 }
+   103: Jump { target: 104 }
+   104: Constant { out: 69, val: String("else") }
+   105: Eq { out: 70, lhs: 47, rhs: 69 }
+   106: If { cond: 70, then_block: 107, else_block: 110 }
+   107: Constant { out: 71, val: String("KW_ELSE") }
+   108: Move { out: 56, src: 71 }
+   109: Jump { target: 110 }
+   110: Constant { out: 72, val: String("loop") }
+   111: Eq { out: 73, lhs: 47, rhs: 72 }
+   112: If { cond: 73, then_block: 113, else_block: 116 }
+   113: Constant { out: 74, val: String("KW_LOOP") }
+   114: Move { out: 56, src: 74 }
+   115: Jump { target: 116 }
+   116: Constant { out: 75, val: String("break") }
+   117: Eq { out: 76, lhs: 47, rhs: 75 }
+   118: If { cond: 76, then_block: 119, else_block: 122 }
+   119: Constant { out: 77, val: String("KW_BREAK") }
+   120: Move { out: 56, src: 77 }
+   121: Jump { target: 122 }
+   122: Constant { out: 78, val: String("continue") }
+   123: Eq { out: 79, lhs: 47, rhs: 78 }
+   124: If { cond: 79, then_block: 125, else_block: 128 }
+   125: Constant { out: 80, val: String("KW_CONT") }
+   126: Move { out: 56, src: 80 }
+   127: Jump { target: 128 }
+   128: Constant { out: 81, val: String("and") }
+   129: Eq { out: 82, lhs: 47, rhs: 81 }
+   130: If { cond: 82, then_block: 131, else_block: 134 }
+   131: Constant { out: 83, val: String("OP_AND") }
+   132: Move { out: 56, src: 83 }
+   133: Jump { target: 134 }
+   134: Constant { out: 84, val: String("or") }
+   135: Eq { out: 85, lhs: 47, rhs: 84 }
+   136: If { cond: 85, then_block: 137, else_block: 140 }
+   137: Constant { out: 86, val: String("OP_OR") }
+   138: Move { out: 56, src: 86 }
+   139: Jump { target: 140 }
+   140: Constant { out: 87, val: String("true") }
+   141: Eq { out: 88, lhs: 47, rhs: 87 }
+   142: If { cond: 88, then_block: 143, else_block: 146 }
+   143: Constant { out: 89, val: String("LIT_BOOL") }
+   144: Move { out: 56, src: 89 }
+   145: Jump { target: 146 }
+   146: Constant { out: 90, val: String("false") }
+   147: Eq { out: 91, lhs: 47, rhs: 90 }
+   148: If { cond: 91, then_block: 149, else_block: 152 }
+   149: Constant { out: 92, val: String("LIT_BOOL") }
+   150: Move { out: 56, src: 92 }
+   151: Jump { target: 152 }
+   152: Constant { out: 93, val: String("null") }
+   153: Eq { out: 94, lhs: 47, rhs: 93 }
+   154: If { cond: 94, then_block: 155, else_block: 158 }
+   155: Constant { out: 95, val: String("LIT_NULL") }
+   156: Move { out: 56, src: 95 }
+   157: Jump { target: 158 }
+   158: ObjectCreate { out: 96, keys: ["type", "val"], values: [56, 47] }
+   159: Call { out: 97, func: "append", args: [28, 96] }
+   160: Move { out: 28, src: 97 }
+   161: Jump { target: 444 }
+   162: Call { out: 98, func: "is_digit", args: [32] }
+   163: If { cond: 98, then_block: 164, else_block: 183 }
+   164: Constant { out: 99, val: String("") }
+   165: Lt { out: 100, lhs: 29, rhs: 30 }
+   166: Index { out: 101, container: 27, index: 29 }
+   167: Call { out: 102, func: "is_digit", args: [101] }
+   168: And { out: 103, lhs: 100, rhs: 102 }
+   169: Loop { cond: 103, body: 171, max_iter: 100 }
+   170: Jump { target: 178 }
+   171: Index { out: 104, container: 27, index: 29 }
+   172: Add { out: 105, lhs: 99, rhs: 104 }
+   173: Move { out: 99, src: 105 }
+   174: Constant { out: 106, val: Integer(1) }
+   175: Add { out: 107, lhs: 29, rhs: 106 }
+   176: Move { out: 29, src: 107 }
+   177: Jump { target: 165 }
+   178: Constant { out: 108, val: String("LIT_INT") }
+   179: ObjectCreate { out: 109, keys: ["type", "val"], values: [108, 99] }
+   180: Call { out: 110, func: "append", args: [28, 109] }
+   181: Move { out: 28, src: 110 }
+   182: Jump { target: 444 }
+   183: Constant { out: 111, val: String("\"") }
+   184: Eq { out: 112, lhs: 32, rhs: 111 }
+   185: If { cond: 112, then_block: 186, else_block: 233 }
+   186: Constant { out: 113, val: Integer(1) }
+   187: Add { out: 114, lhs: 29, rhs: 113 }
+   188: Move { out: 29, src: 114 }
+   189: Constant { out: 115, val: String("") }
+   190: Lt { out: 116, lhs: 29, rhs: 30 }
+   191: Index { out: 117, container: 27, index: 29 }
+   192: Constant { out: 118, val: String("\"") }
+   193: Ne { out: 119, lhs: 117, rhs: 118 }
+   194: And { out: 120, lhs: 116, rhs: 119 }
+   195: Loop { cond: 120, body: 197, max_iter: 1000000 }
+   196: Jump { target: 225 }
+   197: Index { out: 121, container: 27, index: 29 }
+   198: Constant { out: 122, val: String("\\") }
+   199: Eq { out: 123, lhs: 121, rhs: 122 }
+   200: Constant { out: 124, val: Integer(1) }
+   201: Add { out: 125, lhs: 29, rhs: 124 }
+   202: Lt { out: 126, lhs: 125, rhs: 30 }
+   203: And { out: 127, lhs: 123, rhs: 126 }
+   204: Constant { out: 128, val: Integer(1) }
+   205: Add { out: 129, lhs: 29, rhs: 128 }
+   206: Index { out: 130, container: 27, index: 129 }
+   207: Constant { out: 131, val: String("\"") }
+   208: Eq { out: 132, lhs: 130, rhs: 131 }
+   209: And { out: 133, lhs: 127, rhs: 132 }
+   210: If { cond: 133, then_block: 211, else_block: 218 }
+   211: Constant { out: 134, val: String("\"") }
+   212: Add { out: 135, lhs: 115, rhs: 134 }
+   213: Move { out: 115, src: 135 }
+   214: Constant { out: 136, val: Integer(2) }
+   215: Add { out: 137, lhs: 29, rhs: 136 }
+   216: Move { out: 29, src: 137 }
+   217: Jump { target: 224 }
+   218: Index { out: 138, container: 27, index: 29 }
+   219: Add { out: 139, lhs: 115, rhs: 138 }
+   220: Move { out: 115, src: 139 }
+   221: Constant { out: 140, val: Integer(1) }
+   222: Add { out: 141, lhs: 29, rhs: 140 }
+   223: Move { out: 29, src: 141 }
+   224: Jump { target: 190 }
+   225: Constant { out: 142, val: Integer(1) }
+   226: Add { out: 143, lhs: 29, rhs: 142 }
+   227: Move { out: 29, src: 143 }
+   228: Constant { out: 144, val: String("LIT_STR") }
+   229: ObjectCreate { out: 145, keys: ["type", "val"], values: [144, 115] }
+   230: Call { out: 146, func: "append", args: [28, 145] }
+   231: Move { out: 28, src: 146 }
+   232: Jump { target: 444 }
+   233: Constant { out: 147, val: Null }
+   234: Constant { out: 148, val: String("{") }
+   235: Eq { out: 149, lhs: 32, rhs: 148 }
+   236: If { cond: 149, then_block: 237, else_block: 240 }
+   237: Constant { out: 150, val: String("LBRACE") }
+   238: Move { out: 147, src: 150 }
+   239: Jump { target: 240 }
+   240: Constant { out: 151, val: String("}") }
+   241: Eq { out: 152, lhs: 32, rhs: 151 }
+   242: If { cond: 152, then_block: 243, else_block: 246 }
+   243: Constant { out: 153, val: String("RBRACE") }
+   244: Move { out: 147, src: 153 }
+   245: Jump { target: 246 }
+   246: Constant { out: 154, val: String("[") }
+   247: Eq { out: 155, lhs: 32, rhs: 154 }
+   248: If { cond: 155, then_block: 249, else_block: 252 }
+   249: Constant { out: 156, val: String("LBRACK") }
+   250: Move { out: 147, src: 156 }
+   251: Jump { target: 252 }
+   252: Constant { out: 157, val: String("]") }
+   253: Eq { out: 158, lhs: 32, rhs: 157 }
+   254: If { cond: 158, then_block: 255, else_block: 258 }
+   255: Constant { out: 159, val: String("RBRACK") }
+   256: Move { out: 147, src: 159 }
+   257: Jump { target: 258 }
+   258: Constant { out: 160, val: String("(") }
+   259: Eq { out: 161, lhs: 32, rhs: 160 }
+   260: If { cond: 161, then_block: 261, else_block: 264 }
+   261: Constant { out: 162, val: String("LPAREN") }
+   262: Move { out: 147, src: 162 }
+   263: Jump { target: 264 }
+   264: Constant { out: 163, val: String(")") }
+   265: Eq { out: 164, lhs: 32, rhs: 163 }
+   266: If { cond: 164, then_block: 267, else_block: 270 }
+   267: Constant { out: 165, val: String("RPAREN") }
+   268: Move { out: 147, src: 165 }
+   269: Jump { target: 270 }
+   270: Constant { out: 166, val: String(";") }
+   271: Eq { out: 167, lhs: 32, rhs: 166 }
+   272: If { cond: 167, then_block: 273, else_block: 276 }
+   273: Constant { out: 168, val: String("SEMI") }
+   274: Move { out: 147, src: 168 }
+   275: Jump { target: 276 }
+   276: Constant { out: 169, val: String(":") }
+   277: Eq { out: 170, lhs: 32, rhs: 169 }
+   278: If { cond: 170, then_block: 279, else_block: 282 }
+   279: Constant { out: 171, val: String("COLON") }
+   280: Move { out: 147, src: 171 }
+   281: Jump { target: 282 }
+   282: Constant { out: 172, val: String(",") }
+   283: Eq { out: 173, lhs: 32, rhs: 172 }
+   284: If { cond: 173, then_block: 285, else_block: 288 }
+   285: Constant { out: 174, val: String("COMMA") }
+   286: Move { out: 147, src: 174 }
+   287: Jump { target: 288 }
+   288: Constant { out: 175, val: String(".") }
+   289: Eq { out: 176, lhs: 32, rhs: 175 }
+   290: If { cond: 176, then_block: 291, else_block: 294 }
+   291: Constant { out: 177, val: String("DOT") }
+   292: Move { out: 147, src: 177 }
+   293: Jump { target: 294 }
+   294: Constant { out: 178, val: String("+") }
+   295: Eq { out: 179, lhs: 32, rhs: 178 }
+   296: If { cond: 179, then_block: 297, else_block: 300 }
+   297: Constant { out: 180, val: String("OP_ADD") }
+   298: Move { out: 147, src: 180 }
+   299: Jump { target: 300 }
+   300: Constant { out: 181, val: String("-") }
+   301: Eq { out: 182, lhs: 32, rhs: 181 }
+   302: If { cond: 182, then_block: 303, else_block: 306 }
+   303: Constant { out: 183, val: String("OP_SUB") }
+   304: Move { out: 147, src: 183 }
+   305: Jump { target: 306 }
+   306: Constant { out: 184, val: String("*") }
+   307: Eq { out: 185, lhs: 32, rhs: 184 }
+   308: If { cond: 185, then_block: 309, else_block: 312 }
+   309: Constant { out: 186, val: String("OP_MUL") }
+   310: Move { out: 147, src: 186 }
+   311: Jump { target: 312 }
+   312: Constant { out: 187, val: Null }
+   313: Ne { out: 188, lhs: 147, rhs: 187 }
+   314: If { cond: 188, then_block: 315, else_block: 322 }
+   315: ObjectCreate { out: 189, keys: ["type", "val"], values: [147, 32] }
+   316: Call { out: 190, func: "append", args: [28, 189] }
+   317: Move { out: 28, src: 190 }
+   318: Constant { out: 191, val: Integer(1) }
+   319: Add { out: 192, lhs: 29, rhs: 191 }
+   320: Move { out: 29, src: 192 }
+   321: Jump { target: 444 }
+   322: Constant { out: 193, val: String("=") }
+   323: Eq { out: 194, lhs: 32, rhs: 193 }
+   324: If { cond: 194, then_block: 325, else_block: 353 }
+   325: Constant { out: 195, val: Integer(1) }
+   326: Add { out: 196, lhs: 29, rhs: 195 }
+   327: Lt { out: 197, lhs: 196, rhs: 30 }
+   328: Constant { out: 198, val: Integer(1) }
+   329: Add { out: 199, lhs: 29, rhs: 198 }
+   330: Index { out: 200, container: 27, index: 199 }
+   331: Constant { out: 201, val: String("=") }
+   332: Eq { out: 202, lhs: 200, rhs: 201 }
+   333: And { out: 203, lhs: 197, rhs: 202 }
+   334: If { cond: 203, then_block: 335, else_block: 344 }
+   335: Constant { out: 204, val: String("OP_EQ") }
+   336: Constant { out: 205, val: String("==") }
+   337: ObjectCreate { out: 206, keys: ["type", "val"], values: [204, 205] }
+   338: Call { out: 207, func: "append", args: [28, 206] }
+   339: Move { out: 28, src: 207 }
+   340: Constant { out: 208, val: Integer(2) }
+   341: Add { out: 209, lhs: 29, rhs: 208 }
+   342: Move { out: 29, src: 209 }
+   343: Jump { target: 352 }
+   344: Constant { out: 210, val: String("OP_ASSIGN") }
+   345: Constant { out: 211, val: String("=") }
+   346: ObjectCreate { out: 212, keys: ["type", "val"], values: [210, 211] }
+   347: Call { out: 213, func: "append", args: [28, 212] }
+   348: Move { out: 28, src: 213 }
+   349: Constant { out: 214, val: Integer(1) }
+   350: Add { out: 215, lhs: 29, rhs: 214 }
+   351: Move { out: 29, src: 215 }
+   352: Jump { target: 444 }
+   353: Constant { out: 216, val: String("!") }
+   354: Eq { out: 217, lhs: 32, rhs: 216 }
+   355: If { cond: 217, then_block: 356, else_block: 379 }
+   356: Constant { out: 218, val: Integer(1) }
+   357: Add { out: 219, lhs: 29, rhs: 218 }
+   358: Lt { out: 220, lhs: 219, rhs: 30 }
+   359: Constant { out: 221, val: Integer(1) }
+   360: Add { out: 222, lhs: 29, rhs: 221 }
+   361: Index { out: 223, container: 27, index: 222 }
+   362: Constant { out: 224, val: String("=") }
+   363: Eq { out: 225, lhs: 223, rhs: 224 }
+   364: And { out: 226, lhs: 220, rhs: 225 }
+   365: If { cond: 226, then_block: 366, else_block: 375 }
+   366: Constant { out: 227, val: String("OP_NE") }
+   367: Constant { out: 228, val: String("!=") }
+   368: ObjectCreate { out: 229, keys: ["type", "val"], values: [227, 228] }
+   369: Call { out: 230, func: "append", args: [28, 229] }
+   370: Move { out: 28, src: 230 }
+   371: Constant { out: 231, val: Integer(2) }
+   372: Add { out: 232, lhs: 29, rhs: 231 }
+   373: Move { out: 29, src: 232 }
+   374: Jump { target: 378 }
+   375: Constant { out: 233, val: Integer(1) }
+   376: Add { out: 234, lhs: 29, rhs: 233 }
+   377: Move { out: 29, src: 234 }
+   378: Jump { target: 444 }
+   379: Constant { out: 235, val: String("<") }
+   380: Eq { out: 236, lhs: 32, rhs: 235 }
+   381: If { cond: 236, then_block: 382, else_block: 410 }
+   382: Constant { out: 237, val: Integer(1) }
+   383: Add { out: 238, lhs: 29, rhs: 237 }
+   384: Lt { out: 239, lhs: 238, rhs: 30 }
+   385: Constant { out: 240, val: Integer(1) }
+   386: Add { out: 241, lhs: 29, rhs: 240 }
+   387: Index { out: 242, container: 27, index: 241 }
+   388: Constant { out: 243, val: String("=") }
+   389: Eq { out: 244, lhs: 242, rhs: 243 }
+   390: And { out: 245, lhs: 239, rhs: 244 }
+   391: If { cond: 245, then_block: 392, else_block: 401 }
+   392: Constant { out: 246, val: String("OP_LE") }
+   393: Constant { out: 247, val: String("<=") }
+   394: ObjectCreate { out: 248, keys: ["type", "val"], values: [246, 247] }
+   395: Call { out: 249, func: "append", args: [28, 248] }
+   396: Move { out: 28, src: 249 }
+   397: Constant { out: 250, val: Integer(2) }
+   398: Add { out: 251, lhs: 29, rhs: 250 }
+   399: Move { out: 29, src: 251 }
+   400: Jump { target: 409 }
+   401: Constant { out: 252, val: String("OP_LT") }
+   402: Constant { out: 253, val: String("<") }
+   403: ObjectCreate { out: 254, keys: ["type", "val"], values: [252, 253] }
+   404: Call { out: 255, func: "append", args: [28, 254] }
+   405: Move { out: 28, src: 255 }
+   406: Constant { out: 256, val: Integer(1) }
+   407: Add { out: 257, lhs: 29, rhs: 256 }
+   408: Move { out: 29, src: 257 }
+   409: Jump { target: 444 }
+   410: Constant { out: 258, val: String(">") }
+   411: Eq { out: 259, lhs: 32, rhs: 258 }
+   412: If { cond: 259, then_block: 413, else_block: 441 }
+   413: Constant { out: 260, val: Integer(1) }
+   414: Add { out: 261, lhs: 29, rhs: 260 }
+   415: Lt { out: 262, lhs: 261, rhs: 30 }
+   416: Constant { out: 263, val: Integer(1) }
+   417: Add { out: 264, lhs: 29, rhs: 263 }
+   418: Index { out: 265, container: 27, index: 264 }
+   419: Constant { out: 266, val: String("=") }
+   420: Eq { out: 267, lhs: 265, rhs: 266 }
+   421: And { out: 268, lhs: 262, rhs: 267 }
+   422: If { cond: 268, then_block: 423, else_block: 432 }
+   423: Constant { out: 269, val: String("OP_GE") }
+   424: Constant { out: 270, val: String(">=") }
+   425: ObjectCreate { out: 271, keys: ["type", "val"], values: [269, 270] }
+   426: Call { out: 272, func: "append", args: [28, 271] }
+   427: Move { out: 28, src: 272 }
+   428: Constant { out: 273, val: Integer(2) }
+   429: Add { out: 274, lhs: 29, rhs: 273 }
+   430: Move { out: 29, src: 274 }
+   431: Jump { target: 440 }
+   432: Constant { out: 275, val: String("OP_GT") }
+   433: Constant { out: 276, val: String(">") }
+   434: ObjectCreate { out: 277, keys: ["type", "val"], values: [275, 276] }
+   435: Call { out: 278, func: "append", args: [28, 277] }
+   436: Move { out: 28, src: 278 }
+   437: Constant { out: 279, val: Integer(1) }
+   438: Add { out: 280, lhs: 29, rhs: 279 }
+   439: Move { out: 29, src: 280 }
+   440: Jump { target: 444 }
+   441: Constant { out: 281, val: Integer(1) }
+   442: Add { out: 282, lhs: 29, rhs: 281 }
+   443: Move { out: 29, src: 282 }
+   444: Jump { target: 43 }
+   445: Return { val: 28 }
+   446: Constant { out: 283, val: Null }
+   447: Return { val: 283 }
+   448: FuncDef { name: "tokenize", params: [27], body: 40 }
+   449: Constant { out: 285, val: String("pos") }
+   450: Index { out: 286, container: 284, index: 285 }
+   451: Constant { out: 287, val: String("tokens") }
+   452: Index { out: 288, container: 284, index: 287 }
+   453: Index { out: 289, container: 288, index: 286 }
+   454: Constant { out: 290, val: String("type") }
+   455: Index { out: 291, container: 289, index: 290 }
+   456: Constant { out: 292, val: String("LIT_INT") }
+   457: Eq { out: 293, lhs: 291, rhs: 292 }
+   458: Constant { out: 294, val: String("type") }
+   459: Index { out: 295, container: 289, index: 294 }
+   460: Constant { out: 296, val: String("LIT_STR") }
+   461: Eq { out: 297, lhs: 295, rhs: 296 }
+   462: Or { out: 298, lhs: 293, rhs: 297 }
+   463: Constant { out: 299, val: String("type") }
+   464: Index { out: 300, container: 289, index: 299 }
+   465: Constant { out: 301, val: String("LIT_BOOL") }
+   466: Eq { out: 302, lhs: 300, rhs: 301 }
+   467: Or { out: 303, lhs: 298, rhs: 302 }
+   468: Constant { out: 304, val: String("type") }
+   469: Index { out: 305, container: 289, index: 304 }
+   470: Constant { out: 306, val: String("LIT_NULL") }
+   471: Eq { out: 307, lhs: 305, rhs: 306 }
+   472: Or { out: 308, lhs: 303, rhs: 307 }
+   473: If { cond: 308, then_block: 474, else_block: 487 }
+   474: Constant { out: 309, val: String("Literal") }
+   475: Constant { out: 310, val: String("val") }
+   476: Index { out: 311, container: 289, index: 310 }
+   477: Constant { out: 312, val: String("type") }
+   478: Index { out: 313, container: 289, index: 312 }
+   479: ObjectCreate { out: 314, keys: ["type", "val", "lit_type"], values: [309, 311, 313] }
+   480: Constant { out: 315, val: String("node") }
+   481: Store { container: 284, index: 315, value: 314 }
+   482: Constant { out: 316, val: Integer(1) }
+   483: Add { out: 317, lhs: 286, rhs: 316 }
+   484: Constant { out: 318, val: String("pos") }
+   485: Store { container: 284, index: 318, value: 317 }
+   486: Jump { target: 763 }
+   487: Constant { out: 319, val: String("type") }
+   488: Index { out: 320, container: 289, index: 319 }
+   489: Constant { out: 321, val: String("LBRACK") }
+   490: Eq { out: 322, lhs: 320, rhs: 321 }
+   491: If { cond: 322, then_block: 492, else_block: 543 }
+   492: Constant { out: 323, val: Integer(1) }
+   493: Add { out: 324, lhs: 286, rhs: 323 }
+   494: Constant { out: 325, val: String("pos") }
+   495: Store { container: 284, index: 325, value: 324 }
+   496: ArrayCreate { out: 326, elements: [] }
+   497: Constant { out: 327, val: String("tokens") }
+   498: Index { out: 328, container: 284, index: 327 }
+   499: Constant { out: 329, val: String("pos") }
+   500: Index { out: 330, container: 284, index: 329 }
+   501: Index { out: 331, container: 328, index: 330 }
+   502: Constant { out: 332, val: String("type") }
+   503: Index { out: 333, container: 331, index: 332 }
+   504: Constant { out: 334, val: String("RBRACK") }
+   505: Ne { out: 335, lhs: 333, rhs: 334 }
+   506: Loop { cond: 335, body: 508, max_iter: 100000 }
+   507: Jump { target: 532 }
+   508: Call { out: 336, func: "parse_expr", args: [284] }
+   509: Move { out: 284, src: 336 }
+   510: Constant { out: 337, val: String("node") }
+   511: Index { out: 338, container: 284, index: 337 }
+   512: Call { out: 339, func: "append", args: [326, 338] }
+   513: Move { out: 326, src: 339 }
+   514: Constant { out: 340, val: String("tokens") }
+   515: Index { out: 341, container: 284, index: 340 }
+   516: Constant { out: 342, val: String("pos") }
+   517: Index { out: 343, container: 284, index: 342 }
+   518: Index { out: 344, container: 341, index: 343 }
+   519: Constant { out: 345, val: String("type") }
+   520: Index { out: 346, container: 344, index: 345 }
+   521: Constant { out: 347, val: String("COMMA") }
+   522: Eq { out: 348, lhs: 346, rhs: 347 }
+   523: If { cond: 348, then_block: 524, else_block: 531 }
+   524: Constant { out: 349, val: String("pos") }
+   525: Index { out: 350, container: 284, index: 349 }
+   526: Constant { out: 351, val: Integer(1) }
+   527: Add { out: 352, lhs: 350, rhs: 351 }
+   528: Constant { out: 353, val: String("pos") }
+   529: Store { container: 284, index: 353, value: 352 }
+   530: Jump { target: 531 }
+   531: Jump { target: 497 }
+   532: Constant { out: 354, val: String("pos") }
+   533: Index { out: 355, container: 284, index: 354 }
+   534: Constant { out: 356, val: Integer(1) }
+   535: Add { out: 357, lhs: 355, rhs: 356 }
+   536: Constant { out: 358, val: String("pos") }
+   537: Store { container: 284, index: 358, value: 357 }
+   538: Constant { out: 359, val: String("Array") }
+   539: ObjectCreate { out: 360, keys: ["type", "elements"], values: [359, 326] }
+   540: Constant { out: 361, val: String("node") }
+   541: Store { container: 284, index: 361, value: 360 }
+   542: Jump { target: 763 }
+   543: Constant { out: 362, val: String("type") }
+   544: Index { out: 363, container: 289, index: 362 }
+   545: Constant { out: 364, val: String("LBRACE") }
+   546: Eq { out: 365, lhs: 363, rhs: 364 }
+   547: If { cond: 365, then_block: 548, else_block: 615 }
+   548: Constant { out: 366, val: Integer(1) }
+   549: Add { out: 367, lhs: 286, rhs: 366 }
+   550: Constant { out: 368, val: String("pos") }
+   551: Store { container: 284, index: 368, value: 367 }
+   552: ArrayCreate { out: 369, elements: [] }
+   553: ArrayCreate { out: 370, elements: [] }
+   554: Constant { out: 371, val: String("tokens") }
+   555: Index { out: 372, container: 284, index: 371 }
+   556: Constant { out: 373, val: String("pos") }
+   557: Index { out: 374, container: 284, index: 373 }
+   558: Index { out: 375, container: 372, index: 374 }
+   559: Constant { out: 376, val: String("type") }
+   560: Index { out: 377, container: 375, index: 376 }
+   561: Constant { out: 378, val: String("RBRACE") }
+   562: Ne { out: 379, lhs: 377, rhs: 378 }
+   563: Loop { cond: 379, body: 565, max_iter: 100000 }
+   564: Jump { target: 604 }
+   565: Constant { out: 380, val: String("tokens") }
+   566: Index { out: 381, container: 284, index: 380 }
+   567: Constant { out: 382, val: String("pos") }
+   568: Index { out: 383, container: 284, index: 382 }
+   569: Index { out: 384, container: 381, index: 383 }
+   570: Constant { out: 385, val: String("val") }
+   571: Index { out: 386, container: 384, index: 385 }
+   572: Constant { out: 387, val: String("pos") }
+   573: Index { out: 388, container: 284, index: 387 }
+   574: Constant { out: 389, val: Integer(2) }
+   575: Add { out: 390, lhs: 388, rhs: 389 }
+   576: Constant { out: 391, val: String("pos") }
+   577: Store { container: 284, index: 391, value: 390 }
+   578: Call { out: 392, func: "parse_expr", args: [284] }
+   579: Move { out: 284, src: 392 }
+   580: Call { out: 393, func: "append", args: [369, 386] }
+   581: Move { out: 369, src: 393 }
+   582: Constant { out: 394, val: String("node") }
+   583: Index { out: 395, container: 284, index: 394 }
+   584: Call { out: 396, func: "append", args: [370, 395] }
+   585: Move { out: 370, src: 396 }
+   586: Constant { out: 397, val: String("tokens") }
+   587: Index { out: 398, container: 284, index: 397 }
+   588: Constant { out: 399, val: String("pos") }
+   589: Index { out: 400, container: 284, index: 399 }
+   590: Index { out: 401, container: 398, index: 400 }
+   591: Constant { out: 402, val: String("type") }
+   592: Index { out: 403, container: 401, index: 402 }
+   593: Constant { out: 404, val: String("COMMA") }
+   594: Eq { out: 405, lhs: 403, rhs: 404 }
+   595: If { cond: 405, then_block: 596, else_block: 603 }
+   596: Constant { out: 406, val: String("pos") }
+   597: Index { out: 407, container: 284, index: 406 }
+   598: Constant { out: 408, val: Integer(1) }
+   599: Add { out: 409, lhs: 407, rhs: 408 }
+   600: Constant { out: 410, val: String("pos") }
+   601: Store { container: 284, index: 410, value: 409 }
+   602: Jump { target: 603 }
+   603: Jump { target: 554 }
+   604: Constant { out: 411, val: String("pos") }
+   605: Index { out: 412, container: 284, index: 411 }
+   606: Constant { out: 413, val: Integer(1) }
+   607: Add { out: 414, lhs: 412, rhs: 413 }
+   608: Constant { out: 415, val: String("pos") }
+   609: Store { container: 284, index: 415, value: 414 }
+   610: Constant { out: 416, val: String("Object") }
+   611: ObjectCreate { out: 417, keys: ["type", "keys", "values"], values: [416, 369, 370] }
+   612: Constant { out: 418, val: String("node") }
+   613: Store { container: 284, index: 418, value: 417 }
+   614: Jump { target: 763 }
+   615: Constant { out: 419, val: String("type") }
+   616: Index { out: 420, container: 289, index: 419 }
+   617: Constant { out: 421, val: String("IDENT") }
+   618: Eq { out: 422, lhs: 420, rhs: 421 }
+   619: If { cond: 422, then_block: 620, else_block: 763 }
+   620: Constant { out: 423, val: String("Ident") }
+   621: Constant { out: 424, val: String("val") }
+   622: Index { out: 425, container: 289, index: 424 }
+   623: ObjectCreate { out: 426, keys: ["type", "name"], values: [423, 425] }
+   624: Constant { out: 427, val: String("node") }
+   625: Store { container: 284, index: 427, value: 426 }
+   626: Constant { out: 428, val: Integer(1) }
+   627: Add { out: 429, lhs: 286, rhs: 428 }
+   628: Constant { out: 430, val: String("pos") }
+   629: Store { container: 284, index: 430, value: 429 }
+   630: Constant { out: 431, val: String("pos") }
+   631: Index { out: 432, container: 284, index: 431 }
+   632: Constant { out: 433, val: String("tokens") }
+   633: Index { out: 434, container: 284, index: 433 }
+   634: Call { out: 435, func: "len", args: [434] }
+   635: Lt { out: 436, lhs: 432, rhs: 435 }
+   636: Loop { cond: 436, body: 638, max_iter: 100000 }
+   637: Jump { target: 762 }
+   638: Constant { out: 437, val: String("tokens") }
+   639: Index { out: 438, container: 284, index: 437 }
+   640: Constant { out: 439, val: String("pos") }
+   641: Index { out: 440, container: 284, index: 439 }
+   642: Index { out: 441, container: 438, index: 440 }
+   643: Constant { out: 442, val: String("type") }
+   644: Index { out: 443, container: 441, index: 442 }
+   645: Constant { out: 444, val: String("LPAREN") }
+   646: Eq { out: 445, lhs: 443, rhs: 444 }
+   647: If { cond: 445, then_block: 648, else_block: 705 }
+   648: Constant { out: 446, val: String("node") }
+   649: Index { out: 447, container: 284, index: 446 }
+   650: Constant { out: 448, val: String("name") }
+   651: Index { out: 449, container: 447, index: 448 }
+   652: Constant { out: 450, val: String("pos") }
+   653: Index { out: 451, container: 284, index: 450 }
+   654: Constant { out: 452, val: Integer(1) }
+   655: Add { out: 453, lhs: 451, rhs: 452 }
+   656: Constant { out: 454, val: String("pos") }
+   657: Store { container: 284, index: 454, value: 453 }
+   658: ArrayCreate { out: 455, elements: [] }
+   659: Constant { out: 456, val: String("tokens") }
+   660: Index { out: 457, container: 284, index: 456 }
+   661: Constant { out: 458, val: String("pos") }
+   662: Index { out: 459, container: 284, index: 458 }
+   663: Index { out: 460, container: 457, index: 459 }
+   664: Constant { out: 461, val: String("type") }
+   665: Index { out: 462, container: 460, index: 461 }
+   666: Constant { out: 463, val: String("RPAREN") }
+   667: Ne { out: 464, lhs: 462, rhs: 463 }
+   668: Loop { cond: 464, body: 670, max_iter: 100000 }
+   669: Jump { target: 694 }
+   670: Call { out: 465, func: "parse_expr", args: [284] }
+   671: Move { out: 284, src: 465 }
+   672: Constant { out: 466, val: String("node") }
+   673: Index { out: 467, container: 284, index: 466 }
+   674: Call { out: 468, func: "append", args: [455, 467] }
+   675: Move { out: 455, src: 468 }
+   676: Constant { out: 469, val: String("tokens") }
+   677: Index { out: 470, container: 284, index: 469 }
+   678: Constant { out: 471, val: String("pos") }
+   679: Index { out: 472, container: 284, index: 471 }
+   680: Index { out: 473, container: 470, index: 472 }
+   681: Constant { out: 474, val: String("type") }
+   682: Index { out: 475, container: 473, index: 474 }
+   683: Constant { out: 476, val: String("COMMA") }
+   684: Eq { out: 477, lhs: 475, rhs: 476 }
+   685: If { cond: 477, then_block: 686, else_block: 693 }
+   686: Constant { out: 478, val: String("pos") }
+   687: Index { out: 479, container: 284, index: 478 }
+   688: Constant { out: 480, val: Integer(1) }
+   689: Add { out: 481, lhs: 479, rhs: 480 }
+   690: Constant { out: 482, val: String("pos") }
+   691: Store { container: 284, index: 482, value: 481 }
+   692: Jump { target: 693 }
+   693: Jump { target: 659 }
+   694: Constant { out: 483, val: String("pos") }
+   695: Index { out: 484, container: 284, index: 483 }
+   696: Constant { out: 485, val: Integer(1) }
+   697: Add { out: 486, lhs: 484, rhs: 485 }
+   698: Constant { out: 487, val: String("pos") }
+   699: Store { container: 284, index: 487, value: 486 }
+   700: Constant { out: 488, val: String("Call") }
+   701: ObjectCreate { out: 489, keys: ["type", "func", "args"], values: [488, 449, 455] }
+   702: Constant { out: 490, val: String("node") }
+   703: Store { container: 284, index: 490, value: 489 }
+   704: Jump { target: 761 }
+   705: Constant { out: 491, val: String("type") }
+   706: Index { out: 492, container: 441, index: 491 }
+   707: Constant { out: 493, val: String("LBRACK") }
+   708: Eq { out: 494, lhs: 492, rhs: 493 }
+   709: If { cond: 494, then_block: 710, else_block: 733 }
+   710: Constant { out: 495, val: String("node") }
+   711: Index { out: 496, container: 284, index: 495 }
+   712: Constant { out: 497, val: String("pos") }
+   713: Index { out: 498, container: 284, index: 497 }
+   714: Constant { out: 499, val: Integer(1) }
+   715: Add { out: 500, lhs: 498, rhs: 499 }
+   716: Constant { out: 501, val: String("pos") }
+   717: Store { container: 284, index: 501, value: 500 }
+   718: Call { out: 502, func: "parse_expr", args: [284] }
+   719: Move { out: 284, src: 502 }
+   720: Constant { out: 503, val: String("pos") }
+   721: Index { out: 504, container: 284, index: 503 }
+   722: Constant { out: 505, val: Integer(1) }
+   723: Add { out: 506, lhs: 504, rhs: 505 }
+   724: Constant { out: 507, val: String("pos") }
+   725: Store { container: 284, index: 507, value: 506 }
+   726: Constant { out: 508, val: String("Index") }
+   727: Constant { out: 509, val: String("node") }
+   728: Index { out: 510, container: 284, index: 509 }
+   729: ObjectCreate { out: 511, keys: ["type", "object", "index"], values: [508, 496, 510] }
+   730: Constant { out: 512, val: String("node") }
+   731: Store { container: 284, index: 512, value: 511 }
+   732: Jump { target: 761 }
+   733: Constant { out: 513, val: String("type") }
+   734: Index { out: 514, container: 441, index: 513 }
+   735: Constant { out: 515, val: String("DOT") }
+   736: Eq { out: 516, lhs: 514, rhs: 515 }
+   737: If { cond: 516, then_block: 738, else_block: 760 }
+   738: Constant { out: 517, val: String("node") }
+   739: Index { out: 518, container: 284, index: 517 }
+   740: Constant { out: 519, val: String("pos") }
+   741: Index { out: 520, container: 284, index: 519 }
+   742: Constant { out: 521, val: Integer(2) }
+   743: Add { out: 522, lhs: 520, rhs: 521 }
+   744: Constant { out: 523, val: String("pos") }
+   745: Store { container: 284, index: 523, value: 522 }
+   746: Constant { out: 524, val: String("Field") }
+   747: Constant { out: 525, val: String("tokens") }
+   748: Index { out: 526, container: 284, index: 525 }
+   749: Constant { out: 527, val: String("pos") }
+   750: Index { out: 528, container: 284, index: 527 }
+   751: Constant { out: 529, val: Integer(1) }
+   752: Sub { out: 530, lhs: 528, rhs: 529 }
+   753: Index { out: 531, container: 526, index: 530 }
+   754: Constant { out: 532, val: String("val") }
+   755: Index { out: 533, container: 531, index: 532 }
+   756: ObjectCreate { out: 534, keys: ["type", "object", "field"], values: [524, 518, 533] }
+   757: Constant { out: 535, val: String("node") }
+   758: Store { container: 284, index: 535, value: 534 }
+   759: Jump { target: 761 }
+   760: Jump { target: 637 }
+   761: Jump { target: 630 }
+   762: Jump { target: 763 }
+   763: Return { val: 284 }
+   764: Constant { out: 536, val: Null }
+   765: Return { val: 536 }
+   766: FuncDef { name: "parse_primary", params: [284], body: 449 }
+   767: Call { out: 538, func: "parse_primary", args: [537] }
+   768: Move { out: 537, src: 538 }
+   769: Constant { out: 539, val: String("node") }
+   770: Index { out: 540, container: 537, index: 539 }
+   771: Constant { out: 541, val: String("pos") }
+   772: Index { out: 542, container: 537, index: 541 }
+   773: Constant { out: 543, val: String("tokens") }
+   774: Index { out: 544, container: 537, index: 543 }
+   775: Call { out: 545, func: "len", args: [544] }
+   776: Lt { out: 546, lhs: 542, rhs: 545 }
+   777: If { cond: 546, then_block: 778, else_block: 899 }
+   778: Constant { out: 547, val: String("tokens") }
+   779: Index { out: 548, container: 537, index: 547 }
+   780: Constant { out: 549, val: String("pos") }
+   781: Index { out: 550, container: 537, index: 549 }
+   782: Index { out: 551, container: 548, index: 550 }
+   783: Constant { out: 552, val: Null }
+   784: Constant { out: 553, val: String("type") }
+   785: Index { out: 554, container: 551, index: 553 }
+   786: Constant { out: 555, val: String("OP_ADD") }
+   787: Eq { out: 556, lhs: 554, rhs: 555 }
+   788: If { cond: 556, then_block: 789, else_block: 792 }
+   789: Constant { out: 557, val: String("Add") }
+   790: Move { out: 552, src: 557 }
+   791: Jump { target: 792 }
+   792: Constant { out: 558, val: String("type") }
+   793: Index { out: 559, container: 551, index: 558 }
+   794: Constant { out: 560, val: String("OP_SUB") }
+   795: Eq { out: 561, lhs: 559, rhs: 560 }
+   796: If { cond: 561, then_block: 797, else_block: 800 }
+   797: Constant { out: 562, val: String("Sub") }
+   798: Move { out: 552, src: 562 }
+   799: Jump { target: 800 }
+   800: Constant { out: 563, val: String("type") }
+   801: Index { out: 564, container: 551, index: 563 }
+   802: Constant { out: 565, val: String("OP_MUL") }
+   803: Eq { out: 566, lhs: 564, rhs: 565 }
+   804: If { cond: 566, then_block: 805, else_block: 808 }
+   805: Constant { out: 567, val: String("Mul") }
+   806: Move { out: 552, src: 567 }
+   807: Jump { target: 808 }
+   808: Constant { out: 568, val: String("type") }
+   809: Index { out: 569, container: 551, index: 568 }
+   810: Constant { out: 570, val: String("OP_EQ") }
+   811: Eq { out: 571, lhs: 569, rhs: 570 }
+   812: If { cond: 571, then_block: 813, else_block: 816 }
+   813: Constant { out: 572, val: String("Eq") }
+   814: Move { out: 552, src: 572 }
+   815: Jump { target: 816 }
+   816: Constant { out: 573, val: String("type") }
+   817: Index { out: 574, container: 551, index: 573 }
+   818: Constant { out: 575, val: String("OP_NE") }
+   819: Eq { out: 576, lhs: 574, rhs: 575 }
+   820: If { cond: 576, then_block: 821, else_block: 824 }
+   821: Constant { out: 577, val: String("Ne") }
+   822: Move { out: 552, src: 577 }
+   823: Jump { target: 824 }
+   824: Constant { out: 578, val: String("type") }
+   825: Index { out: 579, container: 551, index: 578 }
+   826: Constant { out: 580, val: String("OP_LT") }
+   827: Eq { out: 581, lhs: 579, rhs: 580 }
+   828: If { cond: 581, then_block: 829, else_block: 832 }
+   829: Constant { out: 582, val: String("Lt") }
+   830: Move { out: 552, src: 582 }
+   831: Jump { target: 832 }
+   832: Constant { out: 583, val: String("type") }
+   833: Index { out: 584, container: 551, index: 583 }
+   834: Constant { out: 585, val: String("OP_GT") }
+   835: Eq { out: 586, lhs: 584, rhs: 585 }
+   836: If { cond: 586, then_block: 837, else_block: 840 }
+   837: Constant { out: 587, val: String("Gt") }
+   838: Move { out: 552, src: 587 }
+   839: Jump { target: 840 }
+   840: Constant { out: 588, val: String("type") }
+   841: Index { out: 589, container: 551, index: 588 }
+   842: Constant { out: 590, val: String("OP_LE") }
+   843: Eq { out: 591, lhs: 589, rhs: 590 }
+   844: If { cond: 591, then_block: 845, else_block: 848 }
+   845: Constant { out: 592, val: String("Le") }
+   846: Move { out: 552, src: 592 }
+   847: Jump { target: 848 }
+   848: Constant { out: 593, val: String("type") }
+   849: Index { out: 594, container: 551, index: 593 }
+   850: Constant { out: 595, val: String("OP_GE") }
+   851: Eq { out: 596, lhs: 594, rhs: 595 }
+   852: If { cond: 596, then_block: 853, else_block: 856 }
+   853: Constant { out: 597, val: String("Ge") }
+   854: Move { out: 552, src: 597 }
+   855: Jump { target: 856 }
+   856: Constant { out: 598, val: String("type") }
+   857: Index { out: 599, container: 551, index: 598 }
+   858: Constant { out: 600, val: String("OP_AND") }
+   859: Eq { out: 601, lhs: 599, rhs: 600 }
+   860: If { cond: 601, then_block: 861, else_block: 864 }
+   861: Constant { out: 602, val: String("And") }
+   862: Move { out: 552, src: 602 }
+   863: Jump { target: 864 }
+   864: Constant { out: 603, val: String("type") }
+   865: Index { out: 604, container: 551, index: 603 }
+   866: Constant { out: 605, val: String("OP_OR") }
+   867: Eq { out: 606, lhs: 604, rhs: 605 }
+   868: If { cond: 606, then_block: 869, else_block: 872 }
+   869: Constant { out: 607, val: String("Or") }
+   870: Move { out: 552, src: 607 }
+   871: Jump { target: 872 }
+   872: Constant { out: 608, val: String("type") }
+   873: Index { out: 609, container: 551, index: 608 }
+   874: Constant { out: 610, val: String("OP_ASSIGN") }
+   875: Eq { out: 611, lhs: 609, rhs: 610 }
+   876: If { cond: 611, then_block: 877, else_block: 880 }
+   877: Constant { out: 612, val: String("Assign") }
+   878: Move { out: 552, src: 612 }
+   879: Jump { target: 880 }
+   880: Constant { out: 613, val: Null }
+   881: Ne { out: 614, lhs: 552, rhs: 613 }
+   882: If { cond: 614, then_block: 883, else_block: 898 }
+   883: Constant { out: 615, val: String("pos") }
+   884: Index { out: 616, container: 537, index: 615 }
+   885: Constant { out: 617, val: Integer(1) }
+   886: Add { out: 618, lhs: 616, rhs: 617 }
+   887: Constant { out: 619, val: String("pos") }
+   888: Store { container: 537, index: 619, value: 618 }
+   889: Call { out: 620, func: "parse_expr", args: [537] }
+   890: Move { out: 537, src: 620 }
+   891: Constant { out: 621, val: String("BinOp") }
+   892: Constant { out: 622, val: String("node") }
+   893: Index { out: 623, container: 537, index: 622 }
+   894: ObjectCreate { out: 624, keys: ["type", "op", "lhs", "rhs"], values: [621, 552, 540, 623] }
+   895: Constant { out: 625, val: String("node") }
+   896: Store { container: 537, index: 625, value: 624 }
+   897: Jump { target: 898 }
+   898: Jump { target: 899 }
+   899: Return { val: 537 }
+   900: Constant { out: 626, val: Null }
+   901: Return { val: 626 }
+   902: FuncDef { name: "parse_expr", params: [537], body: 767 }
+   903: Constant { out: 628, val: String("tokens") }
+   904: Index { out: 629, container: 627, index: 628 }
+   905: Constant { out: 630, val: String("pos") }
+   906: Index { out: 631, container: 627, index: 630 }
+   907: Index { out: 632, container: 629, index: 631 }
+   908: Constant { out: 633, val: String("type") }
+   909: Index { out: 634, container: 632, index: 633 }
+   910: Constant { out: 635, val: String("KW_LET") }
+   911: Eq { out: 636, lhs: 634, rhs: 635 }
+   912: If { cond: 636, then_block: 913, else_block: 943 }
+   913: Constant { out: 637, val: String("tokens") }
+   914: Index { out: 638, container: 627, index: 637 }
+   915: Constant { out: 639, val: String("pos") }
+   916: Index { out: 640, container: 627, index: 639 }
+   917: Constant { out: 641, val: Integer(1) }
+   918: Add { out: 642, lhs: 640, rhs: 641 }
+   919: Index { out: 643, container: 638, index: 642 }
+   920: Constant { out: 644, val: String("val") }
+   921: Index { out: 645, container: 643, index: 644 }
+   922: Constant { out: 646, val: String("pos") }
+   923: Index { out: 647, container: 627, index: 646 }
+   924: Constant { out: 648, val: Integer(3) }
+   925: Add { out: 649, lhs: 647, rhs: 648 }
+   926: Constant { out: 650, val: String("pos") }
+   927: Store { container: 627, index: 650, value: 649 }
+   928: Call { out: 651, func: "parse_expr", args: [627] }
+   929: Move { out: 627, src: 651 }
+   930: Constant { out: 652, val: String("Let") }
+   931: Constant { out: 653, val: String("node") }
+   932: Index { out: 654, container: 627, index: 653 }
+   933: ObjectCreate { out: 655, keys: ["type", "name", "value"], values: [652, 645, 654] }
+   934: Constant { out: 656, val: String("node") }
+   935: Store { container: 627, index: 656, value: 655 }
+   936: Constant { out: 657, val: String("pos") }
+   937: Index { out: 658, container: 627, index: 657 }
+   938: Constant { out: 659, val: Integer(1) }
+   939: Add { out: 660, lhs: 658, rhs: 659 }
+   940: Constant { out: 661, val: String("pos") }
+   941: Store { container: 627, index: 661, value: 660 }
+   942: Jump { target: 1146 }
+   943: Constant { out: 662, val: String("type") }
+   944: Index { out: 663, container: 632, index: 662 }
+   945: Constant { out: 664, val: String("KW_RETURN") }
+   946: Eq { out: 665, lhs: 663, rhs: 664 }
+   947: If { cond: 665, then_block: 948, else_block: 969 }
+   948: Constant { out: 666, val: String("pos") }
+   949: Index { out: 667, container: 627, index: 666 }
+   950: Constant { out: 668, val: Integer(1) }
+   951: Add { out: 669, lhs: 667, rhs: 668 }
+   952: Constant { out: 670, val: String("pos") }
+   953: Store { container: 627, index: 670, value: 669 }
+   954: Call { out: 671, func: "parse_expr", args: [627] }
+   955: Move { out: 627, src: 671 }
+   956: Constant { out: 672, val: String("Return") }
+   957: Constant { out: 673, val: String("node") }
+   958: Index { out: 674, container: 627, index: 673 }
+   959: ObjectCreate { out: 675, keys: ["type", "value"], values: [672, 674] }
+   960: Constant { out: 676, val: String("node") }
+   961: Store { container: 627, index: 676, value: 675 }
+   962: Constant { out: 677, val: String("pos") }
+   963: Index { out: 678, container: 627, index: 677 }
+   964: Constant { out: 679, val: Integer(1) }
+   965: Add { out: 680, lhs: 678, rhs: 679 }
+   966: Constant { out: 681, val: String("pos") }
+   967: Store { container: 627, index: 681, value: 680 }
+   968: Jump { target: 1146 }
+   969: Constant { out: 682, val: String("type") }
+   970: Index { out: 683, container: 632, index: 682 }
+   971: Constant { out: 684, val: String("KW_IF") }
+   972: Eq { out: 685, lhs: 683, rhs: 684 }
+   973: If { cond: 685, then_block: 974, else_block: 1020 }
+   974: Constant { out: 686, val: String("pos") }
+   975: Index { out: 687, container: 627, index: 686 }
+   976: Constant { out: 688, val: Integer(1) }
+   977: Add { out: 689, lhs: 687, rhs: 688 }
+   978: Constant { out: 690, val: String("pos") }
+   979: Store { container: 627, index: 690, value: 689 }
+   980: Call { out: 691, func: "parse_expr", args: [627] }
+   981: Move { out: 627, src: 691 }
+   982: Constant { out: 692, val: String("node") }
+   983: Index { out: 693, container: 627, index: 692 }
+   984: Constant { out: 694, val: String("pos") }
+   985: Index { out: 695, container: 627, index: 694 }
+   986: Constant { out: 696, val: Integer(1) }
+   987: Add { out: 697, lhs: 695, rhs: 696 }
+   988: Constant { out: 698, val: String("pos") }
+   989: Store { container: 627, index: 698, value: 697 }
+   990: ArrayCreate { out: 699, elements: [] }
+   991: Constant { out: 700, val: String("tokens") }
+   992: Index { out: 701, container: 627, index: 700 }
+   993: Constant { out: 702, val: String("pos") }
+   994: Index { out: 703, container: 627, index: 702 }
+   995: Index { out: 704, container: 701, index: 703 }
+   996: Constant { out: 705, val: String("type") }
+   997: Index { out: 706, container: 704, index: 705 }
+   998: Constant { out: 707, val: String("RBRACE") }
+   999: Ne { out: 708, lhs: 706, rhs: 707 }
+  1000: Loop { cond: 708, body: 1002, max_iter: 100000 }
+  1001: Jump { target: 1009 }
+  1002: Call { out: 709, func: "parse_stmt", args: [627] }
+  1003: Move { out: 627, src: 709 }
+  1004: Constant { out: 710, val: String("node") }
+  1005: Index { out: 711, container: 627, index: 710 }
+  1006: Call { out: 712, func: "append", args: [699, 711] }
+  1007: Move { out: 699, src: 712 }
+  1008: Jump { target: 991 }
+  1009: Constant { out: 713, val: String("pos") }
+  1010: Index { out: 714, container: 627, index: 713 }
+  1011: Constant { out: 715, val: Integer(1) }
+  1012: Add { out: 716, lhs: 714, rhs: 715 }
+  1013: Constant { out: 717, val: String("pos") }
+  1014: Store { container: 627, index: 717, value: 716 }
+  1015: Constant { out: 718, val: String("If") }
+  1016: ObjectCreate { out: 719, keys: ["type", "cond", "then"], values: [718, 693, 699] }
+  1017: Constant { out: 720, val: String("node") }
+  1018: Store { container: 627, index: 720, value: 719 }
+  1019: Jump { target: 1146 }
+  1020: Constant { out: 721, val: String("type") }
+  1021: Index { out: 722, container: 632, index: 721 }
+  1022: Constant { out: 723, val: String("KW_LOOP") }
+  1023: Eq { out: 724, lhs: 722, rhs: 723 }
+  1024: If { cond: 724, then_block: 1025, else_block: 1084 }
+  1025: Constant { out: 725, val: String("pos") }
+  1026: Index { out: 726, container: 627, index: 725 }
+  1027: Constant { out: 727, val: Integer(2) }
+  1028: Add { out: 728, lhs: 726, rhs: 727 }
+  1029: Constant { out: 729, val: String("pos") }
+  1030: Store { container: 627, index: 729, value: 728 }
+  1031: Call { out: 730, func: "parse_expr", args: [627] }
+  1032: Move { out: 627, src: 730 }
+  1033: Constant { out: 731, val: String("node") }
+  1034: Index { out: 732, container: 627, index: 731 }
+  1035: Constant { out: 733, val: String("pos") }
+  1036: Index { out: 734, container: 627, index: 733 }
+  1037: Constant { out: 735, val: Integer(1) }
+  1038: Add { out: 736, lhs: 734, rhs: 735 }
+  1039: Constant { out: 737, val: String("pos") }
+  1040: Store { container: 627, index: 737, value: 736 }
+  1041: Constant { out: 738, val: String("tokens") }
+  1042: Index { out: 739, container: 627, index: 738 }
+  1043: Constant { out: 740, val: String("pos") }
+  1044: Index { out: 741, container: 627, index: 740 }
+  1045: Index { out: 742, container: 739, index: 741 }
+  1046: Constant { out: 743, val: String("val") }
+  1047: Index { out: 744, container: 742, index: 743 }
+  1048: Constant { out: 745, val: String("pos") }
+  1049: Index { out: 746, container: 627, index: 745 }
+  1050: Constant { out: 747, val: Integer(3) }
+  1051: Add { out: 748, lhs: 746, rhs: 747 }
+  1052: Constant { out: 749, val: String("pos") }
+  1053: Store { container: 627, index: 749, value: 748 }
+  1054: ArrayCreate { out: 750, elements: [] }
+  1055: Constant { out: 751, val: String("tokens") }
+  1056: Index { out: 752, container: 627, index: 751 }
+  1057: Constant { out: 753, val: String("pos") }
+  1058: Index { out: 754, container: 627, index: 753 }
+  1059: Index { out: 755, container: 752, index: 754 }
+  1060: Constant { out: 756, val: String("type") }
+  1061: Index { out: 757, container: 755, index: 756 }
+  1062: Constant { out: 758, val: String("RBRACE") }
+  1063: Ne { out: 759, lhs: 757, rhs: 758 }
+  1064: Loop { cond: 759, body: 1066, max_iter: 100000 }
+  1065: Jump { target: 1073 }
+  1066: Call { out: 760, func: "parse_stmt", args: [627] }
+  1067: Move { out: 627, src: 760 }
+  1068: Constant { out: 761, val: String("node") }
+  1069: Index { out: 762, container: 627, index: 761 }
+  1070: Call { out: 763, func: "append", args: [750, 762] }
+  1071: Move { out: 750, src: 763 }
+  1072: Jump { target: 1055 }
+  1073: Constant { out: 764, val: String("pos") }
+  1074: Index { out: 765, container: 627, index: 764 }
+  1075: Constant { out: 766, val: Integer(1) }
+  1076: Add { out: 767, lhs: 765, rhs: 766 }
+  1077: Constant { out: 768, val: String("pos") }
+  1078: Store { container: 627, index: 768, value: 767 }
+  1079: Constant { out: 769, val: String("Loop") }
+  1080: ObjectCreate { out: 770, keys: ["type", "cond", "body", "max"], values: [769, 732, 750, 744] }
+  1081: Constant { out: 771, val: String("node") }
+  1082: Store { container: 627, index: 771, value: 770 }
+  1083: Jump { target: 1146 }
+  1084: Constant { out: 772, val: String("type") }
+  1085: Index { out: 773, container: 632, index: 772 }
+  1086: Constant { out: 774, val: String("KW_BREAK") }
+  1087: Eq { out: 775, lhs: 773, rhs: 774 }
+  1088: If { cond: 775, then_block: 1089, else_block: 1100 }
+  1089: Constant { out: 776, val: String("Break") }
+  1090: ObjectCreate { out: 777, keys: ["type"], values: [776] }
+  1091: Constant { out: 778, val: String("node") }
+  1092: Store { container: 627, index: 778, value: 777 }
+  1093: Constant { out: 779, val: String("pos") }
+  1094: Index { out: 780, container: 627, index: 779 }
+  1095: Constant { out: 781, val: Integer(2) }
+  1096: Add { out: 782, lhs: 780, rhs: 781 }
+  1097: Constant { out: 783, val: String("pos") }
+  1098: Store { container: 627, index: 783, value: 782 }
+  1099: Jump { target: 1146 }
+  1100: Constant { out: 784, val: String("type") }
+  1101: Index { out: 785, container: 632, index: 784 }
+  1102: Constant { out: 786, val: String("KW_CONT") }
+  1103: Eq { out: 787, lhs: 785, rhs: 786 }
+  1104: If { cond: 787, then_block: 1105, else_block: 1116 }
+  1105: Constant { out: 788, val: String("Continue") }
+  1106: ObjectCreate { out: 789, keys: ["type"], values: [788] }
+  1107: Constant { out: 790, val: String("node") }
+  1108: Store { container: 627, index: 790, value: 789 }
+  1109: Constant { out: 791, val: String("pos") }
+  1110: Index { out: 792, container: 627, index: 791 }
+  1111: Constant { out: 793, val: Integer(2) }
+  1112: Add { out: 794, lhs: 792, rhs: 793 }
+  1113: Constant { out: 795, val: String("pos") }
+  1114: Store { container: 627, index: 795, value: 794 }
+  1115: Jump { target: 1146 }
+  1116: Call { out: 796, func: "parse_expr", args: [627] }
+  1117: Move { out: 627, src: 796 }
+  1118: Constant { out: 797, val: String("node") }
+  1119: Index { out: 798, container: 627, index: 797 }
+  1120: Constant { out: 799, val: String("type") }
+  1121: Index { out: 800, container: 798, index: 799 }
+  1122: Constant { out: 801, val: String("BinOp") }
+  1123: Eq { out: 802, lhs: 800, rhs: 801 }
+  1124: If { cond: 802, then_block: 1125, else_block: 1140 }
+  1125: Constant { out: 803, val: String("op") }
+  1126: Index { out: 804, container: 798, index: 803 }
+  1127: Constant { out: 805, val: String("Assign") }
+  1128: Eq { out: 806, lhs: 804, rhs: 805 }
+  1129: If { cond: 806, then_block: 1130, else_block: 1139 }
+  1130: Constant { out: 807, val: String("Assign") }
+  1131: Constant { out: 808, val: String("lhs") }
+  1132: Index { out: 809, container: 798, index: 808 }
+  1133: Constant { out: 810, val: String("rhs") }
+  1134: Index { out: 811, container: 798, index: 810 }
+  1135: ObjectCreate { out: 812, keys: ["type", "lhs", "rhs"], values: [807, 809, 811] }
+  1136: Constant { out: 813, val: String("node") }
+  1137: Store { container: 627, index: 813, value: 812 }
+  1138: Jump { target: 1139 }
+  1139: Jump { target: 1140 }
+  1140: Constant { out: 814, val: String("pos") }
+  1141: Index { out: 815, container: 627, index: 814 }
+  1142: Constant { out: 816, val: Integer(1) }
+  1143: Add { out: 817, lhs: 815, rhs: 816 }
+  1144: Constant { out: 818, val: String("pos") }
+  1145: Store { container: 627, index: 818, value: 817 }
+  1146: Return { val: 627 }
+  1147: Constant { out: 819, val: Null }
+  1148: Return { val: 819 }
+  1149: FuncDef { name: "parse_stmt", params: [627], body: 903 }
+  1150: Constant { out: 822, val: String("type") }
+  1151: Index { out: 823, container: 821, index: 822 }
+  1152: Constant { out: 824, val: String("Literal") }
+  1153: Eq { out: 825, lhs: 823, rhs: 824 }
+  1154: If { cond: 825, then_block: 1155, else_block: 1201 }
+  1155: Constant { out: 826, val: String("regs") }
+  1156: Index { out: 827, container: 820, index: 826 }
+  1157: Constant { out: 828, val: String("next") }
+  1158: Index { out: 829, container: 827, index: 828 }
+  1159: Constant { out: 830, val: String("regs") }
+  1160: Index { out: 831, container: 820, index: 830 }
+  1161: Constant { out: 832, val: Integer(1) }
+  1162: Add { out: 833, lhs: 829, rhs: 832 }
+  1163: Constant { out: 834, val: String("next") }
+  1164: Store { container: 831, index: 834, value: 833 }
+  1165: Constant { out: 835, val: String("regs") }
+  1166: Store { container: 820, index: 835, value: 831 }
+  1167: Constant { out: 836, val: String("val") }
+  1168: Index { out: 837, container: 821, index: 836 }
+  1169: Constant { out: 838, val: String("lit_type") }
+  1170: Index { out: 839, container: 821, index: 838 }
+  1171: Constant { out: 840, val: String("LIT_BOOL") }
+  1172: Eq { out: 841, lhs: 839, rhs: 840 }
+  1173: If { cond: 841, then_block: 1174, else_block: 1183 }
+  1174: Constant { out: 842, val: String("true") }
+  1175: Eq { out: 843, lhs: 837, rhs: 842 }
+  1176: If { cond: 843, then_block: 1177, else_block: 1180 }
+  1177: Constant { out: 844, val: Boolean(true) }
+  1178: Move { out: 837, src: 844 }
+  1179: Jump { target: 1182 }
+  1180: Constant { out: 845, val: Boolean(false) }
+  1181: Move { out: 837, src: 845 }
+  1182: Jump { target: 1191 }
+  1183: Constant { out: 846, val: String("lit_type") }
+  1184: Index { out: 847, container: 821, index: 846 }
+  1185: Constant { out: 848, val: String("LIT_NULL") }
+  1186: Eq { out: 849, lhs: 847, rhs: 848 }
+  1187: If { cond: 849, then_block: 1188, else_block: 1191 }
+  1188: Constant { out: 850, val: Null }
+  1189: Move { out: 837, src: 850 }
+  1190: Jump { target: 1191 }
+  1191: Constant { out: 851, val: String("insts") }
+  1192: Index { out: 852, container: 820, index: 851 }
+  1193: Constant { out: 853, val: String("Constant") }
+  1194: ObjectCreate { out: 854, keys: ["op", "out", "val"], values: [853, 829, 837] }
+  1195: Call { out: 855, func: "append", args: [852, 854] }
+  1196: Constant { out: 856, val: String("insts") }
+  1197: Store { container: 820, index: 856, value: 855 }
+  1198: Constant { out: 857, val: String("result_reg") }
+  1199: Store { container: 820, index: 857, value: 829 }
+  1200: Jump { target: 1483 }
+  1201: Constant { out: 858, val: String("Ident") }
+  1202: Eq { out: 859, lhs: 823, rhs: 858 }
+  1203: If { cond: 859, then_block: 1204, else_block: 1214 }
+  1204: Constant { out: 860, val: String("regs") }
+  1205: Index { out: 861, container: 820, index: 860 }
+  1206: Constant { out: 862, val: String("map") }
+  1207: Index { out: 863, container: 861, index: 862 }
+  1208: Constant { out: 864, val: String("name") }
+  1209: Index { out: 865, container: 821, index: 864 }
+  1210: Index { out: 866, container: 863, index: 865 }
+  1211: Constant { out: 867, val: String("result_reg") }
+  1212: Store { container: 820, index: 867, value: 866 }
+  1213: Jump { target: 1483 }
+  1214: Constant { out: 868, val: String("BinOp") }
+  1215: Eq { out: 869, lhs: 823, rhs: 868 }
+  1216: If { cond: 869, then_block: 1217, else_block: 1252 }
+  1217: Constant { out: 870, val: String("lhs") }
+  1218: Index { out: 871, container: 821, index: 870 }
+  1219: Call { out: 872, func: "compile_expr", args: [820, 871] }
+  1220: Move { out: 820, src: 872 }
+  1221: Constant { out: 873, val: String("result_reg") }
+  1222: Index { out: 874, container: 820, index: 873 }
+  1223: Constant { out: 875, val: String("rhs") }
+  1224: Index { out: 876, container: 821, index: 875 }
+  1225: Call { out: 877, func: "compile_expr", args: [820, 876] }
+  1226: Move { out: 820, src: 877 }
+  1227: Constant { out: 878, val: String("result_reg") }
+  1228: Index { out: 879, container: 820, index: 878 }
+  1229: Constant { out: 880, val: String("regs") }
+  1230: Index { out: 881, container: 820, index: 880 }
+  1231: Constant { out: 882, val: String("next") }
+  1232: Index { out: 883, container: 881, index: 882 }
+  1233: Constant { out: 884, val: String("regs") }
+  1234: Index { out: 885, container: 820, index: 884 }
+  1235: Constant { out: 886, val: Integer(1) }
+  1236: Add { out: 887, lhs: 883, rhs: 886 }
+  1237: Constant { out: 888, val: String("next") }
+  1238: Store { container: 885, index: 888, value: 887 }
+  1239: Constant { out: 889, val: String("regs") }
+  1240: Store { container: 820, index: 889, value: 885 }
+  1241: Constant { out: 890, val: String("insts") }
+  1242: Index { out: 891, container: 820, index: 890 }
+  1243: Constant { out: 892, val: String("op") }
+  1244: Index { out: 893, container: 821, index: 892 }
+  1245: ObjectCreate { out: 894, keys: ["op", "out", "lhs", "rhs"], values: [893, 883, 874, 879] }
+  1246: Call { out: 895, func: "append", args: [891, 894] }
+  1247: Constant { out: 896, val: String("insts") }
+  1248: Store { container: 820, index: 896, value: 895 }
+  1249: Constant { out: 897, val: String("result_reg") }
+  1250: Store { container: 820, index: 897, value: 883 }
+  1251: Jump { target: 1483 }
+  1252: Constant { out: 898, val: String("Call") }
+  1253: Eq { out: 899, lhs: 823, rhs: 898 }
+  1254: If { cond: 899, then_block: 1255, else_block: 1300 }
+  1255: ArrayCreate { out: 900, elements: [] }
+  1256: Constant { out: 901, val: Integer(0) }
+  1257: Constant { out: 902, val: String("args") }
+  1258: Index { out: 903, container: 821, index: 902 }
+  1259: Call { out: 904, func: "len", args: [903] }
+  1260: Lt { out: 905, lhs: 901, rhs: 904 }
+  1261: Loop { cond: 905, body: 1263, max_iter: 100000 }
+  1262: Jump { target: 1276 }
+  1263: Constant { out: 906, val: String("args") }
+  1264: Index { out: 907, container: 821, index: 906 }
+  1265: Index { out: 908, container: 907, index: 901 }
+  1266: Call { out: 909, func: "compile_expr", args: [820, 908] }
+  1267: Move { out: 820, src: 909 }
+  1268: Constant { out: 910, val: String("result_reg") }
+  1269: Index { out: 911, container: 820, index: 910 }
+  1270: Call { out: 912, func: "append", args: [900, 911] }
+  1271: Move { out: 900, src: 912 }
+  1272: Constant { out: 913, val: Integer(1) }
+  1273: Add { out: 914, lhs: 901, rhs: 913 }
+  1274: Move { out: 901, src: 914 }
+  1275: Jump { target: 1257 }
+  1276: Constant { out: 915, val: String("regs") }
+  1277: Index { out: 916, container: 820, index: 915 }
+  1278: Constant { out: 917, val: String("next") }
+  1279: Index { out: 918, container: 916, index: 917 }
+  1280: Constant { out: 919, val: String("regs") }
+  1281: Index { out: 920, container: 820, index: 919 }
+  1282: Constant { out: 921, val: Integer(1) }
+  1283: Add { out: 922, lhs: 918, rhs: 921 }
+  1284: Constant { out: 923, val: String("next") }
+  1285: Store { container: 920, index: 923, value: 922 }
+  1286: Constant { out: 924, val: String("regs") }
+  1287: Store { container: 820, index: 924, value: 920 }
+  1288: Constant { out: 925, val: String("insts") }
+  1289: Index { out: 926, container: 820, index: 925 }
+  1290: Constant { out: 927, val: String("Call") }
+  1291: Constant { out: 928, val: String("func") }
+  1292: Index { out: 929, container: 821, index: 928 }
+  1293: ObjectCreate { out: 930, keys: ["op", "out", "func", "args"], values: [927, 918, 929, 900] }
+  1294: Call { out: 931, func: "append", args: [926, 930] }
+  1295: Constant { out: 932, val: String("insts") }
+  1296: Store { container: 820, index: 932, value: 931 }
+  1297: Constant { out: 933, val: String("result_reg") }
+  1298: Store { container: 820, index: 933, value: 918 }
+  1299: Jump { target: 1483 }
+  1300: Constant { out: 934, val: String("Index") }
+  1301: Eq { out: 935, lhs: 823, rhs: 934 }
+  1302: If { cond: 935, then_block: 1303, else_block: 1337 }
+  1303: Constant { out: 936, val: String("object") }
+  1304: Index { out: 937, container: 821, index: 936 }
+  1305: Call { out: 938, func: "compile_expr", args: [820, 937] }
+  1306: Move { out: 820, src: 938 }
+  1307: Constant { out: 939, val: String("result_reg") }
+  1308: Index { out: 940, container: 820, index: 939 }
+  1309: Constant { out: 941, val: String("index") }
+  1310: Index { out: 942, container: 821, index: 941 }
+  1311: Call { out: 943, func: "compile_expr", args: [820, 942] }
+  1312: Move { out: 820, src: 943 }
+  1313: Constant { out: 944, val: String("result_reg") }
+  1314: Index { out: 945, container: 820, index: 944 }
+  1315: Constant { out: 946, val: String("regs") }
+  1316: Index { out: 947, container: 820, index: 946 }
+  1317: Constant { out: 948, val: String("next") }
+  1318: Index { out: 949, container: 947, index: 948 }
+  1319: Constant { out: 950, val: String("regs") }
+  1320: Index { out: 951, container: 820, index: 950 }
+  1321: Constant { out: 952, val: Integer(1) }
+  1322: Add { out: 953, lhs: 949, rhs: 952 }
+  1323: Constant { out: 954, val: String("next") }
+  1324: Store { container: 951, index: 954, value: 953 }
+  1325: Constant { out: 955, val: String("regs") }
+  1326: Store { container: 820, index: 955, value: 951 }
+  1327: Constant { out: 956, val: String("insts") }
+  1328: Index { out: 957, container: 820, index: 956 }
+  1329: Constant { out: 958, val: String("Index") }
+  1330: ObjectCreate { out: 959, keys: ["op", "out", "container", "index"], values: [958, 949, 940, 945] }
+  1331: Call { out: 960, func: "append", args: [957, 959] }
+  1332: Constant { out: 961, val: String("insts") }
+  1333: Store { container: 820, index: 961, value: 960 }
+  1334: Constant { out: 962, val: String("result_reg") }
+  1335: Store { container: 820, index: 962, value: 949 }
+  1336: Jump { target: 1483 }
+  1337: Constant { out: 963, val: String("Field") }
+  1338: Eq { out: 964, lhs: 823, rhs: 963 }
+  1339: If { cond: 964, then_block: 1340, else_block: 1389 }
+  1340: Constant { out: 965, val: String("object") }
+  1341: Index { out: 966, container: 821, index: 965 }
+  1342: Call { out: 967, func: "compile_expr", args: [820, 966] }
+  1343: Move { out: 820, src: 967 }
+  1344: Constant { out: 968, val: String("result_reg") }
+  1345: Index { out: 969, container: 820, index: 968 }
+  1346: Constant { out: 970, val: String("regs") }
+  1347: Index { out: 971, container: 820, index: 970 }
+  1348: Constant { out: 972, val: String("next") }
+  1349: Index { out: 973, container: 971, index: 972 }
+  1350: Constant { out: 974, val: String("regs") }
+  1351: Index { out: 975, container: 820, index: 974 }
+  1352: Constant { out: 976, val: Integer(1) }
+  1353: Add { out: 977, lhs: 973, rhs: 976 }
+  1354: Constant { out: 978, val: String("next") }
+  1355: Store { container: 975, index: 978, value: 977 }
+  1356: Constant { out: 979, val: String("regs") }
+  1357: Store { container: 820, index: 979, value: 975 }
+  1358: Constant { out: 980, val: String("insts") }
+  1359: Index { out: 981, container: 820, index: 980 }
+  1360: Constant { out: 982, val: String("Constant") }
+  1361: Constant { out: 983, val: String("field") }
+  1362: Index { out: 984, container: 821, index: 983 }
+  1363: ObjectCreate { out: 985, keys: ["op", "out", "val"], values: [982, 973, 984] }
+  1364: Call { out: 986, func: "append", args: [981, 985] }
+  1365: Constant { out: 987, val: String("insts") }
+  1366: Store { container: 820, index: 987, value: 986 }
+  1367: Constant { out: 988, val: String("regs") }
+  1368: Index { out: 989, container: 820, index: 988 }
+  1369: Constant { out: 990, val: String("next") }
+  1370: Index { out: 991, container: 989, index: 990 }
+  1371: Constant { out: 992, val: String("regs") }
+  1372: Index { out: 993, container: 820, index: 992 }
+  1373: Constant { out: 994, val: Integer(1) }
+  1374: Add { out: 995, lhs: 991, rhs: 994 }
+  1375: Constant { out: 996, val: String("next") }
+  1376: Store { container: 993, index: 996, value: 995 }
+  1377: Constant { out: 997, val: String("regs") }
+  1378: Store { container: 820, index: 997, value: 993 }
+  1379: Constant { out: 998, val: String("insts") }
+  1380: Index { out: 999, container: 820, index: 998 }
+  1381: Constant { out: 1000, val: String("Index") }
+  1382: ObjectCreate { out: 1001, keys: ["op", "out", "container", "index"], values: [1000, 991, 969, 973] }
+  1383: Call { out: 1002, func: "append", args: [999, 1001] }
+  1384: Constant { out: 1003, val: String("insts") }
+  1385: Store { container: 820, index: 1003, value: 1002 }
+  1386: Constant { out: 1004, val: String("result_reg") }
+  1387: Store { container: 820, index: 1004, value: 991 }
+  1388: Jump { target: 1483 }
+  1389: Constant { out: 1005, val: String("Array") }
+  1390: Eq { out: 1006, lhs: 823, rhs: 1005 }
+  1391: If { cond: 1006, then_block: 1392, else_block: 1435 }
+  1392: ArrayCreate { out: 1007, elements: [] }
+  1393: Constant { out: 1008, val: Integer(0) }
+  1394: Constant { out: 1009, val: String("elements") }
+  1395: Index { out: 1010, container: 821, index: 1009 }
+  1396: Call { out: 1011, func: "len", args: [1010] }
+  1397: Lt { out: 1012, lhs: 1008, rhs: 1011 }
+  1398: Loop { cond: 1012, body: 1400, max_iter: 100000 }
+  1399: Jump { target: 1413 }
+  1400: Constant { out: 1013, val: String("elements") }
+  1401: Index { out: 1014, container: 821, index: 1013 }
+  1402: Index { out: 1015, container: 1014, index: 1008 }
+  1403: Call { out: 1016, func: "compile_expr", args: [820, 1015] }
+  1404: Move { out: 820, src: 1016 }
+  1405: Constant { out: 1017, val: String("result_reg") }
+  1406: Index { out: 1018, container: 820, index: 1017 }
+  1407: Call { out: 1019, func: "append", args: [1007, 1018] }
+  1408: Move { out: 1007, src: 1019 }
+  1409: Constant { out: 1020, val: Integer(1) }
+  1410: Add { out: 1021, lhs: 1008, rhs: 1020 }
+  1411: Move { out: 1008, src: 1021 }
+  1412: Jump { target: 1394 }
+  1413: Constant { out: 1022, val: String("regs") }
+  1414: Index { out: 1023, container: 820, index: 1022 }
+  1415: Constant { out: 1024, val: String("next") }
+  1416: Index { out: 1025, container: 1023, index: 1024 }
+  1417: Constant { out: 1026, val: String("regs") }
+  1418: Index { out: 1027, container: 820, index: 1026 }
+  1419: Constant { out: 1028, val: Integer(1) }
+  1420: Add { out: 1029, lhs: 1025, rhs: 1028 }
+  1421: Constant { out: 1030, val: String("next") }
+  1422: Store { container: 1027, index: 1030, value: 1029 }
+  1423: Constant { out: 1031, val: String("regs") }
+  1424: Store { container: 820, index: 1031, value: 1027 }
+  1425: Constant { out: 1032, val: String("insts") }
+  1426: Index { out: 1033, container: 820, index: 1032 }
+  1427: Constant { out: 1034, val: String("ArrayCreate") }
+  1428: ObjectCreate { out: 1035, keys: ["op", "out", "elements"], values: [1034, 1025, 1007] }
+  1429: Call { out: 1036, func: "append", args: [1033, 1035] }
+  1430: Constant { out: 1037, val: String("insts") }
+  1431: Store { container: 820, index: 1037, value: 1036 }
+  1432: Constant { out: 1038, val: String("result_reg") }
+  1433: Store { container: 820, index: 1038, value: 1025 }
+  1434: Jump { target: 1483 }
+  1435: Constant { out: 1039, val: String("Object") }
+  1436: Eq { out: 1040, lhs: 823, rhs: 1039 }
+  1437: If { cond: 1040, then_block: 1438, else_block: 1483 }
+  1438: ArrayCreate { out: 1041, elements: [] }
+  1439: Constant { out: 1042, val: Integer(0) }
+  1440: Constant { out: 1043, val: String("values") }
+  1441: Index { out: 1044, container: 821, index: 1043 }
+  1442: Call { out: 1045, func: "len", args: [1044] }
+  1443: Lt { out: 1046, lhs: 1042, rhs: 1045 }
+  1444: Loop { cond: 1046, body: 1446, max_iter: 100000 }
+  1445: Jump { target: 1459 }
+  1446: Constant { out: 1047, val: String("values") }
+  1447: Index { out: 1048, container: 821, index: 1047 }
+  1448: Index { out: 1049, container: 1048, index: 1042 }
+  1449: Call { out: 1050, func: "compile_expr", args: [820, 1049] }
+  1450: Move { out: 820, src: 1050 }
+  1451: Constant { out: 1051, val: String("result_reg") }
+  1452: Index { out: 1052, container: 820, index: 1051 }
+  1453: Call { out: 1053, func: "append", args: [1041, 1052] }
+  1454: Move { out: 1041, src: 1053 }
+  1455: Constant { out: 1054, val: Integer(1) }
+  1456: Add { out: 1055, lhs: 1042, rhs: 1054 }
+  1457: Move { out: 1042, src: 1055 }
+  1458: Jump { target: 1440 }
+  1459: Constant { out: 1056, val: String("regs") }
+  1460: Index { out: 1057, container: 820, index: 1056 }
+  1461: Constant { out: 1058, val: String("next") }
+  1462: Index { out: 1059, container: 1057, index: 1058 }
+  1463: Constant { out: 1060, val: String("regs") }
+  1464: Index { out: 1061, container: 820, index: 1060 }
+  1465: Constant { out: 1062, val: Integer(1) }
+  1466: Add { out: 1063, lhs: 1059, rhs: 1062 }
+  1467: Constant { out: 1064, val: String("next") }
+  1468: Store { container: 1061, index: 1064, value: 1063 }
+  1469: Constant { out: 1065, val: String("regs") }
+  1470: Store { container: 820, index: 1065, value: 1061 }
+  1471: Constant { out: 1066, val: String("insts") }
+  1472: Index { out: 1067, container: 820, index: 1066 }
+  1473: Constant { out: 1068, val: String("ObjectCreate") }
+  1474: Constant { out: 1069, val: String("keys") }
+  1475: Index { out: 1070, container: 821, index: 1069 }
+  1476: ObjectCreate { out: 1071, keys: ["op", "out", "keys", "values"], values: [1068, 1059, 1070, 1041] }
+  1477: Call { out: 1072, func: "append", args: [1067, 1071] }
+  1478: Constant { out: 1073, val: String("insts") }
+  1479: Store { container: 820, index: 1073, value: 1072 }
+  1480: Constant { out: 1074, val: String("result_reg") }
+  1481: Store { container: 820, index: 1074, value: 1059 }
+  1482: Jump { target: 1483 }
+  1483: Print { val: 820 }
+  1484: Return { val: 820 }
+  1485: Constant { out: 1076, val: Null }
+  1486: Return { val: 1076 }
+  1487: FuncDef { name: "compile_expr", params: [820, 821], body: 1150 }
+  1488: Constant { out: 1079, val: Null }
+  1489: Eq { out: 1080, lhs: 1078, rhs: 1079 }
+  1490: If { cond: 1080, then_block: 1491, else_block: 1493 }
+  1491: Return { val: 1077 }
+  1492: Jump { target: 1493 }
+  1493: Constant { out: 1081, val: String("type") }
+  1494: Index { out: 1082, container: 1078, index: 1081 }
+  1495: Constant { out: 1083, val: String("Let") }
+  1496: Eq { out: 1084, lhs: 1082, rhs: 1083 }
+  1497: If { cond: 1084, then_block: 1498, else_block: 1518 }
+  1498: Constant { out: 1085, val: String("value") }
+  1499: Index { out: 1086, container: 1078, index: 1085 }
+  1500: Call { out: 1087, func: "compile_expr", args: [1077, 1086] }
+  1501: Move { out: 1077, src: 1087 }
+  1502: Constant { out: 1088, val: String("regs") }
+  1503: Index { out: 1089, container: 1077, index: 1088 }
+  1504: Constant { out: 1090, val: String("map") }
+  1505: Index { out: 1091, container: 1089, index: 1090 }
+  1506: Constant { out: 1092, val: String("result_reg") }
+  1507: Index { out: 1093, container: 1077, index: 1092 }
+  1508: Constant { out: 1094, val: String("name") }
+  1509: Index { out: 1095, container: 1078, index: 1094 }
+  1510: Store { container: 1091, index: 1095, value: 1093 }
+  1511: Constant { out: 1096, val: String("regs") }
+  1512: Index { out: 1097, container: 1077, index: 1096 }
+  1513: Constant { out: 1098, val: String("map") }
+  1514: Store { container: 1097, index: 1098, value: 1091 }
+  1515: Constant { out: 1099, val: String("regs") }
+  1516: Store { container: 1077, index: 1099, value: 1097 }
+  1517: Jump { target: 1782 }
+  1518: Constant { out: 1100, val: String("type") }
+  1519: Index { out: 1101, container: 1078, index: 1100 }
+  1520: Constant { out: 1102, val: String("Assign") }
+  1521: Eq { out: 1103, lhs: 1101, rhs: 1102 }
+  1522: If { cond: 1103, then_block: 1523, else_block: 1631 }
+  1523: Constant { out: 1104, val: String("rhs") }
+  1524: Index { out: 1105, container: 1078, index: 1104 }
+  1525: Call { out: 1106, func: "compile_expr", args: [1077, 1105] }
+  1526: Move { out: 1077, src: 1106 }
+  1527: Constant { out: 1107, val: String("result_reg") }
+  1528: Index { out: 1108, container: 1077, index: 1107 }
+  1529: Constant { out: 1109, val: String("lhs") }
+  1530: Index { out: 1110, container: 1078, index: 1109 }
+  1531: Constant { out: 1111, val: String("type") }
+  1532: Index { out: 1112, container: 1110, index: 1111 }
+  1533: Constant { out: 1113, val: String("Ident") }
+  1534: Eq { out: 1114, lhs: 1112, rhs: 1113 }
+  1535: If { cond: 1114, then_block: 1536, else_block: 1553 }
+  1536: Constant { out: 1115, val: String("insts") }
+  1537: Index { out: 1116, container: 1077, index: 1115 }
+  1538: Constant { out: 1117, val: String("Move") }
+  1539: Constant { out: 1118, val: String("regs") }
+  1540: Index { out: 1119, container: 1077, index: 1118 }
+  1541: Constant { out: 1120, val: String("map") }
+  1542: Index { out: 1121, container: 1119, index: 1120 }
+  1543: Constant { out: 1122, val: String("lhs") }
+  1544: Index { out: 1123, container: 1078, index: 1122 }
+  1545: Constant { out: 1124, val: String("name") }
+  1546: Index { out: 1125, container: 1123, index: 1124 }
+  1547: Index { out: 1126, container: 1121, index: 1125 }
+  1548: ObjectCreate { out: 1127, keys: ["op", "out", "src"], values: [1117, 1126, 1108] }
+  1549: Call { out: 1128, func: "append", args: [1116, 1127] }
+  1550: Constant { out: 1129, val: String("insts") }
+  1551: Store { container: 1077, index: 1129, value: 1128 }
+  1552: Jump { target: 1630 }
+  1553: Constant { out: 1130, val: String("lhs") }
+  1554: Index { out: 1131, container: 1078, index: 1130 }
+  1555: Constant { out: 1132, val: String("type") }
+  1556: Index { out: 1133, container: 1131, index: 1132 }
+  1557: Constant { out: 1134, val: String("Index") }
+  1558: Eq { out: 1135, lhs: 1133, rhs: 1134 }
+  1559: If { cond: 1135, then_block: 1560, else_block: 1584 }
+  1560: Constant { out: 1136, val: String("lhs") }
+  1561: Index { out: 1137, container: 1078, index: 1136 }
+  1562: Constant { out: 1138, val: String("object") }
+  1563: Index { out: 1139, container: 1137, index: 1138 }
+  1564: Call { out: 1140, func: "compile_expr", args: [1077, 1139] }
+  1565: Move { out: 1077, src: 1140 }
+  1566: Constant { out: 1141, val: String("result_reg") }
+  1567: Index { out: 1142, container: 1077, index: 1141 }
+  1568: Constant { out: 1143, val: String("lhs") }
+  1569: Index { out: 1144, container: 1078, index: 1143 }
+  1570: Constant { out: 1145, val: String("index") }
+  1571: Index { out: 1146, container: 1144, index: 1145 }
+  1572: Call { out: 1147, func: "compile_expr", args: [1077, 1146] }
+  1573: Move { out: 1077, src: 1147 }
+  1574: Constant { out: 1148, val: String("insts") }
+  1575: Index { out: 1149, container: 1077, index: 1148 }
+  1576: Constant { out: 1150, val: String("Store") }
+  1577: Constant { out: 1151, val: String("result_reg") }
+  1578: Index { out: 1152, container: 1077, index: 1151 }
+  1579: ObjectCreate { out: 1153, keys: ["op", "container", "index", "value"], values: [1150, 1142, 1152, 1108] }
+  1580: Call { out: 1154, func: "append", args: [1149, 1153] }
+  1581: Constant { out: 1155, val: String("insts") }
+  1582: Store { container: 1077, index: 1155, value: 1154 }
+  1583: Jump { target: 1630 }
+  1584: Constant { out: 1156, val: String("lhs") }
+  1585: Index { out: 1157, container: 1078, index: 1156 }
+  1586: Constant { out: 1158, val: String("type") }
+  1587: Index { out: 1159, container: 1157, index: 1158 }
+  1588: Constant { out: 1160, val: String("Field") }
+  1589: Eq { out: 1161, lhs: 1159, rhs: 1160 }
+  1590: If { cond: 1161, then_block: 1591, else_block: 1630 }
+  1591: Constant { out: 1162, val: String("lhs") }
+  1592: Index { out: 1163, container: 1078, index: 1162 }
+  1593: Constant { out: 1164, val: String("object") }
+  1594: Index { out: 1165, container: 1163, index: 1164 }
+  1595: Call { out: 1166, func: "compile_expr", args: [1077, 1165] }
+  1596: Move { out: 1077, src: 1166 }
+  1597: Constant { out: 1167, val: String("result_reg") }
+  1598: Index { out: 1168, container: 1077, index: 1167 }
+  1599: Constant { out: 1169, val: String("regs") }
+  1600: Index { out: 1170, container: 1077, index: 1169 }
+  1601: Constant { out: 1171, val: String("next") }
+  1602: Index { out: 1172, container: 1170, index: 1171 }
+  1603: Constant { out: 1173, val: String("regs") }
+  1604: Index { out: 1174, container: 1077, index: 1173 }
+  1605: Constant { out: 1175, val: Integer(1) }
+  1606: Add { out: 1176, lhs: 1172, rhs: 1175 }
+  1607: Constant { out: 1177, val: String("next") }
+  1608: Store { container: 1174, index: 1177, value: 1176 }
+  1609: Constant { out: 1178, val: String("regs") }
+  1610: Store { container: 1077, index: 1178, value: 1174 }
+  1611: Constant { out: 1179, val: String("insts") }
+  1612: Index { out: 1180, container: 1077, index: 1179 }
+  1613: Constant { out: 1181, val: String("Constant") }
+  1614: Constant { out: 1182, val: String("lhs") }
+  1615: Index { out: 1183, container: 1078, index: 1182 }
+  1616: Constant { out: 1184, val: String("field") }
+  1617: Index { out: 1185, container: 1183, index: 1184 }
+  1618: ObjectCreate { out: 1186, keys: ["op", "out", "val"], values: [1181, 1172, 1185] }
+  1619: Call { out: 1187, func: "append", args: [1180, 1186] }
+  1620: Constant { out: 1188, val: String("insts") }
+  1621: Store { container: 1077, index: 1188, value: 1187 }
+  1622: Constant { out: 1189, val: String("insts") }
+  1623: Index { out: 1190, container: 1077, index: 1189 }
+  1624: Constant { out: 1191, val: String("Store") }
+  1625: ObjectCreate { out: 1192, keys: ["op", "container", "index", "value"], values: [1191, 1168, 1172, 1108] }
+  1626: Call { out: 1193, func: "append", args: [1190, 1192] }
+  1627: Constant { out: 1194, val: String("insts") }
+  1628: Store { container: 1077, index: 1194, value: 1193 }
+  1629: Jump { target: 1630 }
+  1630: Jump { target: 1782 }
+  1631: Constant { out: 1195, val: String("type") }
+  1632: Index { out: 1196, container: 1078, index: 1195 }
+  1633: Constant { out: 1197, val: String("Return") }
+  1634: Eq { out: 1198, lhs: 1196, rhs: 1197 }
+  1635: If { cond: 1198, then_block: 1636, else_block: 1650 }
+  1636: Constant { out: 1199, val: String("value") }
+  1637: Index { out: 1200, container: 1078, index: 1199 }
+  1638: Call { out: 1201, func: "compile_expr", args: [1077, 1200] }
+  1639: Move { out: 1077, src: 1201 }
+  1640: Constant { out: 1202, val: String("insts") }
+  1641: Index { out: 1203, container: 1077, index: 1202 }
+  1642: Constant { out: 1204, val: String("Return") }
+  1643: Constant { out: 1205, val: String("result_reg") }
+  1644: Index { out: 1206, container: 1077, index: 1205 }
+  1645: ObjectCreate { out: 1207, keys: ["op", "val"], values: [1204, 1206] }
+  1646: Call { out: 1208, func: "append", args: [1203, 1207] }
+  1647: Constant { out: 1209, val: String("insts") }
+  1648: Store { container: 1077, index: 1209, value: 1208 }
+  1649: Jump { target: 1782 }
+  1650: Constant { out: 1210, val: String("type") }
+  1651: Index { out: 1211, container: 1078, index: 1210 }
+  1652: Constant { out: 1212, val: String("If") }
+  1653: Eq { out: 1213, lhs: 1211, rhs: 1212 }
+  1654: If { cond: 1213, then_block: 1655, else_block: 1698 }
+  1655: Constant { out: 1214, val: String("cond") }
+  1656: Index { out: 1215, container: 1078, index: 1214 }
+  1657: Call { out: 1216, func: "compile_expr", args: [1077, 1215] }
+  1658: Move { out: 1077, src: 1216 }
+  1659: Constant { out: 1217, val: String("result_reg") }
+  1660: Index { out: 1218, container: 1077, index: 1217 }
+  1661: Constant { out: 1219, val: String("insts") }
+  1662: Index { out: 1220, container: 1077, index: 1219 }
+  1663: Call { out: 1221, func: "len", args: [1220] }
+  1664: Constant { out: 1222, val: String("insts") }
+  1665: Index { out: 1223, container: 1077, index: 1222 }
+  1666: Constant { out: 1224, val: String("IfPlaceholder") }
+  1667: ObjectCreate { out: 1225, keys: ["op"], values: [1224] }
+  1668: Call { out: 1226, func: "append", args: [1223, 1225] }
+  1669: Constant { out: 1227, val: String("insts") }
+  1670: Store { container: 1077, index: 1227, value: 1226 }
+  1671: Constant { out: 1228, val: Integer(0) }
+  1672: Constant { out: 1229, val: String("then") }
+  1673: Index { out: 1230, container: 1078, index: 1229 }
+  1674: Call { out: 1231, func: "len", args: [1230] }
+  1675: Lt { out: 1232, lhs: 1228, rhs: 1231 }
+  1676: Loop { cond: 1232, body: 1678, max_iter: 100000 }
+  1677: Jump { target: 1687 }
+  1678: Constant { out: 1233, val: String("then") }
+  1679: Index { out: 1234, container: 1078, index: 1233 }
+  1680: Index { out: 1235, container: 1234, index: 1228 }
+  1681: Call { out: 1236, func: "compile_stmt", args: [1077, 1235] }
+  1682: Move { out: 1077, src: 1236 }
+  1683: Constant { out: 1237, val: Integer(1) }
+  1684: Add { out: 1238, lhs: 1228, rhs: 1237 }
+  1685: Move { out: 1228, src: 1238 }
+  1686: Jump { target: 1672 }
+  1687: Constant { out: 1239, val: String("insts") }
+  1688: Index { out: 1240, container: 1077, index: 1239 }
+  1689: Constant { out: 1241, val: String("If") }
+  1690: Constant { out: 1242, val: Integer(1) }
+  1691: Add { out: 1243, lhs: 1221, rhs: 1242 }
+  1692: Call { out: 1244, func: "len", args: [1240] }
+  1693: ObjectCreate { out: 1245, keys: ["op", "cond", "then", "else"], values: [1241, 1218, 1243, 1244] }
+  1694: Store { container: 1240, index: 1221, value: 1245 }
+  1695: Constant { out: 1246, val: String("insts") }
+  1696: Store { container: 1077, index: 1246, value: 1240 }
+  1697: Jump { target: 1782 }
+  1698: Constant { out: 1247, val: String("type") }
+  1699: Index { out: 1248, container: 1078, index: 1247 }
+  1700: Constant { out: 1249, val: String("Loop") }
+  1701: Eq { out: 1250, lhs: 1248, rhs: 1249 }
+  1702: If { cond: 1250, then_block: 1703, else_block: 1756 }
+  1703: Constant { out: 1251, val: String("insts") }
+  1704: Index { out: 1252, container: 1077, index: 1251 }
+  1705: Call { out: 1253, func: "len", args: [1252] }
+  1706: Constant { out: 1254, val: String("cond") }
+  1707: Index { out: 1255, container: 1078, index: 1254 }
+  1708: Call { out: 1256, func: "compile_expr", args: [1077, 1255] }
+  1709: Move { out: 1077, src: 1256 }
+  1710: Constant { out: 1257, val: String("result_reg") }
+  1711: Index { out: 1258, container: 1077, index: 1257 }
+  1712: Constant { out: 1259, val: String("insts") }
+  1713: Index { out: 1260, container: 1077, index: 1259 }
+  1714: Call { out: 1261, func: "len", args: [1260] }
+  1715: Constant { out: 1262, val: String("insts") }
+  1716: Index { out: 1263, container: 1077, index: 1262 }
+  1717: Constant { out: 1264, val: String("IfPlaceholder") }
+  1718: ObjectCreate { out: 1265, keys: ["op"], values: [1264] }
+  1719: Call { out: 1266, func: "append", args: [1263, 1265] }
+  1720: Constant { out: 1267, val: String("insts") }
+  1721: Store { container: 1077, index: 1267, value: 1266 }
+  1722: Constant { out: 1268, val: Integer(0) }
+  1723: Constant { out: 1269, val: String("body") }
+  1724: Index { out: 1270, container: 1078, index: 1269 }
+  1725: Call { out: 1271, func: "len", args: [1270] }
+  1726: Lt { out: 1272, lhs: 1268, rhs: 1271 }
+  1727: Loop { cond: 1272, body: 1729, max_iter: 100000 }
+  1728: Jump { target: 1738 }
+  1729: Constant { out: 1273, val: String("body") }
+  1730: Index { out: 1274, container: 1078, index: 1273 }
+  1731: Index { out: 1275, container: 1274, index: 1268 }
+  1732: Call { out: 1276, func: "compile_stmt", args: [1077, 1275] }
+  1733: Move { out: 1077, src: 1276 }
+  1734: Constant { out: 1277, val: Integer(1) }
+  1735: Add { out: 1278, lhs: 1268, rhs: 1277 }
+  1736: Move { out: 1268, src: 1278 }
+  1737: Jump { target: 1723 }
+  1738: Constant { out: 1279, val: String("insts") }
+  1739: Index { out: 1280, container: 1077, index: 1279 }
+  1740: Constant { out: 1281, val: String("Jump") }
+  1741: ObjectCreate { out: 1282, keys: ["op", "target"], values: [1281, 1253] }
+  1742: Call { out: 1283, func: "append", args: [1280, 1282] }
+  1743: Constant { out: 1284, val: String("insts") }
+  1744: Store { container: 1077, index: 1284, value: 1283 }
+  1745: Constant { out: 1285, val: String("insts") }
+  1746: Index { out: 1286, container: 1077, index: 1285 }
+  1747: Constant { out: 1287, val: String("If") }
+  1748: Constant { out: 1288, val: Integer(1) }
+  1749: Add { out: 1289, lhs: 1261, rhs: 1288 }
+  1750: Call { out: 1290, func: "len", args: [1286] }
+  1751: ObjectCreate { out: 1291, keys: ["op", "cond", "then", "else"], values: [1287, 1258, 1289, 1290] }
+  1752: Store { container: 1286, index: 1261, value: 1291 }
+  1753: Constant { out: 1292, val: String("insts") }
+  1754: Store { container: 1077, index: 1292, value: 1286 }
+  1755: Jump { target: 1782 }
+  1756: Constant { out: 1293, val: String("type") }
+  1757: Index { out: 1294, container: 1078, index: 1293 }
+  1758: Constant { out: 1295, val: String("Break") }
+  1759: Eq { out: 1296, lhs: 1294, rhs: 1295 }
+  1760: If { cond: 1296, then_block: 1761, else_block: 1769 }
+  1761: Constant { out: 1297, val: String("insts") }
+  1762: Index { out: 1298, container: 1077, index: 1297 }
+  1763: Constant { out: 1299, val: String("Break") }
+  1764: ObjectCreate { out: 1300, keys: ["op"], values: [1299] }
+  1765: Call { out: 1301, func: "append", args: [1298, 1300] }
+  1766: Constant { out: 1302, val: String("insts") }
+  1767: Store { container: 1077, index: 1302, value: 1301 }
+  1768: Jump { target: 1782 }
+  1769: Constant { out: 1303, val: String("type") }
+  1770: Index { out: 1304, container: 1078, index: 1303 }
+  1771: Constant { out: 1305, val: String("Continue") }
+  1772: Eq { out: 1306, lhs: 1304, rhs: 1305 }
+  1773: If { cond: 1306, then_block: 1774, else_block: 1782 }
+  1774: Constant { out: 1307, val: String("insts") }
+  1775: Index { out: 1308, container: 1077, index: 1307 }
+  1776: Constant { out: 1309, val: String("Continue") }
+  1777: ObjectCreate { out: 1310, keys: ["op"], values: [1309] }
+  1778: Call { out: 1311, func: "append", args: [1308, 1310] }
+  1779: Constant { out: 1312, val: String("insts") }
+  1780: Store { container: 1077, index: 1312, value: 1311 }
+  1781: Jump { target: 1782 }
+  1782: Return { val: 1077 }
+  1783: Constant { out: 1313, val: Null }
+  1784: Return { val: 1313 }
+  1785: FuncDef { name: "compile_stmt", params: [1077, 1078], body: 1488 }
+  1786: Constant { out: 1315, val: Integer(0) }
+  1787: Constant { out: 1316, val: Integer(0) }
+  1788: ObjectCreate { out: 1317, keys: [], values: [] }
+  1789: ObjectCreate { out: 1318, keys: ["next", "map"], values: [1316, 1317] }
+  1790: ArrayCreate { out: 1319, elements: [] }
+  1791: Constant { out: 1320, val: Null }
+  1792: Constant { out: 1321, val: Integer(0) }
+  1793: ObjectCreate { out: 1322, keys: ["tokens", "pos", "regs", "insts", "node", "result_reg"], values: [1314, 1315, 1318, 1319, 1320, 1321] }
+  1794: Call { out: 1323, func: "len", args: [1314] }
+  1795: Constant { out: 1324, val: String("pos") }
+  1796: Index { out: 1325, container: 1322, index: 1324 }
+  1797: Lt { out: 1326, lhs: 1325, rhs: 1323 }
+  1798: Loop { cond: 1326, body: 1800, max_iter: 1000000 }
+  1799: Jump { target: 1953 }
+  1800: Constant { out: 1327, val: String("pos") }
+  1801: Index { out: 1328, container: 1322, index: 1327 }
+  1802: Index { out: 1329, container: 1314, index: 1328 }
+  1803: Constant { out: 1330, val: String("type") }
+  1804: Index { out: 1331, container: 1329, index: 1330 }
+  1805: Constant { out: 1332, val: String("KW_FN") }
+  1806: Eq { out: 1333, lhs: 1331, rhs: 1332 }
+  1807: If { cond: 1333, then_block: 1808, else_block: 1946 }
+  1808: Constant { out: 1334, val: String("pos") }
+  1809: Index { out: 1335, container: 1322, index: 1334 }
+  1810: Constant { out: 1336, val: Integer(1) }
+  1811: Add { out: 1337, lhs: 1335, rhs: 1336 }
+  1812: Index { out: 1338, container: 1314, index: 1337 }
+  1813: Constant { out: 1339, val: String("val") }
+  1814: Index { out: 1340, container: 1338, index: 1339 }
+  1815: Constant { out: 1341, val: String("pos") }
+  1816: Index { out: 1342, container: 1322, index: 1341 }
+  1817: Constant { out: 1343, val: Integer(3) }
+  1818: Add { out: 1344, lhs: 1342, rhs: 1343 }
+  1819: Constant { out: 1345, val: String("pos") }
+  1820: Store { container: 1322, index: 1345, value: 1344 }
+  1821: ArrayCreate { out: 1346, elements: [] }
+  1822: Constant { out: 1347, val: String("tokens") }
+  1823: Index { out: 1348, container: 1322, index: 1347 }
+  1824: Constant { out: 1349, val: String("pos") }
+  1825: Index { out: 1350, container: 1322, index: 1349 }
+  1826: Index { out: 1351, container: 1348, index: 1350 }
+  1827: Constant { out: 1352, val: String("type") }
+  1828: Index { out: 1353, container: 1351, index: 1352 }
+  1829: Constant { out: 1354, val: String("RPAREN") }
+  1830: Ne { out: 1355, lhs: 1353, rhs: 1354 }
+  1831: Loop { cond: 1355, body: 1833, max_iter: 1000000 }
+  1832: Jump { target: 1866 }
+  1833: Constant { out: 1356, val: String("tokens") }
+  1834: Index { out: 1357, container: 1322, index: 1356 }
+  1835: Constant { out: 1358, val: String("pos") }
+  1836: Index { out: 1359, container: 1322, index: 1358 }
+  1837: Index { out: 1360, container: 1357, index: 1359 }
+  1838: Constant { out: 1361, val: String("val") }
+  1839: Index { out: 1362, container: 1360, index: 1361 }
+  1840: Call { out: 1363, func: "append", args: [1346, 1362] }
+  1841: Move { out: 1346, src: 1363 }
+  1842: Constant { out: 1364, val: String("pos") }
+  1843: Index { out: 1365, container: 1322, index: 1364 }
+  1844: Constant { out: 1366, val: Integer(1) }
+  1845: Add { out: 1367, lhs: 1365, rhs: 1366 }
+  1846: Constant { out: 1368, val: String("pos") }
+  1847: Store { container: 1322, index: 1368, value: 1367 }
+  1848: Constant { out: 1369, val: String("tokens") }
+  1849: Index { out: 1370, container: 1322, index: 1369 }
+  1850: Constant { out: 1371, val: String("pos") }
+  1851: Index { out: 1372, container: 1322, index: 1371 }
+  1852: Index { out: 1373, container: 1370, index: 1372 }
+  1853: Constant { out: 1374, val: String("type") }
+  1854: Index { out: 1375, container: 1373, index: 1374 }
+  1855: Constant { out: 1376, val: String("COMMA") }
+  1856: Eq { out: 1377, lhs: 1375, rhs: 1376 }
+  1857: If { cond: 1377, then_block: 1858, else_block: 1865 }
+  1858: Constant { out: 1378, val: String("pos") }
+  1859: Index { out: 1379, container: 1322, index: 1378 }
+  1860: Constant { out: 1380, val: Integer(1) }
+  1861: Add { out: 1381, lhs: 1379, rhs: 1380 }
+  1862: Constant { out: 1382, val: String("pos") }
+  1863: Store { container: 1322, index: 1382, value: 1381 }
+  1864: Jump { target: 1865 }
+  1865: Jump { target: 1822 }
+  1866: Constant { out: 1383, val: String("pos") }
+  1867: Index { out: 1384, container: 1322, index: 1383 }
+  1868: Constant { out: 1385, val: Integer(2) }
+  1869: Add { out: 1386, lhs: 1384, rhs: 1385 }
+  1870: Constant { out: 1387, val: String("pos") }
+  1871: Store { container: 1322, index: 1387, value: 1386 }
+  1872: Constant { out: 1388, val: String("regs") }
+  1873: Index { out: 1389, container: 1322, index: 1388 }
+  1874: Constant { out: 1390, val: Integer(0) }
+  1875: ObjectCreate { out: 1391, keys: [], values: [] }
+  1876: ObjectCreate { out: 1392, keys: ["next", "map"], values: [1390, 1391] }
+  1877: Constant { out: 1393, val: String("regs") }
+  1878: Store { container: 1322, index: 1393, value: 1392 }
+  1879: ArrayCreate { out: 1394, elements: [] }
+  1880: Constant { out: 1395, val: Integer(0) }
+  1881: Call { out: 1396, func: "len", args: [1346] }
+  1882: Lt { out: 1397, lhs: 1395, rhs: 1396 }
+  1883: Loop { cond: 1397, body: 1885, max_iter: 1000000 }
+  1884: Jump { target: 1909 }
+  1885: Constant { out: 1398, val: String("regs") }
+  1886: Index { out: 1399, container: 1322, index: 1398 }
+  1887: Constant { out: 1400, val: String("next") }
+  1888: Index { out: 1401, container: 1399, index: 1400 }
+  1889: Constant { out: 1402, val: String("regs") }
+  1890: Index { out: 1403, container: 1322, index: 1402 }
+  1891: Constant { out: 1404, val: Integer(1) }
+  1892: Add { out: 1405, lhs: 1401, rhs: 1404 }
+  1893: Constant { out: 1406, val: String("next") }
+  1894: Store { container: 1403, index: 1406, value: 1405 }
+  1895: Constant { out: 1407, val: String("map") }
+  1896: Index { out: 1408, container: 1403, index: 1407 }
+  1897: Index { out: 1409, container: 1346, index: 1395 }
+  1898: Store { container: 1408, index: 1409, value: 1401 }
+  1899: Constant { out: 1410, val: String("map") }
+  1900: Store { container: 1403, index: 1410, value: 1408 }
+  1901: Constant { out: 1411, val: String("regs") }
+  1902: Store { container: 1322, index: 1411, value: 1403 }
+  1903: Call { out: 1412, func: "append", args: [1394, 1401] }
+  1904: Move { out: 1394, src: 1412 }
+  1905: Constant { out: 1413, val: Integer(1) }
+  1906: Add { out: 1414, lhs: 1395, rhs: 1413 }
+  1907: Move { out: 1395, src: 1414 }
+  1908: Jump { target: 1881 }
+  1909: Constant { out: 1415, val: String("insts") }
+  1910: Index { out: 1416, container: 1322, index: 1415 }
+  1911: Call { out: 1417, func: "len", args: [1416] }
+  1912: Constant { out: 1418, val: String("tokens") }
+  1913: Index { out: 1419, container: 1322, index: 1418 }
+  1914: Constant { out: 1420, val: String("pos") }
+  1915: Index { out: 1421, container: 1322, index: 1420 }
+  1916: Index { out: 1422, container: 1419, index: 1421 }
+  1917: Constant { out: 1423, val: String("type") }
+  1918: Index { out: 1424, container: 1422, index: 1423 }
+  1919: Constant { out: 1425, val: String("RBRACE") }
+  1920: Ne { out: 1426, lhs: 1424, rhs: 1425 }
+  1921: Loop { cond: 1426, body: 1923, max_iter: 1000000 }
+  1922: Jump { target: 1930 }
+  1923: Call { out: 1427, func: "parse_stmt", args: [1322] }
+  1924: Move { out: 1322, src: 1427 }
+  1925: Constant { out: 1428, val: String("node") }
+  1926: Index { out: 1429, container: 1322, index: 1428 }
+  1927: Call { out: 1430, func: "compile_stmt", args: [1322, 1429] }
+  1928: Move { out: 1322, src: 1430 }
+  1929: Jump { target: 1912 }
+  1930: Constant { out: 1431, val: String("pos") }
+  1931: Index { out: 1432, container: 1322, index: 1431 }
+  1932: Constant { out: 1433, val: Integer(1) }
+  1933: Add { out: 1434, lhs: 1432, rhs: 1433 }
+  1934: Constant { out: 1435, val: String("pos") }
+  1935: Store { container: 1322, index: 1435, value: 1434 }
+  1936: Constant { out: 1436, val: String("insts") }
+  1937: Index { out: 1437, container: 1322, index: 1436 }
+  1938: Constant { out: 1438, val: String("FuncDef") }
+  1939: ObjectCreate { out: 1439, keys: ["op", "name", "params", "body"], values: [1438, 1340, 1394, 1417] }
+  1940: Call { out: 1440, func: "append", args: [1437, 1439] }
+  1941: Constant { out: 1441, val: String("insts") }
+  1942: Store { container: 1322, index: 1441, value: 1440 }
+  1943: Constant { out: 1442, val: String("regs") }
+  1944: Store { container: 1322, index: 1442, value: 1389 }
+  1945: Jump { target: 1952 }
+  1946: Constant { out: 1443, val: String("pos") }
+  1947: Index { out: 1444, container: 1322, index: 1443 }
+  1948: Constant { out: 1445, val: Integer(1) }
+  1949: Add { out: 1446, lhs: 1444, rhs: 1445 }
+  1950: Constant { out: 1447, val: String("pos") }
+  1951: Store { container: 1322, index: 1447, value: 1446 }
+  1952: Jump { target: 1795 }
+  1953: Constant { out: 1448, val: String("insts") }
+  1954: Index { out: 1449, container: 1322, index: 1448 }
+  1955: Return { val: 1449 }
+  1956: Constant { out: 1450, val: Null }
+  1957: Return { val: 1450 }
+  1958: FuncDef { name: "compile", params: [1314], body: 1786 }
+  1959: Constant { out: 1451, val: String("hlx_compiler/bootstrap/compiler.hlxc") }
+  1960: Call { out: 1452, func: "read_file", args: [1451] }
+  1961: Call { out: 1453, func: "native_tokenize", args: [1452] }
+  1962: Call { out: 1454, func: "compile", args: [1453] }
+  1963: Return { val: 1454 }
+  1964: Constant { out: 1455, val: Null }
+  1965: Return { val: 1455 }
+  1966: FuncDef { name: "main", params: [], body: 1959 }

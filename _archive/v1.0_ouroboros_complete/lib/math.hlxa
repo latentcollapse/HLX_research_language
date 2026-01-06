@@ -1,0 +1,101 @@
+program std_math {
+
+    // Return the absolute value of x
+    fn abs(x) {
+        if (x < 0) {
+            return -x;
+        }
+        return x;
+    }
+
+    // Return the larger of two values
+    fn max(a, b) {
+        if (a > b) {
+            return a;
+        }
+        return b;
+    }
+
+    // Return the smaller of two values
+    fn min(a, b) {
+        if (a < b) {
+            return a;
+        }
+        return b;
+    }
+
+    // Clamp value x between min_val and max_val
+    fn clamp(x, min_val, max_val) {
+        let low = max(x, min_val);
+        let res = min(low, max_val);
+        return res;
+    }
+
+    // Square root using Newton-Raphson method
+    fn sqrt(x) {
+        if (x < 0) {
+            return 0;  // Return 0 for negative (or could return NaN equivalent)
+        }
+        if (x == 0) {
+            return 0;
+        }
+
+        // Initial guess
+        let guess = x / 2;
+        let epsilon = 1;  // Tolerance (1 is reasonable for integer math)
+
+        let i = 0;
+        loop(i < 20, 20) {  // Max 20 iterations
+            let next_guess = (guess + (x / guess)) / 2;
+            let diff = abs(next_guess - guess);
+
+            if (diff < epsilon) {
+                return next_guess;
+            }
+
+            guess = next_guess;
+            i = i + 1;
+        }
+
+        return guess;
+    }
+
+    // Power function: x^n (for non-negative integer n)
+    fn pow(x, n) {
+        if (n == 0) {
+            return 1;
+        }
+        if (n == 1) {
+            return x;
+        }
+
+        let result = 1;
+        let i = 0;
+        loop(i < n, 1000) {
+            result = result * x;
+            i = i + 1;
+        }
+
+        return result;
+    }
+
+    // Floor: largest integer <= x
+    fn floor(x) {
+        // In integer math, this is just x (already floored)
+        // But useful as identity for future float support
+        return x;
+    }
+
+    // Ceiling: smallest integer >= x
+    fn ceil(x) {
+        // In integer math, this is just x
+        return x;
+    }
+
+    // Round to nearest integer
+    fn round(x) {
+        // In integer math, this is identity
+        // When we add float support, implement proper rounding
+        return x;
+    }
+}

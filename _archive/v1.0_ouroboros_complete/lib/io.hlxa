@@ -1,0 +1,34 @@
+program std_io {
+    
+    // Open a file. Returns file handle (pointer) or null.
+    fn file_open(path, mode) {
+        return fopen(path, mode);
+    }
+
+    // Close a file.
+    fn file_close(handle) {
+        return fclose(handle);
+    }
+
+    // Write string to file.
+    fn file_write_str(handle, s) {
+        let len = strlen(s);
+        // fwrite(ptr, size, nmemb, handle)
+        return fwrite(s, 1, len, handle);
+    }
+
+    // Read bytes into an array.
+    fn file_read(handle, buffer, len) {
+        return fread(buffer, 1, len, handle);
+    }
+
+    // Seek to position. (whence: 0=SET, 1=CUR, 2=END)
+    fn file_seek(handle, offset, whence) {
+        return fseek(handle, offset, whence);
+    }
+
+    // Get current position.
+    fn file_tell(handle) {
+        return ftell(handle);
+    }
+}

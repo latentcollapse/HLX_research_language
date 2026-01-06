@@ -1,47 +1,38 @@
-# HLX Phase 2 Roadmap: The Engine & The Ecosystem
+# HLX Debug Briefing: The "Phantom State" Bug
 
-**Status:** Phase 1 (Bootstrap) Complete. Control Plane (HLX-C) Active.
-**Goal:** Achieve hardware-accelerated, deterministic execution on NVIDIA/AMD via Vulkan.
+**Context:** We are in Phase 4 (Self-Hosting). The Rust bootstrap compiler (`stage0`) successfully compiles the self-hosted compiler (`stage1`). The `stage1` compiler successfully executes on the VM.
 
----
+**The Bug:**
+During the "Ouroboros" step (Stage 1 compiling Stage 2), the process crashes with a specific validation error:
 
-## 1. The Engine (Vulkan Backend)
+```text
+Error: Execution failed
+Caused by:
+    E_VALIDATION_FAIL: Key 'pos' not found in object with keys: ["_global_state", "_lt", "_name", "_params", "_t", "_tokens"]
+```
 
-The memory allocator is in place. Now we need to light the compute fires.
+**Analysis:**
+1.  **Location:** The error occurs in the `compile` function of `hlx_compiler/bootstrap/compiler.hlxc`.
+2.  **Symptom:** The `_global_state` object, which is supposed to hold the compiler state (`pos`, `tokens`, `z_bc`, etc.), appears to be replaced by an object containing the *local variable names* of the `compile` function (`_lt`, `_name`, etc.).
+3.  **Implication:** This suggests a deep semantic issue where the VM or Lowering pass is confusing a "scope object" or "stack frame map" with the `_global_state` variable itself.
+    *   It is *not* a parser error (we fixed `Nom(Tag)`).
+    *   It is *not* a simple logic bug (we painstakingly verified `_global_state` reconstruction).
+    *   It *is* a runtime value corruption where `_global_state` points to the wrong entity.
 
-- [ ] **SPIR-V Generation (`spirv_gen.rs`):**
-    - Implement a translator from LC-B `Instruction` to SPIR-V assembly (using `rspirv` or raw bytes).
-    - Map `MatMul`, `Add`, `Gelu` to GLSL/SPIR-V compute shaders.
-- [ ] **Compute Dispatch:**
-    - Implement `cmd_dispatch` in `VulkanBackend`.
-    - Integrate `BackendTuning` to select workgroup sizes dynamically.
-- [ ] **Pipeline Management:**
-    - Implement `PipelineCache` to avoid recompiling shaders every run.
-    - Manage Descriptor Sets for binding tensors.
+**Goal:**
+Identify why `_global_state` (register) holds the function's local scope keys instead of its assigned value.
 
-## 2. The Ecosystem (HLX-C Standard Library)
+**Hypotheses:**
+*   **Lowering Bug (`lower.rs`):** Is the `Ident` lookup resolving to a register that implicitly stores the stack frame?
+*   **Runtime Bug (`executor.rs`):** Is `Instruction::Index` or `Call` accidentally exposing internal stack frame maps?
+*   **Shadowing:** Is `_global_state` being shadowed by an implicit scope variable?
 
-We need to build the "libc" of HLX.
+**Files Provided (`ouroboros_debug_pack.zip`):**
+1.  `compiler.hlxc`: The source code triggering the issue.
+2.  `lower.rs`: The compiler logic converting AST to IR.
+3.  `executor.rs`: The VM executing the code.
+4.  `instruction.rs`: The IR definition.
+5.  `bootstrap.sh`: The reproduction script.
 
-- [ ] **`std.hlxc`:**
-    - Basic math functions (`pow`, `exp`, `log`).
-    - Tensor manipulation (`slice`, `concat`).
-    - Randomness (`rand_uniform`, `rand_normal`) using the deterministic seed.
-- [ ] **Kernel Library:**
-    - Implement `Softmax`, `LayerNorm`, `Attention` in pure HLX-C (as reference) and optimized Kernels.
-
-## 3. The Validation (Chaos Monkey)
-
-- [ ] **Cross-Vendor Test Suite:**
-    - A script that runs the same LC-B capsule on CPU, NVIDIA, and AMD (when available).
-    - Verifies bit-exact output hashes.
-
-## 4. The Vision (Helinux Kernel)
-
-- [ ] **Scheduler Prototype:**
-    - A simple Round-Robin scheduler written in HLX-C that manages a queue of dummy "processes" (capsules).
-    - Demonstrates the usage of `max_iter` (DLB) to preempt tasks.
-
----
-
-**Next Immediate Step:** Implement `spirv_gen` to bridge the gap between `Instruction` and the GPU.
+**To Reproduce:**
+Run `./bootstrap.sh`. It will build the Rust compiler, compile Stage 1, and then crash during Stage 2 execution.

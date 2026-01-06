@@ -1,0 +1,16 @@
+program std_string {
+    
+    // Print a string
+    fn str_print(s) {
+        print_str(s);
+        return 0;
+    }
+
+    // Get length of string
+    fn str_len(s) {
+        return strlen(s);
+    }
+    
+    // We can add more complex logic here once we have dynamic resizing 
+    // or just wrap C functions for now.
+}

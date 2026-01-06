@@ -1,0 +1,54 @@
+fn compile(_tokens) -> object {
+    let _global_state = {
+        "tokens": _tokens, "pos": 0, "z_idx": 0, "z_sym": {}, "z_bc": [],
+        "node": null, "result_reg": 0, "stack": []
+    };
+    let _lt = len(_tokens);
+    loop (_global_state.pos < _lt, 1000000) {
+        let _t = _tokens[_global_state.pos];
+        if _t.type == "KW_FN" {
+            let _name = _tokens[_global_state.pos+1].val;
+            _global_state.pos = _global_state.pos + 3; 
+            let _params = [];
+            loop (_global_state.tokens[_global_state.pos].type != "RPAREN", 1000000) {
+                _params = append(_params, _global_state.tokens[_global_state.pos].val);
+                _global_state.pos = _global_state.pos + 1;
+                if (_global_state.tokens[_global_state.pos].type == "COMMA") { _global_state.pos = _global_state.pos + 1; }
+            }
+            _global_state.pos = _global_state.pos + 2; 
+            let _old_next = _global_state.z_idx;
+            let _old_map = _global_state.z_sym;
+            _global_state.z_idx = 0;
+            _global_state.z_sym = {};
+            let _param_regs = [];
+            let _j = 0;
+            loop (_j < len(_params), 1000000) {
+                let _r = _global_state.z_idx;
+                let _m = _global_state.z_sym; _m[_params[_j]] = _r; _global_state.z_sym = _m;
+                _global_state.z_idx = _r + 1;
+                _param_regs = append(_param_regs, _r);
+                _j = _j + 1;
+            }
+            let _start_pc = len(_global_state.z_bc);
+            print("Compiling function: " + _name);
+            loop (_global_state.tokens[_global_state.pos].type != "RBRACE", 1000000) {
+                _global_state = parse_stmt(_global_state);
+                _global_state = compile_stmt(_global_state, _global_state.node);
+            }
+            _global_state.pos = _global_state.pos + 1;
+            _global_state.z_bc = append(_global_state.z_bc, {"op": "FuncDef", "name": _name, "params": _param_regs, "body": _start_pc});
+            _global_state.z_idx = _old_next;
+            _global_state.z_sym = _old_map;
+        } else {
+            _global_state.pos = _global_state.pos + 1;
+        }
+    }
+    return _global_state.z_bc;
+}
+
+fn main() -> object {
+    let source = read_file("hlx_compiler/bootstrap/compiler.hlxc");
+    let tokens = native_tokenize(source);
+    let ir = compile(tokens);
+    return ir;
+}

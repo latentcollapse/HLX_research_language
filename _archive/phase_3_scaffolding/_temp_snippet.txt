@@ -1,0 +1,11 @@
+fn compile_expr(state, expr) -> object {
+    let t = expr.type;
+    // ... logic ...
+    // HACK: Print type before return
+    // print(type(state));
+    // Since I can't easily inject into the middle of the file without replacing the whole block, 
+    // I'll try to find a safe replace target.
+    
+    // Actually, I'll read the file again to make sure I have the exact context for a replace.
+    return state;
+}
