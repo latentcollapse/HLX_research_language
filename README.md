@@ -2,7 +2,7 @@
 
 **A self-hosting, deterministic programming language designed for seamless communication between humans and AI systems.**
 
-The bootstrapper has been tested, broken, and retested until it compiled perfectly every time. It was built and tested on Arch Linux, but has not yet been forked to my knowledge. It's ready for open validation
+The bootstrapper has been tested, broken, and retested until it compiled perfectly every time, but I was built and so far only tested on Arch Linux on my personal hardware, and has not yet been forked to my knowledge. It's ready for open validation
 
 Operating System: Arch Linux 
 KDE Plasma Version: 6.5.4
