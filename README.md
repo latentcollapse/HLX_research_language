@@ -13,7 +13,6 @@ Graphics Platform: Wayland
 Processors: 36 × Intel® Xeon® CPU E5-2699 v3 @ 2.30GHz
 Memory: 32 GiB of RAM (31.2 GiB usable)
 Graphics Processor: NVIDIA GeForce RTX 5060
-Manufacturer: HUANANZHI
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status: Self-Hosting](https://img.shields.io/badge/Status-Self--Hosting-success.svg)](https://github.com/latentcollapse/hlx-compiler)
