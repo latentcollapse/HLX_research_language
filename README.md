@@ -2,6 +2,8 @@
 
 **A self-hosting, deterministic programming language designed for seamless communication between humans and AI systems.**
 
+The bootstrapper has been tested, broken, and retested until it compiled perfectly every time. It's ready for open validation
+
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status: Self-Hosting](https://img.shields.io/badge/Status-Self--Hosting-success.svg)](https://github.com/latentcollapse/hlx-compiler)
 
@@ -403,7 +405,7 @@ If you use HLX in research, please cite:
 ```bibtex
 @software{hlx2026,
   title = {HLX: A Deterministic Language for Human-AI Collaboration},
-  author = {HLX Contributors},
+  author = {latentcollapse, Claude, Gemini},
   year = {2026},
   url = {https://github.com/latentcollapse/hlx-compiler},
   note = {Self-hosting compiler with proven determinism}
@@ -427,9 +429,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
----
-
-**The snake eats its own tail. The compiler compiles itself. The hash never lies.**
-
-🐍 **Ouroboros Complete** 🐍
