@@ -100,7 +100,7 @@ Stage 2 → Stage 3 (HLX compiler compiling itself again)
 **Result:** Stage 2 and Stage 3 are **bytewise identical**.
 
 ```
-SHA256: 98ce9ac411b488b4ecc32f35a35e7995c68d1ca5910f3aec368af213f8184e03
+SHA256: 5b8fa2ee59205fbf6e8710570db3ab0ddf59a3b4c5cbbbe64312923ade111f20
 Size: 76,272 bytes
 Instructions: 3,313
 ```
@@ -125,7 +125,7 @@ cd hlx-compiler/hlx
 Expected output:
 ```
 ✓✓✓ OUROBOROS COMPLETE! ✓✓✓
-Hash: 98ce9ac411b488b4ecc32f35a35e7995c68d1ca5910f3aec368af213f8184e03
+Hash: 5b8fa2ee59205fbf6e8710570db3ab0ddf59a3b4c5cbbbe64312923ade111f20
 
 The HLX compiler is now fully self-hosted.
 ```
@@ -313,13 +313,14 @@ cat hlx/hlx_compiler/bootstrap/compiler.hlxc
 - **Self-hosted compiler** - HLX compiler written in HLX
 - **Three-stage bootstrap** - Ouroboros achieved (Stage 2 == Stage 3)
 - **Deterministic VM** - Register-based executor with bounded loops
-- **Standard library** - `math`, `string`, `array`, `object`, `io` modules
+- **Standard library** - Pure HLX `math` module (abs, sqrt, min, max, pow, clamp, sign, lerp)
 - **Cryptographic verification** - SHA256 hashing of all compiled crates
+- **Language Server Protocol (LSP Phase 1)** - Go-to-definition working in VS Code
 - **Example programs** - Math, graphics, tensor operations
 
 ### 🚧 In Progress
 
-- **Language Server Protocol (LSP)** - IDE support (syntax highlighting, go-to-definition, hover types)
+- **LSP Phase 2** - Syntax highlighting, hover types, autocomplete
 - **Package Manager** (`hlx get`) - Dependency management for shared libraries
 - **Formatter** (`hlx fmt`) - Canonical code formatting
 - **Foreign Function Interface (FFI)** - Plugin system for external libraries (HTTP, database, etc.)
