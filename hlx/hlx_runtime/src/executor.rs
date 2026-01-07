@@ -841,6 +841,30 @@ impl ExecutionContext {
                     }),
                 }
             }
+            "to_int" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "to_int() takes exactly 1 argument".to_string(),
+                    });
+                }
+                let v = self.get_reg(args[0])?;
+                match v {
+                    Value::Integer(n) => Ok(Value::Integer(*n)),
+                    Value::Float(f) => Ok(Value::Integer(*f as i64)),
+                    Value::String(s) => {
+                         match s.parse::<i64>() {
+                            Ok(n) => Ok(Value::Integer(n)),
+                            Err(_) => Err(HlxError::ValidationFail {
+                                message: format!("to_int() cannot parse '{}' as integer", s),
+                            }),
+                        }
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "numeric or string".to_string(),
+                        got: v.type_name().to_string(),
+                    }),
+                }
+            }
             "has_key" => {
                 if args.len() != 2 {
                     return Err(HlxError::ValidationFail {

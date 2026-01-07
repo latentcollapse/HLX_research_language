@@ -1,0 +1,144 @@
+// HLX Synthetic Data Generator (Module A: Math)
+//
+// This script generates synthetic training pairs (Instruction -> Code)
+// for fine-tuning LLMs on HLX syntax.
+//
+// Features used:
+// - Explicit parentheses (Right-associative hardening)
+// - DEFAULT_MAX_ITER() for safety
+// - to_int() for integer math and string building
+// - Object literals for JSON-like output structure
+
+program synthetic_generator {
+
+    // === Helper: Integer to String (Polyfill) ===
+    // Required because we don't have a native 'to_string' yet.
+    fn int_to_string(n) {
+        if (n == 0) { return "0"; } 
+        
+        let s = "";
+        let val = n;
+        let is_neg = false;
+        
+        if (val < 0) {
+            is_neg = true;
+            val = (0 - val); // Explicit precedence
+        }
+
+        // Loop using new DEFAULT_MAX_ITER constant
+        let i = 0;
+        loop (val > 0, DEFAULT_MAX_ITER()) {
+            // Manual modulo: val % 10 = val - (val / 10) * 10
+            let div_res = to_int(val / 10);
+            let digit = (val - (div_res * 10)); // Explicit paren
+            
+            // Digit lookup
+            let char = "?";
+            if (digit == 0) { char = "0"; }
+            if (digit == 1) { char = "1"; }
+            if (digit == 2) { char = "2"; }
+            if (digit == 3) { char = "3"; }
+            if (digit == 4) { char = "4"; }
+            if (digit == 5) { char = "5"; }
+            if (digit == 6) { char = "6"; }
+            if (digit == 7) { char = "7"; }
+            if (digit == 8) { char = "8"; }
+            if (digit == 9) { char = "9"; }
+            
+            s = (char + s);
+            val = div_res;
+            i = (i + 1);
+        }
+        
+        if (is_neg) {
+            s = ("-" + s);
+        }
+        
+        return s;
+    }
+
+    // === Generator: Simple Arithmetic ===
+    // Generates: "Calculate X op Y" -> "print(X op Y);"
+    fn gen_arithmetic(id_start, count) {
+        let examples = [];
+        let i = 0;
+        
+        // Use a simple Linear Congruential Generator (LCG) for deterministic pseudo-randomness
+        // State
+        let rng_state = id_start; 
+
+        loop (i < count, DEFAULT_MAX_ITER()) {
+            // Update RNG: state = (state * 1664525 + 1013904223) % 2147483648
+            // We'll keep it simple to avoid overflow issues with our current int size/ops
+            rng_state = (rng_state * 17); 
+            rng_state = (rng_state + 13);
+            // Simulate modulo 100 for operands
+            let op_a = to_int(rng_state - (to_int(rng_state / 100) * 100));
+            
+            rng_state = (rng_state * 17);
+            let op_b = to_int(rng_state - (to_int(rng_state / 100) * 100));
+            
+            // Select operator (mod 4)
+            rng_state = (rng_state + 7);
+            let op_code = to_int(rng_state - (to_int(rng_state / 4) * 4));
+            
+            let op_sym = "+";
+            let op_name = "add";
+            
+            if (op_code == 1) { 
+                op_sym = "-"; 
+                op_name = "subtract"; 
+            }
+            if (op_code == 2) { 
+                op_sym = "*"; 
+                op_name = "multiply"; 
+            }
+            if (op_code == 3) { 
+                op_sym = "/"; 
+                op_name = "divide"; 
+                if (op_b == 0) { op_b = 1; } // Prevent div by zero
+            }
+
+            // Construct Prompt
+            let prompt = "Write an HLX program to ";
+            prompt = (prompt + op_name);
+            prompt = (prompt + " ");
+            prompt = (prompt + int_to_string(op_a));
+            prompt = (prompt + " and ");
+            prompt = (prompt + int_to_string(op_b));
+            
+            // Construct Code
+            let code = "fn main() {\n    let a = ";
+            code = (code + int_to_string(op_a));
+            code = (code + ";\n    let b = ");
+            code = (code + int_to_string(op_b));
+            code = (code + ";\n    print(a ");
+            code = (code + op_sym);
+            code = (code + " b);\n}");
+
+            let entry = {
+                "id": (id_start + i),
+                "instruction": prompt,
+                "output": code
+            };
+            
+            examples = append(examples, entry);
+            i = (i + 1);
+        }
+        
+        return examples;
+    }
+
+    fn main() {
+        print("Generating Synthetic HLX Training Data...");
+        
+        // Generate 10 arithmetic examples starting at ID 1000
+        let dataset = gen_arithmetic(1000, 10);
+        
+        // Print result (In a real pipeline, we'd write this to a file)
+        // Since print(array) works recursively, we can see the JSON structure
+        print(dataset);
+        
+        return dataset;
+    }
+}
