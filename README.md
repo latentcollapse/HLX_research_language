@@ -2,6 +2,8 @@
 
 **A self-hosting, deterministic programming language designed for seamless communication between humans and AI systems.**
 
+**Not yet even close to production ready, HLX is doing well and is easy to work on, but this will be a long process to get to where anyone actually wants to use it**
+
 The bootstrapper has been tested, broken, and retested until it compiled perfectly every time, but it was built and so far only tested on Arch Linux on my personal hardware, and has not yet been forked to my knowledge. It's still early and rough, but ready for open scrutiny
 
 Operating System: Arch Linux 
