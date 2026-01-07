@@ -15,6 +15,13 @@ impl LanguageServer for Backend {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::FULL,
                 )),
+                completion_provider: Some(CompletionOptions {
+                    resolve_provider: Some(false),
+                    trigger_characters: Some(vec![ ".".to_string(), ":".to_string() ]),
+                    work_done_progress_options: Default::default(),
+                    all_commit_characters: None,
+                    completion_item: None,
+                }),
                 ..Default::default()
             },
             ..Default::default()
@@ -40,6 +47,46 @@ impl LanguageServer for Backend {
         if let Some(event) = params.content_changes.pop() {
             self.validate_document(params.text_document.uri, event.text).await;
         }
+    }
+
+    async fn completion(&self, _params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        // Basic Static Completion
+        let keywords = vec![
+            // Keywords
+            ("fn", CompletionItemKind::KEYWORD, "Function definition"),
+            ("let", CompletionItemKind::KEYWORD, "Variable declaration"),
+            ("if", CompletionItemKind::KEYWORD, "Conditional"),
+            ("else", CompletionItemKind::KEYWORD, "Alternative"),
+            ("loop", CompletionItemKind::KEYWORD, "Loop construct"),
+            ("return", CompletionItemKind::KEYWORD, "Return value"),
+            ("program", CompletionItemKind::KEYWORD, "Program definition"),
+            ("break", CompletionItemKind::KEYWORD, "Break loop"),
+            ("continue", CompletionItemKind::KEYWORD, "Continue loop"),
+            ("true", CompletionItemKind::KEYWORD, "Boolean true"),
+            ("false", CompletionItemKind::KEYWORD, "Boolean false"),
+            ("null", CompletionItemKind::KEYWORD, "Null value"),
+            
+            // Builtins & Constants
+            ("DEFAULT_MAX_ITER", CompletionItemKind::CONSTANT, "Safety constant (1,000,000)"),
+            ("print", CompletionItemKind::FUNCTION, "Print value(s)"),
+            ("len", CompletionItemKind::FUNCTION, "Get length of array/string"),
+            ("to_int", CompletionItemKind::FUNCTION, "Convert to integer"),
+            ("slice", CompletionItemKind::FUNCTION, "Slice array"),
+            ("append", CompletionItemKind::FUNCTION, "Append to array"),
+            ("type", CompletionItemKind::FUNCTION, "Get value type"),
+            ("read_file", CompletionItemKind::FUNCTION, "Read file content"),
+        ];
+
+        let items: Vec<CompletionItem> = keywords.into_iter().map(|(label, kind, detail)| {
+            CompletionItem {
+                label: label.to_string(),
+                kind: Some(kind),
+                detail: Some(detail.to_string()),
+                ..Default::default()
+            }
+        }).collect();
+
+        Ok(Some(CompletionResponse::Array(items)))
     }
 }
 
