@@ -12,6 +12,7 @@ nom.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
