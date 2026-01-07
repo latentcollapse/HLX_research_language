@@ -6,9 +6,9 @@
 
 ## Executive Summary
 
-HLX has achieved self-hosting (Ouroboros) with proven determinism. The core architecture is validated by senior engineers. The next phase is building real projects *with* HLX to prove ecosystem viability and attract major AI company adoption.
+HLX has achieved self-hosting (Ouroboros) with proven determinism. The next phase is building real projects *with* HLX to prove ecosystem viability.
 
-**Target: Get Anthropic (or similar) to adopt HLX within 18 months by proving real-world value through projects and research.**
+**Target: Have 1 stable program running on HLX within 3 months**
 
 ---
 
@@ -63,7 +63,7 @@ HLX has achieved self-hosting (Ouroboros) with proven determinism. The core arch
 
 ## Phase 2: Tensor System Architecture (Weeks 5-10)
 
-**Goal:** Implement the tensor shape verification system based on Italian engineer's guidance.
+**Goal:** Implement the tensor shape verification system based on received guidance.
 
 ### Implementation Tasks
 - [ ] Design static tensor shape verification at bytecode load
@@ -85,11 +85,11 @@ HLX has achieved self-hosting (Ouroboros) with proven determinism. The core arch
 
 ---
 
-## Phase 3: The Killer App - Autograph (Weeks 11-24)
+## Phase 3: The First App - Autograph (Weeks 11-24)
 
 **Goal:** Build a deterministic workflow automation tool that proves HLX's value.
 
-### Autograph: n8n Killer Concept
+### Autograph: Visual agent automation builder
 - Visual workflow builder (drag-and-drop)
 - Compiles to HLX code
 - Deterministic execution guarantees
@@ -145,31 +145,6 @@ HLX has achieved self-hosting (Ouroboros) with proven determinism. The core arch
 - 10-20 real projects built with HLX
 - Published research cited in AI safety circles
 - Community contributions accepted
-
----
-
-## Phase 5: Major Company Adoption (Months 12-18)
-
-**Goal:** Make HLX attractive to Anthropic, OpenAI, or similar.
-
-### What They'd Want
-1. **Proven use case** - Autograph working at scale
-2. **Research validation** - Papers showing safety/determinism benefits
-3. **Community adoption** - Proof it works beyond just your use
-4. **Performance** - Benchmarks showing it's practical
-5. **Integration** - Works with PyTorch/JAX/transformers
-6. **Safety guarantees** - Formal verification of bounds
-
-### Pitch Strategy
-- **NOT:** "We built a cool language"
-- **BUT:** "Research teams are using HLX for deterministic AI coordination. Here's quantifiable safety improvements."
-
-### Engagement Path
-1. Get HLX paper cited in AI safety research
-2. Autograph adoption reaches 100+ users
-3. Someone from target company finds it organically
-4. Demonstrate specific value for their use case
-5. They reach out
 
 ---
 
@@ -240,29 +215,10 @@ HLX has achieved self-hosting (Ouroboros) with proven determinism. The core arch
 ## Budget & Resources
 
 **Current:**
-- ~$6.40 spent (type coercion fix, stdlib, examples)
-- Infinite time available
+- ~$655 spent (HLX ecosystem)
+- Lots of time available
 - Access to senior technical feedback (community)
-
-**Needed:**
-- Time to build Autograph UI (~2-4 weeks)
-- Hosting for Autograph service (small cost)
-- Marketing (blog, conference talks, etc.)
-
-**Not needed:**
-- Venture capital (build organically)
-- Large team (solo + community works)
-- Traditional marketing (technical merit speaks)
-
----
-
-## Next Immediate Actions (This Week)
-
-1. [ ] Brother validates Windows + AMD build
-2. [ ] Italian engineer responds with tensor guidance
-3. [ ] Iterate on stdlib based on community feedback
-4. [ ] Start design doc for Autograph
-5. [ ] Document architecture decisions for potential contributors
+- Claude & Gemini
 
 ---
 
@@ -282,3 +238,5 @@ Alongside Python and Rust in the modern AI/systems stack, HLX fills a niche no o
 ## Revision History
 
 - **2026-01-06**: Initial roadmap created based on Week 1 achievements
+
+- Still very early
