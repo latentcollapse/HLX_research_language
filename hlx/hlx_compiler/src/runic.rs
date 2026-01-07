@@ -116,6 +116,7 @@ impl RunicEmitter {
                 out.push_str(name);
                 out.push_str(" = ");
                 self.emit_expr(&value.node, out)?;
+                out.push(';');
             }
             Statement::Local { name, value } => {
                 out.push_str(glyphs::LOCAL);
@@ -123,6 +124,7 @@ impl RunicEmitter {
                 out.push_str(name);
                 out.push_str(" = ");
                 self.emit_expr(&value.node, out)?;
+                out.push(';');
             }
             
             Statement::Assign { lhs, value } => {
@@ -131,12 +133,14 @@ impl RunicEmitter {
                 out.push_str(glyphs::ASSIGN);
                 out.push(' ');
                 self.emit_expr(&value.node, out)?;
+                out.push(';');
             }
             
             Statement::Return { value } => {
                 out.push_str(glyphs::RETURN);
                 out.push(' ');
                 self.emit_expr(&value.node, out)?;
+                out.push(';');
             }
             
             Statement::If { condition, then_branch, else_branch } => {
@@ -780,22 +784,22 @@ pub fn transliterate_to_hlxl(source: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::HlxlParser;
+    use crate::HlxaParser;
     
     #[test]
     fn test_hlxl_to_runic_roundtrip() {
         let hlxl_src = r#"
             program test {
-                block main() {
-                    let x = 42
-                    let y = x + 10
-                    return y
+                fn main() {
+                    let x = 42;
+                    let y = (x + 10);
+                    return y;
                 }
             }
         "#;
         
         // Parse HLXL
-        let ast = HlxlParser::new().parse(hlxl_src).unwrap();
+        let ast = HlxaParser::new().parse(hlxl_src).unwrap();
         
         // Emit as runic
         let runic = RunicEmitter::new().emit(&ast).unwrap();

@@ -277,6 +277,24 @@ fn parse_program(input: &str) -> ParseResult<'_, Program> {
 pub struct HlxaParser;
 impl HlxaParser {
     pub fn new() -> Self { Self }
+
+    pub fn parse_diagnostics(&self, source: &str) -> std::result::Result<Program, Vec<(String, usize)>> {
+        match parse_program(source) {
+            Ok((_, p)) => Ok(p),
+            Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
+                let mut diags = Vec::new();
+                // Get the primary error (first one usually points to location)
+                if let Some((substring, kind)) = e.errors.first() {
+                    let offset = substring.as_ptr() as usize - source.as_ptr() as usize;
+                    diags.push((format!("{:?}", kind), offset));
+                } else {
+                     diags.push(("Unknown syntax error".to_string(), 0));
+                }
+                Err(diags)
+            },
+            Err(nom::Err::Incomplete(_)) => Err(vec![("Incomplete input".to_string(), source.len())]),
+        }
+    }
 }
 impl Parser for HlxaParser {
     fn parse(&self, source: &str) -> Result<Program> {
@@ -426,4 +444,25 @@ impl Emitter for HlxaEmitter {
         Ok(output)
     }
     fn name(&self) -> &'static str { "HLX-A" }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_diagnostics() {
+        let parser = HlxaParser::new();
+        let source = "program test { fn main() { print(1 } }"; // Missing closing paren
+        let result = parser.parse_diagnostics(source);
+        
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert!(!errors.is_empty());
+        let (msg, offset) = &errors[0];
+        println!("Error: {} at offset {}", msg, offset);
+        
+        // Offset should point somewhere after 'print(1'
+        assert!(*offset > 0);
+    }
 }

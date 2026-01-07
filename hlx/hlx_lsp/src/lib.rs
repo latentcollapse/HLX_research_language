@@ -1,7 +1,7 @@
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
-use hlx_compiler::{HlxaParser, parser::Parser};
+use hlx_compiler::HlxaParser;
 
 pub struct Backend {
     client: Client,
@@ -48,100 +48,63 @@ impl Backend {
         Self { client }
     }
 
-            async fn validate_document(&self, uri: Url, text: String) {
+    async fn validate_document(&self, uri: Url, text: String) {
+        let parser = HlxaParser::new();
+        let diagnostics = match parser.parse_diagnostics(&text) {
+            Ok(_) => vec![], // No errors
+            Err(errors) => {
+                let mut diags = Vec::new();
+                for (msg, offset) in errors {
+                    let pos = self.offset_to_position(&text, offset);
+                    
+                    // Highlight the word at that position, or just one char
+                    let end_pos = Position {
+                        line: pos.line,
+                        character: pos.character + 1
+                    };
 
-                let parser = HlxaParser::new();
-
-                let diagnostics = match parser.parse(&text) {
-
-                    Ok(_) => vec![],
-
-                    Err(e) => {
-
-                        let msg = match e {
-
-                            hlx_core::HlxError::ParseError { message } => message,
-
-                            _ => format!("{}", e),
-
-                        };
-
-
-
-                        // TODO: Extract actual position from error message
-                        // For now, show error at line 0
-                        let pos = Position { line: 0, character: 0 };
-
-
-
-                        vec![Diagnostic {
-
-                            range: Range {
-
-                                start: pos,
-
-                                end: Position { line: 0, character: 100 },
-
-                            },
-
-                            severity: Some(DiagnosticSeverity::ERROR),
-
-                            message: msg,
-
-                            ..Default::default()
-
-                        }]
-
-                    }
-
-                };
-
-        
-
-                self.client.publish_diagnostics(uri, diagnostics, None).await;
-
-            }
-
-        
-
-    
-
-        fn get_position(&self, text: &str, offset: usize) -> Position {
-
-            let mut line = 0;
-
-            let mut character = 0;
-
-    
-
-            for (i, c) in text.char_indices() {
-
-                if i >= offset {
-
-                    break;
-
+                    diags.push(Diagnostic {
+                        range: Range {
+                            start: pos,
+                            end: end_pos,
+                        },
+                        severity: Some(DiagnosticSeverity::ERROR),
+                        code: None,
+                        code_description: None,
+                        source: Some("hlx".to_string()),
+                        message: msg,
+                        related_information: None,
+                        tags: None,
+                        data: None,
+                    });
                 }
-
-                if c == '\n' {
-
-                    line += 1;
-
-                    character = 0;
-
-                } else {
-
-                    character += 1;
-
-                }
-
+                diags
             }
+        };
 
-    
-
-            Position { line, character }
-
-        }
-
+        self.client.publish_diagnostics(uri, diagnostics, None).await;
     }
 
-    
+    fn offset_to_position(&self, text: &str, offset: usize) -> Position {
+        let mut line = 0;
+        let mut last_line_start = 0;
+        
+        for (i, c) in text.char_indices() {
+            if i >= offset {
+                break;
+            }
+            if c == '\n' {
+                line += 1;
+                last_line_start = i + 1;
+            }
+        }
+        
+        let character = if offset >= last_line_start {
+            (offset - last_line_start) as u32
+        } else {
+            0
+        };
+
+        Position { line, character }
+    }
+}
