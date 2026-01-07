@@ -1,6 +1,6 @@
 # HLX Language Support for VS Code
 
-Language support for HLX (Helix Language) with syntax highlighting and Language Server Protocol integration.
+Language support for HLX with syntax highlighting and Language Server Protocol integration.
 
 ## Features
 
