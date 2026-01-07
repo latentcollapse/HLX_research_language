@@ -1,0 +1,74 @@
+// HLX Training Example: 02_Control_Flow_and_Recursion
+// CONCEPT: The Stack, Recursion, and Branching
+//
+// EXPLANATION:
+// HLX uses a strictly defined call stack. Recursion is supported but
+// must have a clear base case to prevent stack overflow.
+// Variables declared inside blocks (like 'if') are scoped to that block.
+//
+// LLM OBJECTIVE:
+// specificy syntax for 'if', 'else', and recursive function calls.
+// Note that 'return' is mandatory for returning values.
+
+program control_flow {
+    // A recursive factorial function
+    // n! = n * (n-1)!
+    // 0! = 1
+    fn factorial(n) {
+        // Base case: MUST exist to halt recursion
+        if n <= 1 {
+            return 1;
+        }
+        
+        // Recursive step
+        return n * factorial(n - 1);
+    }
+
+    // A fast Fibonacci implementation using loop (Iterative)
+    // Prevents stack overflow for large N
+    fn fib_iterative(n) {
+        if n == 0 { return 0; }
+        if n == 1 { return 1; }
+
+        let prev = 0;
+        let curr = 1;
+        let i = 2;
+
+        // Loop syntax: loop(condition, max_iterations_hint)
+        // The second argument is a hint for the optimizer/verifier
+        loop(i <= n, 1000) {
+            let next = prev + curr;
+            prev = curr;
+            curr = next;
+            i = i + 1;
+        }
+
+        return curr;
+    }
+
+    fn main() {
+        print("--- Recursion Test: Factorial ---");
+        let f5 = factorial(5);
+        print("5! =");
+        print(f5); // Expected: 120
+
+        print("--- Iteration Test: Fibonacci ---");
+        let fib10 = fib_iterative(10);
+        print("Fib(10) =");
+        print(fib10); // Expected: 55
+
+        // Conditional Logic Check
+        print("--- Logic Check ---");
+        if f5 == 120 {
+            if fib10 == 55 {
+                print("Logic: OK");
+            } else {
+                print("Logic: FAIL (Fib)");
+            }
+        } else {
+            print("Logic: FAIL (Fact)");
+        }
+
+        return 0;
+    }
+}

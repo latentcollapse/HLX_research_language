@@ -709,6 +709,9 @@ impl ExecutionContext {
     
     fn call_builtin(&mut self, func: &str, args: &[u32]) -> Result<Value> {
         match func {
+            "DEFAULT_MAX_ITER" => {
+                Ok(Value::Integer(1000000))
+            }
             "print" => {
                 for arg in args {
                     let v = self.get_reg(*arg)?;

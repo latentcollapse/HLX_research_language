@@ -26,20 +26,20 @@ fn max(a, b) {
 }
 
 // Square root using Newton's method
-// Iterates until convergence (max 20 iterations for safety)
+// Converges quickly (usually < 10 iterations for reasonable inputs)
 fn sqrt(x) {
-    if x < 0 {
-        return 0;  // Return 0 for negative (no error handling yet)
+    if x <= 0 {
+        return 0;  // Return 0 for non-positive
     }
-    if x == 0 {
-        return 0;
+    if x == 1 {
+        return 1;
     }
 
     // Initial guess: x/2
-    let guess = x;
+    let guess = x / 2;
     let i = 0;
 
-    // Newton's method: guess = (guess + x/guess) / 2
+    // Newton's method: x_{n+1} = (x_n + S/x_n) / 2
     loop(i < 20, 20) {
         let next = (guess + (x / guess)) / 2;
 

@@ -166,56 +166,41 @@ fn unary_expr(input: &str) -> ParseResult<'_, Expr> {
     ))(input)
 }
 
-fn mul_expr(input: &str) -> ParseResult<'_, Expr> {
+fn bin_op(input: &str) -> ParseResult<'_, BinOp> {
+    preceded(ws, alt((
+        value(BinOp::Add, char('+')),
+        value(BinOp::Sub, char('-')),
+        value(BinOp::Mul, char('*')),
+        value(BinOp::Div, char('/')),
+        value(BinOp::Eq, tag("==")),
+        value(BinOp::Ne, tag("!=")),
+        value(BinOp::Le, tag("<=")),
+        value(BinOp::Ge, tag(">=")),
+        value(BinOp::Lt, char('<')),
+        value(BinOp::Gt, char('>')),
+        value(BinOp::And, tag("and")),
+        value(BinOp::Or, tag("or")),
+    )))(input)
+}
+
+fn expr(input: &str) -> ParseResult<'_, Expr> {
     let (input, lhs) = unary_expr(input)?;
-    let (input, ops) = many0(tuple((
-        preceded(ws, alt((value(BinOp::Mul, char('*')), value(BinOp::Div, char('/'))))),
-        unary_expr
-    )))(input)?;
-    Ok((input, ops.into_iter().fold(lhs, |acc, (op, rhs)| Expr::BinOp { op, lhs: Box::new(Spanned::dummy(acc)), rhs: Box::new(Spanned::dummy(rhs)) })))
+    let (input, op_opt) = opt(bin_op)(input)?;
+    
+    if let Some(op) = op_opt {
+        let (input, rhs) = expr(input)?;
+        // Enforce no operator precedence: if RHS is a BinOp, it MUST be parenthesized
+        // (Our recursive call to expr will handle nested BinOps, but we want to 
+        // discourage this in the future or enforce it via the parser's structure)
+        Ok((input, Expr::BinOp { 
+            op, 
+            lhs: Box::new(Spanned::dummy(lhs)), 
+            rhs: Box::new(Spanned::dummy(rhs)) 
+        }))
+    } else {
+        Ok((input, lhs))
+    }
 }
-
-fn add_expr(input: &str) -> ParseResult<'_, Expr> {
-    let (input, lhs) = mul_expr(input)?;
-    let (input, ops) = many0(tuple((
-        preceded(ws, alt((value(BinOp::Add, char('+')), value(BinOp::Sub, char('-'))))),
-        mul_expr
-    )))(input)?;
-    Ok((input, ops.into_iter().fold(lhs, |acc, (op, rhs)| Expr::BinOp { op, lhs: Box::new(Spanned::dummy(acc)), rhs: Box::new(Spanned::dummy(rhs)) })))
-}
-
-fn comp_expr(input: &str) -> ParseResult<'_, Expr> {
-    let (input, lhs) = add_expr(input)?;
-    let (input, ops) = many0(tuple((
-        preceded(ws, alt((
-            value(BinOp::Eq, tag("==")), value(BinOp::Ne, tag("!=")),
-            value(BinOp::Le, tag("<=")), value(BinOp::Ge, tag(">=")),
-            value(BinOp::Lt, char('<')), value(BinOp::Gt, char('>'))
-        ))),
-        add_expr
-    )))(input)?;
-    Ok((input, ops.into_iter().fold(lhs, |acc, (op, rhs)| Expr::BinOp { op, lhs: Box::new(Spanned::dummy(acc)), rhs: Box::new(Spanned::dummy(rhs)) })))
-}
-
-fn and_expr(input: &str) -> ParseResult<'_, Expr> {
-    let (input, lhs) = comp_expr(input)?;
-    let (input, ops) = many0(tuple((
-        preceded(ws, tag("and")),
-        comp_expr
-    )))(input)?;
-    Ok((input, ops.into_iter().fold(lhs, |acc, (_, rhs)| Expr::BinOp { op: BinOp::And, lhs: Box::new(Spanned::dummy(acc)), rhs: Box::new(Spanned::dummy(rhs)) })))
-}
-
-fn or_expr(input: &str) -> ParseResult<'_, Expr> {
-    let (input, lhs) = and_expr(input)?;
-    let (input, ops) = many0(tuple((
-        preceded(ws, tag("or")),
-        and_expr
-    )))(input)?;
-    Ok((input, ops.into_iter().fold(lhs, |acc, (_, rhs)| Expr::BinOp { op: BinOp::Or, lhs: Box::new(Spanned::dummy(acc)), rhs: Box::new(Spanned::dummy(rhs)) })))
-}
-
-fn expr(input: &str) -> ParseResult<'_, Expr> { or_expr(input) }
 
 fn statement(input: &str) -> ParseResult<'_, Statement> {
     alt((
@@ -239,10 +224,14 @@ fn statement(input: &str) -> ParseResult<'_, Statement> {
         
                 map(tuple((
                     preceded(ws, tag("loop")), preceded(ws, char('(')), expr, preceded(ws, char(',')),
-                    preceded(ws, digit1), preceded(ws, char(')')),
+                    alt((
+                        map(preceded(ws, digit1), |s: &str| s.parse::<u32>().unwrap()),
+                        value(1000000, preceded(ws, tag("DEFAULT_MAX_ITER()")))
+                    )),
+                    preceded(ws, char(')')),
                     preceded(ws, char('{')), many0(map(preceded(ws, statement), Spanned::dummy)), preceded(ws, char('}'))
                 )), |(_, _, cond, _, max_iter, _, _, body, _)| {
-                    Statement::While { condition: Spanned::dummy(cond), body, max_iter: max_iter.parse().unwrap() }
+                    Statement::While { condition: Spanned::dummy(cond), body, max_iter }
                 }),
         
                 map(tuple((preceded(ws, tag("break")), preceded(ws, char(';')))), |(_, _)| Statement::Break),

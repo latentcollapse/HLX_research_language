@@ -12,6 +12,7 @@ Mathematical functions implemented in pure HLX:
 
 ### Working:
 - `abs(x)` - Absolute value
+- `sqrt(x)` - Square root via Newton's method
 - `min(a, b)` - Minimum of two numbers
 - `max(a, b)` - Maximum of two numbers
 - `pow(base, exp)` - Integer exponentiation
@@ -19,9 +20,8 @@ Mathematical functions implemented in pure HLX:
 - `sign(x)` - Returns -1, 0, or 1
 - `lerp(a, b, t)` - Linear interpolation
 
-### Blocked:
-- `sqrt(x)` - Requires division, blocked by type coercion bug (int/int → float)
-- `floor(x)`, `ceil(x)` - Same issue
+### Partially Working:
+- `floor(x)`, `ceil(x)` - Implemented but inefficient (linear search)
 
 See `examples/showcase_math.hlxa` for working demo.
 
@@ -35,8 +35,8 @@ See `examples/showcase_math.hlxa` for working demo.
 ## Known Limitations
 
 - **No import system yet** - Functions must be copied into user programs
-- **Type coercion bug** - Integer division returns float, breaks mixed operations
-- **No floating point** - All math is integer-based until type system matures
+- **Floating point precision** - sqrt() accurate to ~0.0001 due to convergence threshold
+- **Inefficient floor/ceil** - Use linear search, need better algorithm
 
 ## Next Steps
 
