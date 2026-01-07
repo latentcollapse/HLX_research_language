@@ -125,7 +125,9 @@ enum Postfix {
     Field(String),
 }
 
+#[instrument(skip(input), fields(preview = %&input[..input.len().min(30)].replace('\n', " ")))]
 fn atom_expr(input: &str) -> ParseResult<'_, Expr> {
+    debug!("Parsing atom");
     let (input, atom) = alt((
         map(preceded(ws, literal), Expr::Literal),
         array_literal,
@@ -184,7 +186,9 @@ fn bin_op(input: &str) -> ParseResult<'_, BinOp> {
     )))(input)
 }
 
+#[instrument(skip(input), fields(preview = %&input[..input.len().min(30)].replace('\n', " ")))]
 fn expr(input: &str) -> ParseResult<'_, Expr> {
+    debug!("Parsing expr");
     let (input, lhs) = unary_expr(input)?;
     let (input, op_opt) = opt(bin_op)(input)?;
     
