@@ -246,7 +246,8 @@ pub enum BinOp {
     Sub,    // -
     Mul,    // *
     Div,    // /
-    
+    Mod,    // %
+
     // Comparison
     Eq,     // ==
     Ne,     // !=
@@ -254,7 +255,7 @@ pub enum BinOp {
     Le,     // <=
     Gt,     // >
     Ge,     // >=
-    
+
     // Logical
     And,    // and, ∧
     Or,     // or, ∨
@@ -268,6 +269,7 @@ impl BinOp {
             BinOp::Sub => "-",
             BinOp::Mul => "*",
             BinOp::Div => "/",
+            BinOp::Mod => "%",
             BinOp::Eq => "==",
             BinOp::Ne => "!=",
             BinOp::Lt => "<",
@@ -278,7 +280,7 @@ impl BinOp {
             BinOp::Or => "or",
         }
     }
-    
+
     /// Get the HLX (runic) representation
     pub fn runic_str(&self) -> &'static str {
         match self {
@@ -286,6 +288,7 @@ impl BinOp {
             BinOp::Sub => "⊖",
             BinOp::Mul => "⊗",
             BinOp::Div => "⊘",
+            BinOp::Mod => "⊙",
             BinOp::Eq => "⩵",
             BinOp::Ne => "≠",
             BinOp::Lt => "≪",
@@ -296,7 +299,7 @@ impl BinOp {
             BinOp::Or => "∨",
         }
     }
-    
+
     /// Get operator precedence (higher = binds tighter)
     pub fn precedence(&self) -> u8 {
         match self {
@@ -304,7 +307,7 @@ impl BinOp {
             BinOp::And => 2,
             BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => 3,
             BinOp::Add | BinOp::Sub => 4,
-            BinOp::Mul | BinOp::Div => 5,
+            BinOp::Mul | BinOp::Div | BinOp::Mod => 5,
         }
     }
 }

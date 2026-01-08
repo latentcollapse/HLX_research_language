@@ -221,7 +221,8 @@ impl Backend for CpuBackend {
     fn scalar_sub(&mut self, a: &Value, b: &Value) -> Result<Value> { a.sub(b) }
     fn scalar_mul(&mut self, a: &Value, b: &Value) -> Result<Value> { a.mul(b) }
     fn scalar_div(&mut self, a: &Value, b: &Value) -> Result<Value> { a.div(b) }
-    
+    fn scalar_mod(&mut self, a: &Value, b: &Value) -> Result<Value> { a.rem(b) }
+
     // === Comparison Operations ===
     
     fn scalar_eq(&mut self, a: &Value, b: &Value) -> Result<Value> { Ok(Value::Boolean(a == b)) }

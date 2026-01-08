@@ -293,6 +293,7 @@ impl LoweringContext {
                             BinOp::Sub => Instruction::Sub { out, lhs: l, rhs: r },
                             BinOp::Mul => Instruction::Mul { out, lhs: l, rhs: r },
                             BinOp::Div => Instruction::Div { out, lhs: l, rhs: r },
+                            BinOp::Mod => Instruction::Mod { out, lhs: l, rhs: r },
                             BinOp::Lt => Instruction::Lt { out, lhs: l, rhs: r },
                             BinOp::Gt => Instruction::Gt { out, lhs: l, rhs: r },
                             BinOp::Le => Instruction::Le { out, lhs: l, rhs: r },

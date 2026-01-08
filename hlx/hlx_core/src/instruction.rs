@@ -83,6 +83,13 @@ pub enum Instruction {
         rhs: Register,
     },
 
+    /// Modulo: out = lhs % rhs
+    Mod {
+        out: Register,
+        lhs: Register,
+        rhs: Register,
+    },
+
     /// Negate: out = -src
     Neg {
         out: Register,
@@ -456,6 +463,7 @@ impl Instruction {
             Instruction::Sub { out, .. } => Some(*out),
             Instruction::Mul { out, .. } => Some(*out),
             Instruction::Div { out, .. } => Some(*out),
+            Instruction::Mod { out, .. } => Some(*out),
             Instruction::Neg { out, .. } => Some(*out),
             Instruction::Eq { out, .. } => Some(*out),
             Instruction::Ne { out, .. } => Some(*out),
@@ -517,6 +525,7 @@ impl Instruction {
             Instruction::Sub { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::Mul { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::Div { lhs, rhs, .. } => vec![*lhs, *rhs],
+            Instruction::Mod { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::Neg { src, .. } => vec![*src],
             Instruction::Eq { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::Ne { lhs, rhs, .. } => vec![*lhs, *rhs],

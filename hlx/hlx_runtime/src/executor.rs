@@ -375,7 +375,14 @@ impl ExecutionContext {
                 let result = backend.scalar_div(a, b)?;
                 self.set_reg(*out, result);
             }
-            
+
+            Instruction::Mod { out, lhs, rhs } => {
+                let a = self.get_reg(*lhs)?;
+                let b = self.get_reg(*rhs)?;
+                let result = backend.scalar_mod(a, b)?;
+                self.set_reg(*out, result);
+            }
+
             Instruction::Neg { out, src } => {
                 let a = self.get_reg(*src)?;
                 let result = match a {

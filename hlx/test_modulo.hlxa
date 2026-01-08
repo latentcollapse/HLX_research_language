@@ -1,0 +1,29 @@
+program test_modulo {
+    fn main() {
+        // Test integer modulo
+        let frame = 150;
+        let is_second_mark = (frame % 60) == 0;
+
+        if (is_second_mark) {
+            print("Second mark!");
+        }
+
+        // Test modulo with different values
+        let a = 17;
+        let b = 5;
+        let remainder = a % b;  // Should be 2
+
+        print("17 % 5 = ");
+        print(remainder);
+
+        // Test float modulo
+        let x = 10.5;
+        let y = 3.0;
+        let float_mod = x % y;  // Should be 1.5
+
+        print("10.5 % 3.0 = ");
+        print(float_mod);
+
+        return 0;
+    }
+}

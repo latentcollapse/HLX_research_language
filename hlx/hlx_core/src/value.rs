@@ -216,6 +216,31 @@ impl Value {
         }
     }
 
+    pub fn rem(&self, other: &Value) -> Result<Value> {
+        match (self, other) {
+            (Value::Integer(x), Value::Integer(y)) => {
+                if *y == 0 { return Err(HlxError::ValidationFail { message: "Modulo by zero".to_string() }); }
+                Ok(Value::Integer(x % y))
+            }
+            (Value::Float(x), Value::Float(y)) => {
+                if *y == 0.0 { return Err(HlxError::ValidationFail { message: "Modulo by zero".to_string() }); }
+                Value::float(x % y)
+            }
+            (Value::Integer(x), Value::Float(y)) => {
+                if *y == 0.0 { return Err(HlxError::ValidationFail { message: "Modulo by zero".to_string() }); }
+                Value::float((*x as f64) % y)
+            }
+            (Value::Float(x), Value::Integer(y)) => {
+                if *y == 0 { return Err(HlxError::ValidationFail { message: "Modulo by zero".to_string() }); }
+                Value::float(x % (*y as f64))
+            }
+            _ => Err(HlxError::TypeError {
+                expected: "numeric".to_string(),
+                got: format!("{} % {}", self.type_name(), other.type_name()),
+            }),
+        }
+    }
+
     // === Comparison ===
 
     pub fn lt(&self, other: &Value) -> Result<bool> {

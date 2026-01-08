@@ -103,6 +103,7 @@ impl<'ctx> CodeGen<'ctx> {
         functions.insert("malloc".to_string(), module.add_function("malloc", ptr_type.fn_type(&[i64_type.into()], false), Some(Linkage::External)));
         functions.insert("free".to_string(), module.add_function("free", context.void_type().fn_type(&[ptr_type.into()], false), Some(Linkage::External)));
         functions.insert("printf".to_string(), module.add_function("printf", i32_type.fn_type(&[ptr_type.into()], true), Some(Linkage::External)));
+        functions.insert("sprintf".to_string(), module.add_function("sprintf", i32_type.fn_type(&[ptr_type.into(), ptr_type.into()], true), Some(Linkage::External)));
         functions.insert("strlen".to_string(), module.add_function("strlen", i64_type.fn_type(&[ptr_type.into()], false), Some(Linkage::External)));
         functions.insert("strcpy".to_string(), module.add_function("strcpy", ptr_type.fn_type(&[ptr_type.into(), ptr_type.into()], false), Some(Linkage::External)));
         functions.insert("strcat".to_string(), module.add_function("strcat", ptr_type.fn_type(&[ptr_type.into(), ptr_type.into()], false), Some(Linkage::External)));
@@ -504,6 +505,24 @@ impl<'ctx> CodeGen<'ctx> {
 
                 self.store_reg(*out, res, res_type)?;
             }
+            Instruction::Mod { out, lhs, rhs } => {
+                let (l, l_type) = self.load_reg(*lhs)?;
+                let (r, r_type) = self.load_reg(*rhs)?;
+
+                let (res, res_type) = match (l_type, r_type) {
+                    (ValueType::Int, ValueType::Int) => {
+                        let res = self.builder.build_int_signed_rem(l.into_int_value(), r.into_int_value(), "mod")?;
+                        (res.into(), ValueType::Int)
+                    }
+                    (ValueType::Float, ValueType::Float) => {
+                        let res = self.builder.build_float_rem(l.into_float_value(), r.into_float_value(), "fmod")?;
+                        (res.into(), ValueType::Float)
+                    }
+                    _ => return Err(anyhow!("Type mismatch in Mod: {:?} % {:?}", l_type, r_type)),
+                };
+
+                self.store_reg(*out, res, res_type)?;
+            }
             Instruction::Neg { out, src } => {
                 let (val, val_type) = self.load_reg(*src)?;
 
@@ -573,6 +592,54 @@ impl<'ctx> CodeGen<'ctx> {
                 self.store_reg(*out, ext.into(), ValueType::Int)?;
             }
             Instruction::Call { out, func, args } => {
+                // Builtin intrinsics
+                if func == "to_int" {
+                    let (val, _) = self.load_reg(args[0])?;
+                    let res = if val.is_float_value() {
+                        self.builder.build_float_to_signed_int(val.into_float_value(), self.context.i64_type(), "fptosi")?.into()
+                    } else if val.is_pointer_value() {
+                        self.builder.build_ptr_to_int(val.into_pointer_value(), self.context.i64_type(), "ptrtoint")?.into()
+                    } else {
+                        val
+                    };
+                    self.store_reg(*out, res, ValueType::Int)?;
+                    return Ok(());
+                }
+                if func == "to_float" {
+                    let (val, _) = self.load_reg(args[0])?;
+                    let res = if val.is_int_value() {
+                        self.builder.build_signed_int_to_float(val.into_int_value(), self.context.f64_type(), "sitofp")?.into()
+                    } else {
+                        val
+                    };
+                    self.store_reg(*out, res, ValueType::Float)?;
+                    return Ok(());
+                }
+                if func == "to_string" {
+                    let (val, val_type) = self.load_reg(args[0])?;
+                    let malloc = *self.functions.get("malloc").unwrap();
+                    let sprintf = *self.functions.get("sprintf").ok_or(anyhow!("sprintf missing"))?;
+                    
+                    // Allocate 32 bytes for the string
+                    let buf = self.builder.build_call(malloc, &[self.context.i64_type().const_int(32, false).into()], "buf")?
+                        .try_as_basic_value().left().unwrap().into_pointer_value();
+                    
+                    let fmt_str = match val_type {
+                        ValueType::Float => "%f\0",
+                        ValueType::Pointer => "%p\0",
+                        _ => "%lld\0",
+                    };
+                    let fmt = self.context.const_string(fmt_str.as_bytes(), false);
+                    let g = self.module.add_global(fmt.get_type(), Some(inkwell::AddressSpace::default()), "tsf");
+                    g.set_initializer(&fmt); g.set_constant(true); g.set_linkage(Linkage::Internal);
+                    let gep = unsafe { self.builder.build_gep(fmt.get_type(), g.as_pointer_value(), &[self.context.i32_type().const_int(0, false), self.context.i32_type().const_int(0, false)], "tsg")? };
+                    
+                    self.builder.build_call(sprintf, &[buf.into(), gep.into(), val.into()], "spr")?;
+                    
+                    self.store_reg(*out, buf.into(), ValueType::Pointer)?;
+                    return Ok(());
+                }
+
                 let f = *self.functions.get(func).ok_or_else(|| anyhow!("Fn missing: {}", func))?;
                 let mut llvm_args = Vec::new();
                 let param_types = f.get_type().get_param_types();

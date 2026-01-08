@@ -75,10 +75,13 @@ pub trait Backend: Send + Sync {
     
     /// Multiply two scalars
     fn scalar_mul(&mut self, a: &Value, b: &Value) -> Result<Value>;
-    
+
     /// Divide two scalars
     fn scalar_div(&mut self, a: &Value, b: &Value) -> Result<Value>;
-    
+
+    /// Modulo two scalars
+    fn scalar_mod(&mut self, a: &Value, b: &Value) -> Result<Value>;
+
     // === Comparison Operations ===
     
     fn scalar_eq(&mut self, a: &Value, b: &Value) -> Result<Value>;
