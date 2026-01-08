@@ -1,0 +1,20 @@
+program recorder {
+fn main() {
+print("Starting Screen Recording...");
+let cmd = "ffmpeg -y -f rawvideo -pixel_format rgba -video_size 1920x1080 -framerate 10 -i pipe:0 -c:v libx264 -preset ultrafast -pix_fmt yuv420p output.mp4";
+let pipe = pipe_open(cmd);
+print("Recording 50 frames...");
+let i = 0;
+loop(i < 50, 200) {
+let frame = capture_screen(0);
+pipe_write(pipe, frame);
+sleep(100);
+i = i + 1;
+print("Frame:");
+print(i);
+}
+pipe_close(pipe);
+print("Recording complete: output.mp4");
+return {"status":"SUCCESS","file":"output.mp4"};
+}
+}

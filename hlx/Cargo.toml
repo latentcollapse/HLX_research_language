@@ -47,6 +47,10 @@ tokio = { version = "1.35", features = ["full"] }
 axum = "0.7"
 tower-http = { version = "0.5", features = ["cors"] }
 
+# Media
+xcap = "0.0.12"
+image = "0.24"
+
 # Testing & Benchmarks
 criterion = "0.5"
 

@@ -6,12 +6,20 @@ use dashmap::DashMap;
 use std::sync::Arc;
 
 mod contracts;
+mod ai_diagnostics;
+mod patterns;
+mod confidence;
+
 use contracts::{ContractCache, ContractCatalogue};
+use ai_diagnostics::AIDiagnosticBuilder;
+use patterns::PatternLibrary;
+use confidence::ConfidenceAnalyzer;
 
 pub struct Backend {
     client: Client,
     document_map: DashMap<String, String>,
     contracts: Option<Arc<ContractCatalogue>>,
+    patterns: Arc<PatternLibrary>,
 }
 
 #[tower_lsp::async_trait]
@@ -235,10 +243,15 @@ impl Backend {
             }
         };
 
+        // Load pattern library
+        let patterns = Arc::new(PatternLibrary::new());
+        eprintln!("✓ Loaded {} HLX patterns", patterns.patterns.len());
+
         Self {
             client,
             document_map: DashMap::new(),
             contracts,
+            patterns,
         }
     }
 
@@ -288,6 +301,7 @@ impl Backend {
     /// Validate contract field signatures
     fn validate_contract_signatures(&self, text: &str, catalogue: &ContractCatalogue) -> Vec<Diagnostic> {
         let mut diagnostics = Vec::new();
+        let ai_diag = AIDiagnosticBuilder::new(catalogue);
 
         // Regex to find contract invocations: @123 { field: value, ... }
         // This is a simple pattern matcher - not a full parser
@@ -358,31 +372,15 @@ impl Backend {
                                                 character: (field_offset + field_name.len()) as u32,
                                             };
 
-                                            diagnostics.push(Diagnostic {
-                                                range: Range {
-                                                    start: pos,
-                                                    end: end_pos,
-                                                },
-                                                severity: Some(DiagnosticSeverity::ERROR),
-                                                code: Some(tower_lsp::lsp_types::NumberOrString::String(
-                                                    "unknown-field".to_string()
-                                                )),
-                                                source: Some("hlx-contracts".to_string()),
-                                                message: format!(
-                                                    "Unknown field '{}' for contract @{} ({}). Valid fields: {}",
-                                                    field_name,
-                                                    id_str,
-                                                    spec.name,
-                                                    spec.fields.keys()
-                                                        .map(|k| format!("'{}'", k))
-                                                        .collect::<Vec<_>>()
-                                                        .join(", ")
-                                                ),
-                                                related_information: None,
-                                                tags: None,
-                                                data: None,
-                                                code_description: None,
-                                            });
+                                            // Use AI-optimized diagnostic
+                                            let valid_fields: Vec<String> = spec.fields.keys().cloned().collect();
+                                            let ai_diagnostic = ai_diag.unknown_field(
+                                                Range { start: pos, end: end_pos },
+                                                field_name,
+                                                &id_str,
+                                                &valid_fields
+                                            );
+                                            diagnostics.push(ai_diagnostic.to_diagnostic());
                                         }
                                     }
                                 }
@@ -407,27 +405,13 @@ impl Backend {
                                             character: (brace_pos + close_brace + 2) as u32,
                                         };
 
-                                        diagnostics.push(Diagnostic {
-                                            range: Range {
-                                                start: pos,
-                                                end: end_pos,
-                                            },
-                                            severity: Some(DiagnosticSeverity::WARNING),
-                                            code: Some(tower_lsp::lsp_types::NumberOrString::String(
-                                                "missing-required-field".to_string()
-                                            )),
-                                            source: Some("hlx-contracts".to_string()),
-                                            message: format!(
-                                                "Missing required field '{}' for contract @{} ({})",
-                                                field_name,
-                                                id_str,
-                                                spec.name
-                                            ),
-                                            related_information: None,
-                                            tags: None,
-                                            data: None,
-                                            code_description: None,
-                                        });
+                                        // Use AI-optimized diagnostic
+                                        let ai_diagnostic = ai_diag.missing_required_field(
+                                            Range { start: pos, end: end_pos },
+                                            field_name,
+                                            &id_str
+                                        );
+                                        diagnostics.push(ai_diagnostic.to_diagnostic());
                                     }
                                 }
                             }

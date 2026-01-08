@@ -1,7 +1,7 @@
 {
-  "version": "1.1.1",
+  "version": "1.1.2",
   "last_updated": "2026-01-08",
-  "total_contracts": 47,
+  "total_contracts": 51,
   "contract_id_space": "0-∞ (no artificial limits)",
   "tier_system": {
     "T0": "0-99: Core Language (types, operators)",
@@ -526,6 +526,59 @@
       "example": "@606 { path: \"dump.json\", handle: h }",
       "usage": "Persisting crash dumps",
       "related": ["605"],
+      "status": "stable"
+    },
+    "700": {
+      "name": "ScreenCapture",
+      "tier": "T2-Reserved",
+      "signature": "@700 { monitor: Integer } -> Tensor",
+      "description": "Capture a screenshot of the specified monitor",
+      "fields": {
+        "monitor": { "type": "Integer", "description": "Monitor index (0-based)", "required": true }
+      },
+      "example": "let frame = @700 { monitor: 0 };",
+      "usage": "Screen recording and vision processing",
+      "related": ["701", "702"],
+      "status": "stable"
+    },
+    "701": {
+      "name": "PipeWrite",
+      "tier": "T2-Reserved",
+      "signature": "@701 { pipe: Integer, tensor: Tensor } -> Bool",
+      "description": "Write tensor data (as raw bytes) to a subprocess pipe",
+      "fields": {
+        "pipe": { "type": "Integer", "description": "Pipe ID from @702", "required": true },
+        "tensor": { "type": "Tensor", "description": "Tensor to write", "required": true }
+      },
+      "example": "@701 { pipe: p, tensor: frame };",
+      "usage": "Streaming video frames to ffmpeg",
+      "related": ["700", "702"],
+      "status": "stable"
+    },
+    "702": {
+      "name": "PipeOpen",
+      "tier": "T2-Reserved",
+      "signature": "@702 { command: String } -> Integer",
+      "description": "Open a subprocess and get a pipe handle",
+      "fields": {
+        "command": { "type": "String", "description": "Shell command to run", "required": true }
+      },
+      "example": "let p = @702 { command: \"ffmpeg -f rawvideo ...\" };",
+      "usage": "Launching external processors",
+      "related": ["701"],
+      "status": "stable"
+    },
+    "703": {
+      "name": "Sleep",
+      "tier": "T2-Reserved",
+      "signature": "@703 { ms: Integer } -> Null",
+      "description": "Pause execution for a duration",
+      "fields": {
+        "ms": { "type": "Integer", "description": "Milliseconds to sleep", "required": true }
+      },
+      "example": "@703 { ms: 100 };",
+      "usage": "Rate limiting and timing",
+      "related": [],
       "status": "stable"
     },
     "900": {

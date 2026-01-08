@@ -206,8 +206,12 @@ impl ContractCatalogue {
                 doc.push_str("\n");
             }
 
-            // Example
-            doc.push_str(&format!("## Example\n```hlx\n{}\n```\n\n", spec.example));
+            // Example (with actionable hint)
+            doc.push_str(&format!(
+                "## Example\n```hlx\n{}\n```\n\n\
+                 💡 **Try it**: Copy this example and run it in your code\n\n",
+                spec.example
+            ));
 
             // Usage
             doc.push_str(&format!("## Usage\n{}\n\n", spec.usage));

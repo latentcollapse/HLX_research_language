@@ -9,6 +9,9 @@ use crate::backend::{Backend, create_backend, TensorHandle};
 use crate::value_store::ValueStore;
 use std::collections::HashMap;
 use im::{Vector, OrdMap};
+use std::process::{Child, Command, Stdio};
+use std::io::Write;
+use xcap::Monitor;
 
 /// The executor runs LC-B crates
 pub struct Executor {
@@ -135,6 +138,10 @@ struct ExecutionContext {
 
     /// Flight recorder: Last 50 PCs
     trace_buffer: VecDeque<usize>,
+
+    /// Subprocess pipes (handle_id -> Child)
+    pipes: HashMap<u32, Child>,
+    next_pipe_id: u32,
 }
 
 impl ExecutionContext {
@@ -153,6 +160,8 @@ impl ExecutionContext {
             return_value: Value::Null,
             config: config.clone(),
             trace_buffer: VecDeque::with_capacity(50),
+            pipes: HashMap::new(),
+            next_pipe_id: 1,
         }
     }
     
@@ -281,7 +290,7 @@ impl ExecutionContext {
                     
                     return Ok(ControlFlow::Jump(*start_pc));
                 } else {
-                    let res = self.call_builtin(func, args)?;
+                    let res = self.call_builtin(func, args, backend)?;
                     self.set_reg(*out, res);
                     return Ok(ControlFlow::Continue);
                 }
@@ -730,7 +739,7 @@ impl ExecutionContext {
         }
     }
     
-    fn call_builtin(&mut self, func: &str, args: &[u32]) -> Result<Value> {
+    fn call_builtin(&mut self, func: &str, args: &[u32], backend: &mut dyn Backend) -> Result<Value> {
         match func {
             "DEFAULT_MAX_ITER" => {
                 Ok(Value::Integer(1000000))
@@ -1087,6 +1096,127 @@ impl ExecutionContext {
                 })?;
                 
                 Ok(Value::Boolean(true))
+            }
+            "pipe_open" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "pipe_open() takes exactly 1 argument (command_string)".to_string(),
+                    });
+                }
+                let cmd_str = match self.get_reg(args[0])? {
+                    Value::String(s) => s.clone(),
+                    v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }),
+                };
+                
+                let mut child = if cfg!(target_os = "windows") {
+                    Command::new("cmd").args(["/C", &cmd_str]).stdin(Stdio::piped()).spawn()
+                } else {
+                    Command::new("sh").args(["-c", &cmd_str]).stdin(Stdio::piped()).spawn()
+                }.map_err(|e| HlxError::BackendError { message: format!("Failed to spawn pipe: {}", e) })?;
+                
+                let id = self.next_pipe_id;
+                self.next_pipe_id += 1;
+                self.pipes.insert(id, child);
+                
+                Ok(Value::Integer(id as i64))
+            }
+            "pipe_write" => {
+                if args.len() != 2 {
+                    return Err(HlxError::ValidationFail {
+                        message: "pipe_write() takes 2 arguments (pipe_id, tensor_handle)".to_string(),
+                    });
+                }
+                let pipe_id = match self.get_reg(args[0])? {
+                    Value::Integer(i) => *i as u32,
+                    v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }),
+                };
+                let handle = match self.get_reg(args[1])? {
+                    Value::Handle(h) => h.clone(),
+                    v => return Err(HlxError::TypeError { expected: "handle".to_string(), got: v.type_name().to_string() }),
+                };
+                
+                // Get raw tensor data
+                let tensor_handle = crate::backend::TensorHandle(handle.parse::<u64>().map_err(|_| HlxError::ValidationFail { message: "Invalid tensor handle".to_string() })?);
+                let data = backend.read_tensor(tensor_handle)?;
+                let i32_data: &[i32] = bytemuck::cast_slice(&data);
+                
+                // Convert i32 back to u8 for the pipe
+                let mut u8_data = Vec::with_capacity(i32_data.len());
+                for &val in i32_data {
+                    u8_data.push(val.clamp(0, 255) as u8);
+                }
+                
+                if let Some(child) = self.pipes.get_mut(&pipe_id) {
+                    if let Some(stdin) = child.stdin.as_mut() {
+                        stdin.write_all(&u8_data).map_err(|e| HlxError::BackendError { message: format!("Pipe write failed: {}", e) })?;
+                        stdin.flush().ok();
+                    }
+                }
+                
+                Ok(Value::Boolean(true))
+            }
+            "pipe_close" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "pipe_close() takes 1 argument (pipe_id)".to_string(),
+                    });
+                }
+                let pipe_id = match self.get_reg(args[0])? {
+                    Value::Integer(i) => *i as u32,
+                    v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }),
+                };
+                
+                if let Some(mut child) = self.pipes.remove(&pipe_id) {
+                    child.kill().ok();
+                }
+                
+                Ok(Value::Boolean(true))
+            }
+            "capture_screen" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "capture_screen() takes 1 argument (monitor_index)".to_string(),
+                    });
+                }
+                let monitor_idx = match self.get_reg(args[0])? {
+                    Value::Integer(i) => *i as usize,
+                    v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }),
+                };
+                
+                let monitors = Monitor::all().map_err(|e| HlxError::BackendError { message: format!("Failed to list monitors: {}", e) })?;
+                let monitor = monitors.get(monitor_idx).ok_or_else(|| HlxError::ValidationFail { message: format!("Monitor index {} not found", monitor_idx) })?;
+                
+                let image = monitor.capture_image().map_err(|e| HlxError::BackendError { message: format!("Capture failed: {}", e) })?;
+                let width = image.width() as usize;
+                let height = image.height() as usize;
+                let rgba_data = image.into_raw();
+                
+                // Convert u8 to i32 for the tensor
+                let mut i32_data = Vec::with_capacity(rgba_data.len());
+                for b in rgba_data {
+                    i32_data.push(b as i32);
+                }
+                let raw_bytes: &[u8] = bytemuck::cast_slice(&i32_data);
+                
+                // Allocate tensor in backend (H, W, 4)
+                let shape = vec![height, width, 4];
+                let h_tensor = backend.alloc_tensor(&shape, crate::backend::DType::I32)?;
+                backend.write_tensor(h_tensor, raw_bytes)?;
+                
+                Ok(Value::Handle(h_tensor.0.to_string()))
+            }
+            "sleep" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "sleep() takes 1 argument (ms)".to_string(),
+                    });
+                }
+                let ms = match self.get_reg(args[0])? {
+                    Value::Integer(i) => *i as u64,
+                    v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }),
+                };
+                std::thread::sleep(std::time::Duration::from_millis(ms));
+                Ok(Value::Null)
             }
             "native_tokenize" => {
                 // Native tokenizer - runs in Rust to bypass O(n²) interpreted string ops
