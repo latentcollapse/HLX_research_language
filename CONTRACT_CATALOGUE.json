@@ -1,7 +1,7 @@
 {
-  "version": "1.1.2",
+  "version": "1.2.0",
   "last_updated": "2026-01-08",
-  "total_contracts": 51,
+  "total_contracts": 124,
   "contract_id_space": "0-∞ (no artificial limits)",
   "tier_system": {
     "T0": "0-99: Core Language (types, operators)",
@@ -378,6 +378,178 @@
       "related": ["205"],
       "status": "stable"
     },
+    "207": {
+      "name": "Abs",
+      "tier": "T2-Reserved",
+      "signature": "@207 { val: Number } -> Number",
+      "description": "Absolute value",
+      "fields": {
+        "val": { "type": "Number", "description": "Value", "required": true }
+      },
+      "example": "@207 { val: -5 }",
+      "usage": "Magnitude calculation",
+      "status": "stable"
+    },
+    "208": {
+      "name": "Min",
+      "tier": "T2-Reserved",
+      "signature": "@208 { lhs: Number, rhs: Number } -> Number",
+      "description": "Minimum of two values",
+      "fields": {
+        "lhs": { "type": "Number", "description": "First value", "required": true },
+        "rhs": { "type": "Number", "description": "Second value", "required": true }
+      },
+      "example": "@208 { lhs: 5, rhs: 10 }",
+      "usage": "Finding minimum",
+      "related": ["209"],
+      "status": "stable"
+    },
+    "209": {
+      "name": "Max",
+      "tier": "T2-Reserved",
+      "signature": "@209 { lhs: Number, rhs: Number } -> Number",
+      "description": "Maximum of two values",
+      "fields": {
+        "lhs": { "type": "Number", "description": "First value", "required": true },
+        "rhs": { "type": "Number", "description": "Second value", "required": true }
+      },
+      "example": "@209 { lhs: 5, rhs: 10 }",
+      "usage": "Finding maximum",
+      "related": ["208"],
+      "status": "stable"
+    },
+    "210": {
+      "name": "Floor",
+      "tier": "T2-Reserved",
+      "signature": "@210 { val: Float } -> Integer",
+      "description": "Round down to nearest integer",
+      "fields": {
+        "val": { "type": "Float", "description": "Value to floor", "required": true }
+      },
+      "example": "@210 { val: 3.9 }",
+      "usage": "Rounding down",
+      "related": ["211", "212"],
+      "status": "stable"
+    },
+    "211": {
+      "name": "Ceil",
+      "tier": "T2-Reserved",
+      "signature": "@211 { val: Float } -> Integer",
+      "description": "Round up to nearest integer",
+      "fields": {
+        "val": { "type": "Float", "description": "Value to ceil", "required": true }
+      },
+      "example": "@211 { val: 3.1 }",
+      "usage": "Rounding up",
+      "related": ["210", "212"],
+      "status": "stable"
+    },
+    "212": {
+      "name": "Round",
+      "tier": "T2-Reserved",
+      "signature": "@212 { val: Float } -> Integer",
+      "description": "Round to nearest integer",
+      "fields": {
+        "val": { "type": "Float", "description": "Value to round", "required": true }
+      },
+      "example": "@212 { val: 3.5 }",
+      "usage": "Rounding",
+      "related": ["210", "211"],
+      "status": "stable"
+    },
+    "213": {
+      "name": "Sin",
+      "tier": "T2-Reserved",
+      "signature": "@213 { val: Float } -> Float",
+      "description": "Sine function (radians)",
+      "fields": {
+        "val": { "type": "Float", "description": "Angle in radians", "required": true }
+      },
+      "example": "@213 { val: 1.57 }",
+      "usage": "Trigonometry",
+      "related": ["214", "215"],
+      "status": "stable"
+    },
+    "214": {
+      "name": "Cos",
+      "tier": "T2-Reserved",
+      "signature": "@214 { val: Float } -> Float",
+      "description": "Cosine function (radians)",
+      "fields": {
+        "val": { "type": "Float", "description": "Angle in radians", "required": true }
+      },
+      "example": "@214 { val: 3.14 }",
+      "usage": "Trigonometry",
+      "related": ["213", "215"],
+      "status": "stable"
+    },
+    "215": {
+      "name": "Tan",
+      "tier": "T2-Reserved",
+      "signature": "@215 { val: Float } -> Float",
+      "description": "Tangent function (radians)",
+      "fields": {
+        "val": { "type": "Float", "description": "Angle in radians", "required": true }
+      },
+      "example": "@215 { val: 0.785 }",
+      "usage": "Trigonometry",
+      "related": ["213", "214"],
+      "status": "stable"
+    },
+    "216": {
+      "name": "Log",
+      "tier": "T2-Reserved",
+      "signature": "@216 { val: Float, base: Float } -> Float",
+      "description": "Logarithm",
+      "fields": {
+        "val": { "type": "Float", "description": "Value", "required": true },
+        "base": { "type": "Float", "description": "Base (default e)", "required": false }
+      },
+      "example": "@216 { val: 100, base: 10 }",
+      "usage": "Logarithmic calculations",
+      "related": ["217"],
+      "status": "stable"
+    },
+    "217": {
+      "name": "Exp",
+      "tier": "T2-Reserved",
+      "signature": "@217 { val: Float } -> Float",
+      "description": "Exponential function (e^x)",
+      "fields": {
+        "val": { "type": "Float", "description": "Exponent", "required": true }
+      },
+      "example": "@217 { val: 1.0 }",
+      "usage": "Exponential growth",
+      "related": ["216"],
+      "status": "stable"
+    },
+    "218": {
+      "name": "Random",
+      "tier": "T2-Reserved",
+      "signature": "@218 { seed: Integer } -> Float",
+      "description": "Deterministic pseudo-random number (0.0 - 1.0)",
+      "fields": {
+        "seed": { "type": "Integer", "description": "Seed value", "required": true }
+      },
+      "example": "@218 { seed: 12345 }",
+      "usage": "Deterministic randomness",
+      "status": "stable"
+    },
+    "219": {
+      "name": "Clamp",
+      "tier": "T2-Reserved",
+      "signature": "@219 { val: Number, min: Number, max: Number } -> Number",
+      "description": "Clamp value between min and max",
+      "fields": {
+        "val": { "type": "Number", "description": "Value to clamp", "required": true },
+        "min": { "type": "Number", "description": "Minimum bound", "required": true },
+        "max": { "type": "Number", "description": "Maximum bound", "required": true }
+      },
+      "example": "@219 { val: 15, min: 0, max: 10 }",
+      "usage": "Bounding values",
+      "related": ["208", "209"],
+      "status": "stable"
+    },
     "300": {
       "name": "Concat",
       "tier": "T2-Reserved",
@@ -403,6 +575,179 @@
       "example": "@301 { val: \"abc\" }",
       "usage": "Get character count",
       "related": ["300", "400"],
+      "status": "stable"
+    },
+    "302": {
+      "name": "Substring",
+      "tier": "T2-Reserved",
+      "signature": "@302 { val: String, start: Integer, len: Integer } -> String",
+      "description": "Extract substring",
+      "fields": {
+        "val": { "type": "String", "description": "Source string", "required": true },
+        "start": { "type": "Integer", "description": "Start index", "required": true },
+        "len": { "type": "Integer", "description": "Length to extract", "required": true }
+      },
+      "example": "@302 { val: \"hello\", start: 1, len: 3 }",
+      "usage": "Extracting text parts",
+      "status": "stable"
+    },
+    "303": {
+      "name": "IndexOf",
+      "tier": "T2-Reserved",
+      "signature": "@303 { val: String, sub: String } -> Integer",
+      "description": "Find substring position",
+      "fields": {
+        "val": { "type": "String", "description": "Haystack", "required": true },
+        "sub": { "type": "String", "description": "Needle", "required": true }
+      },
+      "example": "@303 { val: \"hello\", sub: \"ll\" }",
+      "usage": "Searching text",
+      "status": "stable"
+    },
+    "304": {
+      "name": "Replace",
+      "tier": "T2-Reserved",
+      "signature": "@304 { val: String, old: String, new: String } -> String",
+      "description": "Replace substring",
+      "fields": {
+        "val": { "type": "String", "description": "Input string", "required": true },
+        "old": { "type": "String", "description": "Target", "required": true },
+        "new": { "type": "String", "description": "Replacement", "required": true }
+      },
+      "example": "@304 { val: \"hi\", old: \"i\", new: \"ey\" }",
+      "usage": "String modification",
+      "status": "stable"
+    },
+    "305": {
+      "name": "Split",
+      "tier": "T2-Reserved",
+      "signature": "@305 { val: String, sep: String } -> Array",
+      "description": "Split string by separator",
+      "fields": {
+        "val": { "type": "String", "description": "Input string", "required": true },
+        "sep": { "type": "String", "description": "Separator", "required": true }
+      },
+      "example": "@305 { val: \"a,b\", sep: \",\" }",
+      "usage": "Tokenizing",
+      "related": ["306"],
+      "status": "stable"
+    },
+    "306": {
+      "name": "Join",
+      "tier": "T2-Reserved",
+      "signature": "@306 { val: Array, sep: String } -> String",
+      "description": "Join array into string",
+      "fields": {
+        "val": { "type": "Array", "description": "Input array", "required": true },
+        "sep": { "type": "String", "description": "Separator", "required": true }
+      },
+      "example": "@306 { val: [\"a\", \"b\"], sep: \",\" }",
+      "usage": "Combining tokens",
+      "related": ["305"],
+      "status": "stable"
+    },
+    "307": {
+      "name": "ToUpperCase",
+      "tier": "T2-Reserved",
+      "signature": "@307 { val: String } -> String",
+      "description": "Convert to uppercase",
+      "fields": {
+        "val": { "type": "String", "description": "Input string", "required": true }
+      },
+      "example": "@307 { val: \"hi\" }",
+      "usage": "Case conversion",
+      "related": ["308"],
+      "status": "stable"
+    },
+    "308": {
+      "name": "ToLowerCase",
+      "tier": "T2-Reserved",
+      "signature": "@308 { val: String } -> String",
+      "description": "Convert to lowercase",
+      "fields": {
+        "val": { "type": "String", "description": "Input string", "required": true }
+      },
+      "example": "@308 { val: \"HI\" }",
+      "usage": "Case conversion",
+      "related": ["307"],
+      "status": "stable"
+    },
+    "309": {
+      "name": "Trim",
+      "tier": "T2-Reserved",
+      "signature": "@309 { val: String } -> String",
+      "description": "Remove whitespace from ends",
+      "fields": {
+        "val": { "type": "String", "description": "Input string", "required": true }
+      },
+      "example": "@309 { val: \" hi \" }",
+      "usage": "Cleaning input",
+      "status": "stable"
+    },
+    "310": {
+      "name": "StartsWith",
+      "tier": "T2-Reserved",
+      "signature": "@310 { val: String, prefix: String } -> Bool",
+      "description": "Check if string starts with prefix",
+      "fields": {
+        "val": { "type": "String", "description": "Input string", "required": true },
+        "prefix": { "type": "String", "description": "Prefix", "required": true }
+      },
+      "example": "@310 { val: \"file.txt\", prefix: \"file\" }",
+      "usage": "Prefix checking",
+      "related": ["311"],
+      "status": "stable"
+    },
+    "311": {
+      "name": "EndsWith",
+      "tier": "T2-Reserved",
+      "signature": "@311 { val: String, suffix: String } -> Bool",
+      "description": "Check if string ends with suffix",
+      "fields": {
+        "val": { "type": "String", "description": "Input string", "required": true },
+        "suffix": { "type": "String", "description": "Suffix", "required": true }
+      },
+      "example": "@311 { val: \"file.txt\", suffix: \".txt\" }",
+      "usage": "Suffix checking",
+      "related": ["310"],
+      "status": "stable"
+    },
+    "312": {
+      "name": "Repeat",
+      "tier": "T2-Reserved",
+      "signature": "@312 { val: String, count: Integer } -> String",
+      "description": "Repeat string N times",
+      "fields": {
+        "val": { "type": "String", "description": "Input string", "required": true },
+        "count": { "type": "Integer", "description": "Count", "required": true }
+      },
+      "example": "@312 { val: \"na\", count: 3 }",
+      "usage": "String generation",
+      "status": "stable"
+    },
+    "313": {
+      "name": "Reverse",
+      "tier": "T2-Reserved",
+      "signature": "@313 { val: String } -> String",
+      "description": "Reverse string",
+      "fields": {
+        "val": { "type": "String", "description": "Input string", "required": true }
+      },
+      "example": "@313 { val: \"abc\" }",
+      "usage": "Reversing text",
+      "status": "stable"
+    },
+    "314": {
+      "name": "CharAt",
+      "tier": "T2-Reserved",
+      "signature": "@314 { val: String, index: Integer } -> String",
+      "description": "Get character at index",
+      "fields": {
+        "val": { "type": "String", "description": "Input string", "required": true },
+        "index": { "type": "Integer", "description": "Index", "required": true }
+      },
+      "example": "@314 { val: \"abc\", index: 0 }",
+      "usage": "Character access",
       "status": "stable"
     },
     "400": {
@@ -432,6 +777,21 @@
       "related": ["400", "403"],
       "status": "stable"
     },
+    "402": {
+      "name": "ArrSet",
+      "tier": "T2-Reserved",
+      "signature": "@402 { arr: Array, idx: Integer, val: Value } -> Array",
+      "description": "Set array element at index",
+      "fields": {
+        "arr": { "type": "Array", "description": "Target array", "required": true },
+        "idx": { "type": "Integer", "description": "Index", "required": true },
+        "val": { "type": "Value", "description": "New value", "required": true }
+      },
+      "example": "@402 { arr: [1], idx: 0, val: 2 }",
+      "usage": "Array modification",
+      "related": ["401"],
+      "status": "stable"
+    },
     "403": {
       "name": "ArrPush",
       "tier": "T2-Reserved",
@@ -444,6 +804,155 @@
       "example": "@403 { arr: [1], val: 2 }",
       "usage": "Grow array",
       "related": ["400", "401"],
+      "status": "stable"
+    },
+    "404": {
+      "name": "ArrPop",
+      "tier": "T2-Reserved",
+      "signature": "@404 { arr: Array } -> Array",
+      "description": "Remove last element",
+      "fields": {
+        "arr": { "type": "Array", "description": "Target array", "required": true }
+      },
+      "example": "@404 { arr: [1, 2] }",
+      "usage": "Shrink array",
+      "related": ["403"],
+      "status": "stable"
+    },
+    "405": {
+      "name": "ArrShift",
+      "tier": "T2-Reserved",
+      "signature": "@405 { arr: Array } -> Array",
+      "description": "Remove first element",
+      "fields": {
+        "arr": { "type": "Array", "description": "Target array", "required": true }
+      },
+      "example": "@405 { arr: [1, 2] }",
+      "usage": "Queue operation",
+      "related": ["406"],
+      "status": "stable"
+    },
+    "406": {
+      "name": "ArrUnshift",
+      "tier": "T2-Reserved",
+      "signature": "@406 { arr: Array, val: Value } -> Array",
+      "description": "Prepend element",
+      "fields": {
+        "arr": { "type": "Array", "description": "Target array", "required": true },
+        "val": { "type": "Value", "description": "Value to prepend", "required": true }
+      },
+      "example": "@406 { arr: [2], val: 1 }",
+      "usage": "Queue operation",
+      "related": ["405"],
+      "status": "stable"
+    },
+    "407": {
+      "name": "ArrSlice",
+      "tier": "T2-Reserved",
+      "signature": "@407 { arr: Array, start: Integer, end: Integer } -> Array",
+      "description": "Extract subarray",
+      "fields": {
+        "arr": { "type": "Array", "description": "Source array", "required": true },
+        "start": { "type": "Integer", "description": "Start index", "required": true },
+        "end": { "type": "Integer", "description": "End index (exclusive)", "required": true }
+      },
+      "example": "@407 { arr: [1, 2, 3], start: 0, end: 2 }",
+      "usage": "Subarray extraction",
+      "status": "stable"
+    },
+    "408": {
+      "name": "ArrMap",
+      "tier": "T2-Reserved",
+      "signature": "@408 { arr: Array, fn: Function } -> Array",
+      "description": "Transform elements",
+      "fields": {
+        "arr": { "type": "Array", "description": "Input array", "required": true },
+        "fn": { "type": "Function", "description": "Transform function", "required": true }
+      },
+      "example": "@408 { arr: [1, 2], fn: double }",
+      "usage": "Functional mapping",
+      "related": ["409", "410"],
+      "status": "stable"
+    },
+    "409": {
+      "name": "ArrFilter",
+      "tier": "T2-Reserved",
+      "signature": "@409 { arr: Array, fn: Function } -> Array",
+      "description": "Filter elements",
+      "fields": {
+        "arr": { "type": "Array", "description": "Input array", "required": true },
+        "fn": { "type": "Function", "description": "Predicate function", "required": true }
+      },
+      "example": "@409 { arr: [1, 2], fn: is_even }",
+      "usage": "Functional filtering",
+      "related": ["408"],
+      "status": "stable"
+    },
+    "410": {
+      "name": "ArrReduce",
+      "tier": "T2-Reserved",
+      "signature": "@410 { arr: Array, fn: Function, init: Value } -> Value",
+      "description": "Reduce array to value",
+      "fields": {
+        "arr": { "type": "Array", "description": "Input array", "required": true },
+        "fn": { "type": "Function", "description": "Reducer function", "required": true },
+        "init": { "type": "Value", "description": "Initial value", "required": true }
+      },
+      "example": "@410 { arr: [1, 2], fn: sum, init: 0 }",
+      "usage": "Functional reduction",
+      "related": ["408"],
+      "status": "stable"
+    },
+    "411": {
+      "name": "ArrFind",
+      "tier": "T2-Reserved",
+      "signature": "@411 { arr: Array, fn: Function } -> Value",
+      "description": "Find first matching element",
+      "fields": {
+        "arr": { "type": "Array", "description": "Input array", "required": true },
+        "fn": { "type": "Function", "description": "Predicate function", "required": true }
+      },
+      "example": "@411 { arr: [1, 2], fn: is_even }",
+      "usage": "Search",
+      "status": "stable"
+    },
+    "412": {
+      "name": "ArrSort",
+      "tier": "T2-Reserved",
+      "signature": "@412 { arr: Array } -> Array",
+      "description": "Sort array",
+      "fields": {
+        "arr": { "type": "Array", "description": "Input array", "required": true }
+      },
+      "example": "@412 { arr: [3, 1, 2] }",
+      "usage": "Sorting",
+      "related": ["413"],
+      "status": "stable"
+    },
+    "413": {
+      "name": "ArrReverse",
+      "tier": "T2-Reserved",
+      "signature": "@413 { arr: Array } -> Array",
+      "description": "Reverse array",
+      "fields": {
+        "arr": { "type": "Array", "description": "Input array", "required": true }
+      },
+      "example": "@413 { arr: [1, 2, 3] }",
+      "usage": "Reversing",
+      "related": ["412"],
+      "status": "stable"
+    },
+    "414": {
+      "name": "ArrConcat",
+      "tier": "T2-Reserved",
+      "signature": "@414 { lhs: Array, rhs: Array } -> Array",
+      "description": "Concatenate arrays",
+      "fields": {
+        "lhs": { "type": "Array", "description": "First array", "required": true },
+        "rhs": { "type": "Array", "description": "Second array", "required": true }
+      },
+      "example": "@414 { lhs: [1], rhs: [2] }",
+      "usage": "Merging arrays",
       "status": "stable"
     },
     "500": {
@@ -461,6 +970,120 @@
       "related": ["22"],
       "status": "stable"
     },
+    "501": {
+      "name": "While",
+      "tier": "T2-Reserved",
+      "signature": "@501 { cond: Bool, body: Block }",
+      "description": "While loop",
+      "fields": {
+        "cond": { "type": "Bool", "description": "Condition", "required": true },
+        "body": { "type": "Block", "description": "Loop body", "required": true }
+      },
+      "example": "@501 { cond: true, body: ... }",
+      "usage": "Looping",
+      "related": ["502"],
+      "status": "stable"
+    },
+    "502": {
+      "name": "For",
+      "tier": "T2-Reserved",
+      "signature": "@502 { init: Statement, cond: Bool, step: Statement, body: Block }",
+      "description": "For loop",
+      "fields": {
+        "init": { "type": "Statement", "description": "Initialization", "required": true },
+        "cond": { "type": "Bool", "description": "Condition", "required": true },
+        "step": { "type": "Statement", "description": "Step", "required": true },
+        "body": { "type": "Block", "description": "Loop body", "required": true }
+      },
+      "example": "@502 { init: ..., cond: ..., step: ..., body: ... }",
+      "usage": "Looping",
+      "related": ["501"],
+      "status": "stable"
+    },
+    "503": {
+      "name": "Break",
+      "tier": "T2-Reserved",
+      "signature": "@503 { }",
+      "description": "Break loop",
+      "fields": {},
+      "example": "@503 { }",
+      "usage": "Exiting loops",
+      "status": "stable"
+    },
+    "504": {
+      "name": "Continue",
+      "tier": "T2-Reserved",
+      "signature": "@504 { }",
+      "description": "Continue loop",
+      "fields": {},
+      "example": "@504 { }",
+      "usage": "Skipping iteration",
+      "status": "stable"
+    },
+    "505": {
+      "name": "Switch",
+      "tier": "T2-Reserved",
+      "signature": "@505 { val: Value, cases: Object, default: Block }",
+      "description": "Switch statement",
+      "fields": {
+        "val": { "type": "Value", "description": "Value to match", "required": true },
+        "cases": { "type": "Object", "description": "Map of value to block", "required": true },
+        "default": { "type": "Block", "description": "Default block", "required": true }
+      },
+      "example": "@505 { val: x, cases: {1: b1, 2: b2}, default: b3 }",
+      "usage": "Multi-way branching",
+      "status": "stable"
+    },
+    "506": {
+      "name": "Match",
+      "tier": "T2-Reserved",
+      "signature": "@506 { val: Value, patterns: Array }",
+      "description": "Pattern matching",
+      "fields": {
+        "val": { "type": "Value", "description": "Value to match", "required": true },
+        "patterns": { "type": "Array", "description": "List of (pattern, block)", "required": true }
+      },
+      "example": "@506 { val: x, patterns: [...] }",
+      "usage": "Advanced branching",
+      "status": "stable"
+    },
+    "507": {
+      "name": "Try",
+      "tier": "T2-Reserved",
+      "signature": "@507 { body: Block, catch: Block }",
+      "description": "Try-catch block",
+      "fields": {
+        "body": { "type": "Block", "description": "Code to try", "required": true },
+        "catch": { "type": "Block", "description": "Error handler", "required": true }
+      },
+      "example": "@507 { body: b1, catch: b2 }",
+      "usage": "Error handling",
+      "status": "stable"
+    },
+    "508": {
+      "name": "Throw",
+      "tier": "T2-Reserved",
+      "signature": "@508 { err: Value }",
+      "description": "Throw error",
+      "fields": {
+        "err": { "type": "Value", "description": "Error object", "required": true }
+      },
+      "example": "@508 { err: \"Fail\" }",
+      "usage": "Signaling error",
+      "status": "stable"
+    },
+    "509": {
+      "name": "Return",
+      "tier": "T2-Reserved",
+      "signature": "@509 { val: Value }",
+      "description": "Return from function",
+      "fields": {
+        "val": { "type": "Value", "description": "Return value", "required": true }
+      },
+      "example": "@509 { val: 0 }",
+      "usage": "Function exit",
+      "status": "stable"
+    },
     "600": {
       "name": "Print",
       "tier": "T2-Reserved",
@@ -472,6 +1095,29 @@
       "example": "@600 { val: \"Hello\" }",
       "usage": "Debug output",
       "related": ["16", "21"],
+      "status": "stable"
+    },
+    "601": {
+      "name": "ReadLine",
+      "tier": "T2-Reserved",
+      "signature": "@601 { } -> String",
+      "description": "Read line from stdin",
+      "fields": {},
+      "example": "@601 { }",
+      "usage": "Console input",
+      "status": "stable"
+    },
+    "602": {
+      "name": "ReadFile",
+      "tier": "T2-Reserved",
+      "signature": "@602 { path: String } -> String",
+      "description": "Read file contents",
+      "fields": {
+        "path": { "type": "String", "description": "File path", "required": true }
+      },
+      "example": "@602 { path: \"file.txt\" }",
+      "usage": "File input",
+      "related": ["607"],
       "status": "stable"
     },
     "603": {
@@ -528,6 +1174,204 @@
       "related": ["605"],
       "status": "stable"
     },
+    "607": {
+      "name": "WriteFile",
+      "tier": "T2-Reserved",
+      "signature": "@607 { path: String, data: String } -> Bool",
+      "description": "Write string to file",
+      "fields": {
+        "path": { "type": "String", "description": "File path", "required": true },
+        "data": { "type": "String", "description": "Content", "required": true }
+      },
+      "example": "@607 { path: \"out.txt\", data: \"hi\" }",
+      "usage": "File output",
+      "related": ["602", "608"],
+      "status": "stable"
+    },
+    "608": {
+      "name": "AppendFile",
+      "tier": "T2-Reserved",
+      "signature": "@608 { path: String, data: String } -> Bool",
+      "description": "Append string to file",
+      "fields": {
+        "path": { "type": "String", "description": "File path", "required": true },
+        "data": { "type": "String", "description": "Content", "required": true }
+      },
+      "example": "@608 { path: \"log.txt\", data: \"entry\\n\" }",
+      "usage": "Logging",
+      "related": ["607"],
+      "status": "stable"
+    },
+    "609": {
+      "name": "FileExists",
+      "tier": "T2-Reserved",
+      "signature": "@609 { path: String } -> Bool",
+      "description": "Check if file exists",
+      "fields": {
+        "path": { "type": "String", "description": "File path", "required": true }
+      },
+      "example": "@609 { path: \"config.json\" }",
+      "usage": "File checks",
+      "status": "stable"
+    },
+    "610": {
+      "name": "DeleteFile",
+      "tier": "T2-Reserved",
+      "signature": "@610 { path: String } -> Bool",
+      "description": "Delete a file",
+      "fields": {
+        "path": { "type": "String", "description": "File path", "required": true }
+      },
+      "example": "@610 { path: \"temp.txt\" }",
+      "usage": "Cleanup",
+      "status": "stable"
+    },
+    "611": {
+      "name": "ListFiles",
+      "tier": "T2-Reserved",
+      "signature": "@611 { path: String } -> Array",
+      "description": "List directory contents",
+      "fields": {
+        "path": { "type": "String", "description": "Directory path", "required": true }
+      },
+      "example": "@611 { path: \".\" }",
+      "usage": "Directory traversal",
+      "status": "stable"
+    },
+    "612": {
+      "name": "CreateDir",
+      "tier": "T2-Reserved",
+      "signature": "@612 { path: String } -> Bool",
+      "description": "Create directory",
+      "fields": {
+        "path": { "type": "String", "description": "Directory path", "required": true }
+      },
+      "example": "@612 { path: \"logs\" }",
+      "usage": "Setup",
+      "related": ["613"],
+      "status": "stable"
+    },
+    "613": {
+      "name": "DeleteDir",
+      "tier": "T2-Reserved",
+      "signature": "@613 { path: String } -> Bool",
+      "description": "Delete directory",
+      "fields": {
+        "path": { "type": "String", "description": "Directory path", "required": true }
+      },
+      "example": "@613 { path: \"temp\" }",
+      "usage": "Cleanup",
+      "related": ["612"],
+      "status": "stable"
+    },
+    "614": {
+      "name": "ReadJSON",
+      "tier": "T2-Reserved",
+      "signature": "@614 { path: String } -> Value",
+      "description": "Read and parse JSON file",
+      "fields": {
+        "path": { "type": "String", "description": "File path", "required": true }
+      },
+      "example": "@614 { path: \"config.json\" }",
+      "usage": "Config loading",
+      "related": ["615", "604"],
+      "status": "stable"
+    },
+    "615": {
+      "name": "WriteJSON",
+      "tier": "T2-Reserved",
+      "signature": "@615 { path: String, val: Value } -> Bool",
+      "description": "Serialize and write JSON file",
+      "fields": {
+        "path": { "type": "String", "description": "File path", "required": true },
+        "val": { "type": "Value", "description": "Value to write", "required": true }
+      },
+      "example": "@615 { path: \"data.json\", val: obj }",
+      "usage": "Data persistence",
+      "related": ["614"],
+      "status": "stable"
+    },
+    "616": {
+      "name": "ReadCSV",
+      "tier": "T2-Reserved",
+      "signature": "@616 { path: String } -> Array",
+      "description": "Read CSV file to array of objects",
+      "fields": {
+        "path": { "type": "String", "description": "File path", "required": true }
+      },
+      "example": "@616 { path: \"data.csv\" }",
+      "usage": "Data import",
+      "related": ["617"],
+      "status": "stable"
+    },
+    "617": {
+      "name": "WriteCSV",
+      "tier": "T2-Reserved",
+      "signature": "@617 { path: String, data: Array } -> Bool",
+      "description": "Write array of objects to CSV",
+      "fields": {
+        "path": { "type": "String", "description": "File path", "required": true },
+        "data": { "type": "Array", "description": "Data to write", "required": true }
+      },
+      "example": "@617 { path: \"out.csv\", data: rows }",
+      "usage": "Data export",
+      "related": ["616"],
+      "status": "stable"
+    },
+    "618": {
+      "name": "HttpGet",
+      "tier": "T2-Reserved",
+      "signature": "@618 { url: String } -> Object",
+      "description": "Simple HTTP GET",
+      "fields": {
+        "url": { "type": "String", "description": "URL", "required": true }
+      },
+      "example": "@618 { url: \"https://api.com\" }",
+      "usage": "Fetching data",
+      "related": ["603", "619"],
+      "status": "stable"
+    },
+    "619": {
+      "name": "HttpPost",
+      "tier": "T2-Reserved",
+      "signature": "@619 { url: String, body: Value } -> Object",
+      "description": "Simple HTTP POST",
+      "fields": {
+        "url": { "type": "String", "description": "URL", "required": true },
+        "body": { "type": "Value", "description": "Body (JSON)", "required": true }
+      },
+      "example": "@619 { url: \"https://api.com\", body: data }",
+      "usage": "Sending data",
+      "related": ["603", "618"],
+      "status": "stable"
+    },
+    "620": {
+      "name": "TcpConnect",
+      "tier": "T2-Reserved",
+      "signature": "@620 { host: String, port: Integer } -> Handle",
+      "description": "Open TCP connection",
+      "fields": {
+        "host": { "type": "String", "description": "Hostname", "required": true },
+        "port": { "type": "Integer", "description": "Port", "required": true }
+      },
+      "example": "@620 { host: \"localhost\", port: 8080 }",
+      "usage": "Raw networking",
+      "status": "stable"
+    },
+    "621": {
+      "name": "UdpSend",
+      "tier": "T2-Reserved",
+      "signature": "@621 { host: String, port: Integer, data: Bytes } -> Bool",
+      "description": "Send UDP packet",
+      "fields": {
+        "host": { "type": "String", "description": "Hostname", "required": true },
+        "port": { "type": "Integer", "description": "Port", "required": true },
+        "data": { "type": "Bytes", "description": "Packet data", "required": true }
+      },
+      "example": "@621 { host: \"127.0.0.1\", port: 53, data: [...] }",
+      "usage": "Datagram networking",
+      "status": "stable"
+    },
     "700": {
       "name": "ScreenCapture",
       "tier": "T2-Reserved",
@@ -579,6 +1423,137 @@
       "example": "@703 { ms: 100 };",
       "usage": "Rate limiting and timing",
       "related": [],
+      "status": "stable"
+    },
+    "800": {
+      "name": "ParseInt",
+      "tier": "T3-Parser",
+      "signature": "@800 { val: String } -> Integer",
+      "description": "Parse integer from string",
+      "fields": {
+        "val": { "type": "String", "description": "Input string", "required": true }
+      },
+      "example": "@800 { val: \"123\" }",
+      "usage": "Data conversion",
+      "related": ["801"],
+      "status": "stable"
+    },
+    "801": {
+      "name": "ParseFloat",
+      "tier": "T3-Parser",
+      "signature": "@801 { val: String } -> Float",
+      "description": "Parse float from string",
+      "fields": {
+        "val": { "type": "String", "description": "Input string", "required": true }
+      },
+      "example": "@801 { val: \"3.14\" }",
+      "usage": "Data conversion",
+      "related": ["800"],
+      "status": "stable"
+    },
+    "802": {
+      "name": "ParseJSON",
+      "tier": "T3-Parser",
+      "signature": "@802 { json: String } -> Value",
+      "description": "Parse JSON string (Standard)",
+      "fields": {
+        "json": { "type": "String", "description": "JSON string", "required": true }
+      },
+      "example": "@802 { json: \"{}\" }",
+      "usage": "Data parsing",
+      "related": ["803", "604"],
+      "status": "stable"
+    },
+    "803": {
+      "name": "SerializeJSON",
+      "tier": "T3-Parser",
+      "signature": "@803 { val: Value } -> String",
+      "description": "Serialize to JSON string",
+      "fields": {
+        "val": { "type": "Value", "description": "Value to serialize", "required": true }
+      },
+      "example": "@803 { val: obj }",
+      "usage": "Data persistence",
+      "related": ["802"],
+      "status": "stable"
+    },
+    "804": {
+      "name": "ParseXML",
+      "tier": "T3-Parser",
+      "signature": "@804 { xml: String } -> Object",
+      "description": "Parse XML string",
+      "fields": {
+        "xml": { "type": "String", "description": "XML string", "required": true }
+      },
+      "example": "@804 { xml: \"<root/>\" }",
+      "usage": "Data parsing",
+      "status": "experimental"
+    },
+    "805": {
+      "name": "ParseCSV",
+      "tier": "T3-Parser",
+      "signature": "@805 { csv: String } -> Array",
+      "description": "Parse CSV string",
+      "fields": {
+        "csv": { "type": "String", "description": "CSV content", "required": true }
+      },
+      "example": "@805 { csv: \"a,b\\n1,2\" }",
+      "usage": "Data parsing",
+      "related": ["616"],
+      "status": "stable"
+    },
+    "806": {
+      "name": "ParseURL",
+      "tier": "T3-Parser",
+      "signature": "@806 { url: String } -> Object",
+      "description": "Parse URL components",
+      "fields": {
+        "url": { "type": "String", "description": "URL string", "required": true }
+      },
+      "example": "@806 { url: \"https://example.com\" }",
+      "usage": "Network utils",
+      "status": "stable"
+    },
+    "807": {
+      "name": "FormatString",
+      "tier": "T3-Parser",
+      "signature": "@807 { fmt: String, args: Array } -> String",
+      "description": "Format string with placeholders",
+      "fields": {
+        "fmt": { "type": "String", "description": "Format string ({})", "required": true },
+        "args": { "type": "Array", "description": "Arguments", "required": true }
+      },
+      "example": "@807 { fmt: \"Hello {}\", args: [\"World\"] }",
+      "usage": "Text formatting",
+      "status": "stable"
+    },
+    "808": {
+      "name": "RegexMatch",
+      "tier": "T3-Parser",
+      "signature": "@808 { regex: String, text: String } -> Bool",
+      "description": "Check regex match",
+      "fields": {
+        "regex": { "type": "String", "description": "Regex pattern", "required": true },
+        "text": { "type": "String", "description": "Input text", "required": true }
+      },
+      "example": "@808 { regex: \"^\\d+$\", text: \"123\" }",
+      "usage": "Validation",
+      "related": ["809"],
+      "status": "stable"
+    },
+    "809": {
+      "name": "RegexReplace",
+      "tier": "T3-Parser",
+      "signature": "@809 { regex: String, text: String, replace: String } -> String",
+      "description": "Regex replacement",
+      "fields": {
+        "regex": { "type": "String", "description": "Pattern", "required": true },
+        "text": { "type": "String", "description": "Input text", "required": true },
+        "replace": { "type": "String", "description": "Replacement", "required": true }
+      },
+      "example": "@809 { regex: \"\\s+\", text: \"a b\", replace: \"\" }",
+      "usage": "Text processing",
+      "related": ["808"],
       "status": "stable"
     },
     "900": {
@@ -786,6 +1761,78 @@
       "usage": "Training loss for classification tasks",
       "performance": "O(N), GPU-accelerated",
       "related": ["909"],
+      "status": "stable"
+    },
+    "911": {
+      "name": "ReLU",
+      "tier": "T4-GPU",
+      "signature": "@911 { x: Tensor } -> Tensor",
+      "description": "Rectified Linear Unit activation",
+      "fields": {
+        "x": { "type": "Tensor", "description": "Input tensor", "required": true }
+      },
+      "example": "let act = @911 { x: input };",
+      "usage": "Neural network activation",
+      "performance": "O(N), GPU-accelerated",
+      "related": ["908", "912"],
+      "status": "stable"
+    },
+    "912": {
+      "name": "Sigmoid",
+      "tier": "T4-GPU",
+      "signature": "@912 { x: Tensor } -> Tensor",
+      "description": "Sigmoid activation",
+      "fields": {
+        "x": { "type": "Tensor", "description": "Input tensor", "required": true }
+      },
+      "example": "let prob = @912 { x: logits };",
+      "usage": "Binary classification",
+      "performance": "O(N), GPU-accelerated",
+      "related": ["913"],
+      "status": "stable"
+    },
+    "913": {
+      "name": "Tanh",
+      "tier": "T4-GPU",
+      "signature": "@913 { x: Tensor } -> Tensor",
+      "description": "Hyperbolic tangent activation",
+      "fields": {
+        "x": { "type": "Tensor", "description": "Input tensor", "required": true }
+      },
+      "example": "let val = @913 { x: input };",
+      "usage": "Neural network activation",
+      "performance": "O(N), GPU-accelerated",
+      "related": ["912"],
+      "status": "stable"
+    },
+    "914": {
+      "name": "Dropout",
+      "tier": "T4-GPU",
+      "signature": "@914 { x: Tensor, rate: Float } -> Tensor",
+      "description": "Randomly zero out elements",
+      "fields": {
+        "x": { "type": "Tensor", "description": "Input tensor", "required": true },
+        "rate": { "type": "Float", "description": "Dropout rate (0-1)", "required": true }
+      },
+      "example": "let out = @914 { x: hidden, rate: 0.5 };",
+      "usage": "Regularization during training",
+      "performance": "O(N), GPU-accelerated",
+      "status": "stable"
+    },
+    "915": {
+      "name": "BatchNorm",
+      "tier": "T4-GPU",
+      "signature": "@915 { x: Tensor, mean: Tensor, var: Tensor } -> Tensor",
+      "description": "Batch Normalization",
+      "fields": {
+        "x": { "type": "Tensor", "description": "Input tensor", "required": true },
+        "mean": { "type": "Tensor", "description": "Running mean", "required": true },
+        "var": { "type": "Tensor", "description": "Running variance", "required": true }
+      },
+      "example": "let norm = @915 { x: input, mean: m, var: v };",
+      "usage": "Stabilizing training",
+      "performance": "O(N), GPU-accelerated",
+      "related": ["907"],
       "status": "stable"
     }
   },
