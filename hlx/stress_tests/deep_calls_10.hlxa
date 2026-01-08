@@ -1,0 +1,34 @@
+// Stress test: call chain depth 10
+program stress_test {
+    fn f1() {
+        return f2();
+    }
+    fn f2() {
+        return f3();
+    }
+    fn f3() {
+        return f4();
+    }
+    fn f4() {
+        return f5();
+    }
+    fn f5() {
+        return f6();
+    }
+    fn f6() {
+        return f7();
+    }
+    fn f7() {
+        return f8();
+    }
+    fn f8() {
+        return f9();
+    }
+    fn f9() {
+        return f10();
+    }
+    fn f10() {
+        return 10;
+    }
+    fn main() { return f1(); }
+}

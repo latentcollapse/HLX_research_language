@@ -1,0 +1,42 @@
+program stress_test {
+    fn int_to_string(n) {
+        if (n == 0) { return "0"; }
+        let s = "";
+        let val = n;
+        let i = 0;
+        loop (val > 0, 1000) {
+            let digit = (val - ((val / 10) * 10));
+            if (digit == 0) { s = ("0" + s); }
+            if (digit == 1) { s = ("1" + s); }
+            if (digit == 2) { s = ("2" + s); }
+            if (digit == 3) { s = ("3" + s); }
+            if (digit == 4) { s = ("4" + s); }
+            if (digit == 5) { s = ("5" + s); }
+            if (digit == 6) { s = ("6" + s); }
+            if (digit == 7) { s = ("7" + s); }
+            if (digit == 8) { s = ("8" + s); }
+            if (digit == 9) { s = ("9" + s); }
+            val = (val / 10);
+            i = (i + 1);
+        }
+        return s;
+    }
+
+    fn generate(count) {
+        let examples = [];
+        let i = 0;
+        loop (i < count, DEFAULT_MAX_ITER()) {
+            let id_str = int_to_string(i);
+            let prompt = ("Example " + id_str);
+            let code = ("fn main() { return " + id_str + "; }");
+            let entry = { "id": i, "instruction": prompt, "output": code };
+            examples = append(examples, entry);
+            i = (i + 1);
+        }
+        return examples;
+    }
+
+    fn main() {
+        return generate(10);
+    }
+}

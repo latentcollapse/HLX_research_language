@@ -1,0 +1,12 @@
+program echo {
+    fn main(input_str) {
+        print("Echo flow received input:");
+        print(input_str);
+        
+        let data = json_parse(input_str);
+        data.processed = true;
+        data.server = "HLX-Flow";
+        
+        return data;
+    }
+}

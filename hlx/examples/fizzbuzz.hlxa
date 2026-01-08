@@ -1,0 +1,51 @@
+// FizzBuzz - The Classic Programming Challenge
+// Print numbers 1-100, but:
+//   - "Fizz" for multiples of 3
+//   - "Buzz" for multiples of 5
+//   - "FizzBuzz" for multiples of both
+
+program fizzbuzz {
+    // Integer modulo using repeated subtraction
+    fn mod(n, divisor) {
+        let remainder = n;
+        loop(remainder >= divisor, 1000) {
+            remainder = remainder - divisor;
+        }
+        return remainder;
+    }
+
+    fn fizzbuzz(n) {
+        let div3 = mod(n, 3);
+        let div5 = mod(n, 5);
+
+        if div3 == 0 {
+            if div5 == 0 {
+                print("FizzBuzz");
+                return 0;
+            }
+            print("Fizz");
+            return 0;
+        }
+
+        if div5 == 0 {
+            print("Buzz");
+            return 0;
+        }
+
+        print(n);
+        return 0;
+    }
+
+    fn main() {
+        print("=== FizzBuzz (1-100) ===");
+        print("");
+
+        let i = 1;
+        loop(i <= 100, 101) {
+            fizzbuzz(i);
+            i = i + 1;
+        }
+
+        return 0;
+    }
+}

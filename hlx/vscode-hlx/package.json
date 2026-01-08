@@ -24,6 +24,10 @@
       "scopeName": "source.hlx",
       "path": "./syntaxes/hlx.tmLanguage.json"
     }],
+    "snippets": [{
+      "language": "hlx",
+      "path": "./snippets/hlx.snippets.json"
+    }],
     "configuration": {
       "type": "object",
       "title": "HLX Language Server",

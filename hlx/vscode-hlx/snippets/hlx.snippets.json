@@ -1,0 +1,64 @@
+{
+  "Function Definition": {
+    "prefix": "fn",
+    "body": [
+      "fn ${1:name}(${2:params}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Define a new function"
+  },
+  "Program Wrapper": {
+    "prefix": "program",
+    "body": [
+      "program ${1:name} {",
+      "\tfn main(${2:input}) {",
+      "\t\t$0",
+      "\t" ,
+      "}"
+    ],
+    "description": "Define a new HLX-A program"
+  },
+  "HTTP GET Request": {
+    "prefix": "httpget",
+    "body": [
+      "let ${1:resp} = @603 { ",
+      "\tmethod: \"GET\", ",
+      "\turl: \"${2:https://api.example.com}\" ",
+      "};
+    ],
+    "description": "Make an HTTP GET request"
+  },
+  "JSON Parse": {
+    "prefix": "jsonp",
+    "body": [
+      "let ${1:data} = @604 { json: ${2:input_str} };"
+    ],
+    "description": "Parse a JSON string"
+  },
+  "Matrix Multiply (GEMM)": {
+    "prefix": "gemm",
+    "body": [
+      "let ${1:C} = @906 { A: ${2:matrix_a}, B: ${3:matrix_b} };"
+    ],
+    "description": "GPU-accelerated Matrix Multiplication"
+  },
+  "If Condition": {
+    "prefix": "if",
+    "body": [
+      "if (${1:condition}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "If statement"
+  },
+  "Loop (Deterministic)": {
+    "prefix": "loop",
+    "body": [
+      "loop (${1:condition}, ${2:1000}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Deterministic loop with max iterations"
+  }
+}

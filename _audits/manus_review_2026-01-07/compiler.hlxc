@@ -1,0 +1,926 @@
+// HLX SELF-HOSTED COMPILER (Phase 4.2: Flat Context)
+
+fn is_digit(c) -> bool {
+    let code = ord(c);
+    let _c1 = code >= 48;
+    let _c2 = code <= 57;
+    if _c1 {
+        if _c2 { return true; }
+    }
+    return false;
+}
+
+fn is_alpha(c) -> bool {
+    let code = ord(c);
+    if code >= 97 {
+        if code <= 122 { return true; }
+    }
+    if code >= 65 {
+        if code <= 90 { return true; }
+    }
+    if code == 95 { return true; }
+    return false;
+}
+
+fn tokenize(source) -> object {
+    let tokens = [];
+    let i = 0;
+    let len = len(source);
+    loop (i < len, DEFAULT_MAX_ITER()) {
+        let c = source[i];
+        if c == " " or c == "
+" or c == "	" or c == "
+" {
+            i = i + 1;
+        } else {
+            if is_alpha(c) {
+                let ident = "";
+                loop (i < len, 100) {
+                    if not is_alpha(source[i]) { break; }
+                    ident = ident + source[i];
+                    i = i + 1;
+                }
+                let type = "IDENT";
+                if ident == "fn" { type = "KW_FN"; }
+                if ident == "let" { type = "KW_LET"; }
+                if ident == "return" { type = "KW_RETURN"; }
+                if ident == "if" { type = "KW_IF"; }
+                if ident == "else" { type = "KW_ELSE"; }
+                if ident == "loop" { type = "KW_LOOP"; }
+                if ident == "break" { type = "KW_BREAK"; }
+                if ident == "continue" { type = "KW_CONT"; }
+                if ident == "and" { type = "OP_AND"; }
+                if ident == "or" { type = "OP_OR"; }
+                if ident == "true" { type = "LIT_BOOL"; }
+                if ident == "false" { type = "LIT_BOOL"; }
+                if ident == "null" { type = "LIT_NULL"; }
+                tokens = append(tokens, {"type": type, "val": ident});
+            } else {
+                if is_digit(c) {
+                    let num = "";
+                    loop (i < len, 100) {
+                        if not is_digit(source[i]) { break; }
+                        num = num + source[i];
+                        i = i + 1;
+                    }
+                    tokens = append(tokens, {"type": "LIT_INT", "val": num});
+                } else {
+                    if c == "\"" {
+                        i = i + 1;
+                        let s = "";
+                        loop (i < len, DEFAULT_MAX_ITER()) {
+                            if source[i] == "\"" { break; }
+                            if i + 1 < len {
+                                let _is_esc = false;
+                                if source[i] == "\\" {
+                                    if source[i+1] == "\"" { _is_esc = true; }
+                                }
+                                if _is_esc {
+                                    s = s + "\"";
+                                    i = i + 2;
+                                } else {
+                                    s = s + source[i];
+                                    i = i + 1;
+                                }
+                            } else {
+                                s = s + source[i];
+                                i = i + 1;
+                            }
+                        }
+                        i = i + 1;
+                        tokens = append(tokens, {"type": "LIT_STR", "val": s});
+                    } else {
+                        let t = null;
+                        if c == "{" { t = "LBRACE"; }
+                        if c == "}" { t = "RBRACE"; }
+                        if c == "[" { t = "LBRACK"; }
+                        if c == "]" { t = "RBRACK"; }
+                        if c == "(" { t = "LPAREN"; }
+                        if c == ")" { t = "RPAREN"; }
+                        if c == ";" { t = "SEMI"; }
+                        if c == ":" { t = "COLON"; }
+                        if c == "," { t = "COMMA"; }
+                        if c == "." { t = "DOT"; }
+                        if c == "+" { t = "OP_ADD"; }
+                        if c == "-" { t = "OP_SUB"; }
+                        if c == "*" { t = "OP_MUL"; }
+                        if c == "/" { t = "OP_DIV"; }
+                        if t != null {
+                            tokens = append(tokens, {"type": t, "val": c});
+                            i = i + 1;
+                        } else {
+                            if c == "-" {
+                                if i + 1 < len and source[i+1] == ">" {
+                                    tokens = append(tokens, {"type": "OP_ARROW", "val": "->"});
+                                    i = i + 2;
+                                } else {
+                                    tokens = append(tokens, {"type": "OP_SUB", "val": "-"});
+                                    i = i + 1;
+                                }
+                            } else {
+                                if c == "=" {
+                                    if i + 1 < len and source[i+1] == "=" {
+                                        tokens = append(tokens, {"type": "OP_EQ", "val": "=="}); i = i + 2;
+                                    } else {
+                                        tokens = append(tokens, {"type": "OP_ASSIGN", "val": "="}); i = i + 1;
+                                    }
+                                } else {
+                                    if c == "!" {
+                                        if i + 1 < len and source[i+1] == "=" {
+                                            tokens = append(tokens, {"type": "OP_NE", "val": "!= "}); i = i + 2;
+                                        } else { i = i + 1; }
+                                    } else {
+                                        if c == "<" {
+                                            if i + 1 < len and source[i+1] == "=" {
+                                                tokens = append(tokens, {"type": "OP_LE", "val": "<="}); i = i + 2;
+                                            } else {
+                                                tokens = append(tokens, {"type": "OP_LT", "val": "<"}); i = i + 1;
+                                            }
+                                        } else {
+                                            if c == ">" {
+                                                if i + 1 < len and source[i+1] == "=" {
+                                                    tokens = append(tokens, {"type": "OP_GE", "val": ">="}); i = i + 2;
+                                                } else {
+                                                    tokens = append(tokens, {"type": "OP_GT", "val": ">"}); i = i + 1;
+                                                }
+                                            } else {
+                                                i = i + 1;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return tokens;
+}
+
+fn parse_primary(_state_in) -> object {
+    if _state_in == null { return null; }
+    if _state_in.pos >= len(_state_in.tokens) { return _state_in; }
+    let _state = {
+        "tokens": _state_in.tokens, "pos": _state_in.pos, "z_idx": _state_in.z_idx, "z_sym": _state_in.z_sym,
+        "z_bc": _state_in.z_bc, "node": _state_in.node, "result_reg": _state_in.result_reg, "stack": _state_in.stack
+    };
+    
+    let t = _state.tokens[_state.pos];
+    let _is_lit = false;
+    if t.type == "LIT_INT" { _is_lit = true; }
+    if t.type == "LIT_STR" { _is_lit = true; }
+    if t.type == "LIT_BOOL" { _is_lit = true; }
+    if t.type == "LIT_NULL" { _is_lit = true; }
+    if _is_lit {
+        let _next_pos = _state.pos + 1;
+        if _next_pos > len(_state.tokens) { _next_pos = len(_state.tokens); }
+        _state = {
+            "tokens": _state.tokens, "pos": _next_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+            "z_bc": _state.z_bc, "node": {"type": "Literal", "val": t.val, "lit_type": t.type}, 
+            "result_reg": _state.result_reg, "stack": _state.stack
+        };
+    } else {
+        if t.type == "LBRACK" {
+            let _next_pos = _state.pos + 1;
+            if _next_pos > len(_state.tokens) { _next_pos = len(_state.tokens); }
+            _state = {
+                "tokens": _state.tokens, "pos": _next_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+            };
+            let els = [];
+            loop (_state.pos < len(_state.tokens), 100000) {
+                if _state.tokens[_state.pos].type == "RBRACK" { break; }
+                _state = parse_expr(_state);
+                els = append(els, _state.node);
+                if _state.pos < len(_state.tokens) {
+                    if _state.tokens[_state.pos].type == "COMMA" {
+                        let _post_comma = _state.pos + 1;
+                        if _post_comma > len(_state.tokens) { _post_comma = len(_state.tokens); }
+                        _state = {
+                            "tokens": _state.tokens, "pos": _post_comma, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                            "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                        };
+                    }
+                }
+            }
+            let _final_pos = _state.pos + 1;
+            if _final_pos > len(_state.tokens) { _final_pos = len(_state.tokens); }
+            _state = {
+                "tokens": _state.tokens, "pos": _final_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                "z_bc": _state.z_bc, "node": {"type": "Array", "elements": els}, 
+                "result_reg": _state.result_reg, "stack": _state.stack
+            };
+        } else {
+            if t.type == "LBRACE" {
+                let _next_pos = _state.pos + 1;
+                if _next_pos > len(_state.tokens) { _next_pos = len(_state.tokens); }
+                _state = {
+                    "tokens": _state.tokens, "pos": _next_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                    "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                };
+                let ks = []; let vs = [];
+                loop (_state.pos < len(_state.tokens), 100000) {
+                    if _state.tokens[_state.pos].type == "RBRACE" { break; }
+                    let key = _state.tokens[_state.pos].val;
+                    let _post_key = _state.pos + 2;
+                    if _post_key > len(_state.tokens) { _post_key = len(_state.tokens); }
+                    _state = {
+                        "tokens": _state.tokens, "pos": _post_key, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                        "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                    };
+                    _state = parse_expr(_state);
+                    ks = append(ks, key); vs = append(vs, _state.node);
+                    if _state.pos < len(_state.tokens) {
+                        if _state.tokens[_state.pos].type == "COMMA" {
+                            let _post_comma = _state.pos + 1;
+                            if _post_comma > len(_state.tokens) { _post_comma = len(_state.tokens); }
+                            _state = {
+                                "tokens": _state.tokens, "pos": _post_comma, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                                "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                            };
+                        }
+                    }
+                }
+                let _final_pos = _state.pos + 1;
+                if _final_pos > len(_state.tokens) { _final_pos = len(_state.tokens); }
+                _state = {
+                    "tokens": _state.tokens, "pos": _final_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                    "z_bc": _state.z_bc, "node": {"type": "Object", "keys": ks, "values": vs}, 
+                    "result_reg": _state.result_reg, "stack": _state.stack
+                };
+            } else {
+                if t.type == "IDENT" {
+                    let _ident_node = {"type": "Ident", "name": t.val};
+                    let _next_pos = _state.pos + 1;
+                    if _next_pos > len(_state.tokens) { _next_pos = len(_state.tokens); }
+                    _state = {
+                        "tokens": _state.tokens, "pos": _next_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                        "z_bc": _state.z_bc, "node": _ident_node, 
+                        "result_reg": _state.result_reg, "stack": _state.stack
+                    };
+                    loop (_state.pos < len(_state.tokens), 100000) {
+                        let n = _state.tokens[_state.pos];
+                        if n.type == "LPAREN" {
+                            let name = _state.node.name; 
+                            let _post_lparen = _state.pos + 1;
+                            if _post_lparen > len(_state.tokens) { _post_lparen = len(_state.tokens); }
+                            _state = {
+                                "tokens": _state.tokens, "pos": _post_lparen, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                                "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                            };
+                            let args = [];
+                            loop (_state.pos < len(_state.tokens), 100000) {
+                                if _state.tokens[_state.pos].type == "RPAREN" { break; }
+                                _state = parse_expr(_state);
+                                args = append(args, _state.node);
+                                if _state.pos < len(_state.tokens) {
+                                    if _state.tokens[_state.pos].type == "COMMA" {
+                                        let _post_comma = _state.pos + 1;
+                                        if _post_comma > len(_state.tokens) { _post_comma = len(_state.tokens); }
+                                        _state = {
+                                            "tokens": _state.tokens, "pos": _post_comma, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                                            "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                                        };
+                                    }
+                                }
+                            }
+                            let _final_pos = _state.pos + 1;
+                            if _final_pos > len(_state.tokens) { _final_pos = len(_state.tokens); }
+                            _state = {
+                                "tokens": _state.tokens, "pos": _final_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                                "z_bc": _state.z_bc, "node": {"type": "Call", "func": name, "args": args}, 
+                                "result_reg": _state.result_reg, "stack": _state.stack
+                            };
+                        } else {
+                            if n.type == "LBRACK" {
+                                let o = _state.node; 
+                                let _post_lbrack = _state.pos + 1;
+                                if _post_lbrack > len(_state.tokens) { _post_lbrack = len(_state.tokens); }
+                                _state = {
+                                    "tokens": _state.tokens, "pos": _post_lbrack, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                                    "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                                };
+                                _state = parse_expr(_state); 
+                                let _final_pos = _state.pos + 1;
+                                if _final_pos > len(_state.tokens) { _final_pos = len(_state.tokens); }
+                                _state = {
+                                    "tokens": _state.tokens, "pos": _final_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                                    "z_bc": _state.z_bc, "node": {"type": "Index", "object": o, "index": _state.node}, 
+                                    "result_reg": _state.result_reg, "stack": _state.stack
+                                };
+                            } else {
+                                if n.type == "DOT" {
+                                    let o = _state.node; 
+                                    let _post_dot = _state.pos + 1;
+                                    let field = "";
+                                    if _post_dot < len(_state.tokens) { field = _state.tokens[_post_dot].val; }
+                                    let _final_pos = _state.pos + 2;
+                                    if _final_pos > len(_state.tokens) { _final_pos = len(_state.tokens); }
+                                    _state = {
+                                        "tokens": _state.tokens, "pos": _final_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                                        "z_bc": _state.z_bc, "node": {"type": "Field", "object": o, "field": field}, 
+                                        "result_reg": _state.result_reg, "stack": _state.stack
+                                    };
+                                } else { break; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return _state;
+}
+
+fn parse_expr(_state_in) -> object {
+    if _state_in == null { return null; }
+    let _state = parse_primary(_state_in);
+    let lhs = _state.node;
+    if _state.pos < len(_state.tokens) {
+        let op = _state.tokens[_state.pos];
+        let ot = null;
+        if op.type == "OP_ADD" { ot = "Add"; }
+        if op.type == "OP_SUB" { ot = "Sub"; }
+        if op.type == "OP_MUL" { ot = "Mul"; }
+        if op.type == "OP_DIV" { ot = "Div"; }
+        if op.type == "OP_EQ"  { ot = "Eq"; }
+        if op.type == "OP_NE"  { ot = "Ne"; }
+        if op.type == "OP_LT"  { ot = "Lt"; }
+        if op.type == "OP_GT"  { ot = "Gt"; }
+        if op.type == "OP_LE"  { ot = "Le"; }
+        if op.type == "OP_GE"  { ot = "Ge"; }
+        if op.type == "OP_AND" { ot = "And"; }
+        if op.type == "OP_OR"  { ot = "Or"; }
+        if op.type == "OP_ASSIGN" { ot = "Assign"; }
+        if ot != null {
+            let _next_pos = _state.pos + 1;
+            if _next_pos > len(_state.tokens) { _next_pos = len(_state.tokens); }
+            _state = {
+                "tokens": _state.tokens, "pos": _next_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+            };
+            _state = parse_expr(_state);
+            _state = {
+                "tokens": _state.tokens, "pos": _state.pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                "z_bc": _state.z_bc, "node": {"type": "BinOp", "op": ot, "lhs": lhs, "rhs": _state.node}, 
+                "result_reg": _state.result_reg, "stack": _state.stack
+            };
+        }
+    }
+    return _state;
+}
+
+fn parse_stmt(_state_in) -> object {
+    if _state_in == null { return null; }
+    if _state_in.pos >= len(_state_in.tokens) { return _state_in; }
+    let _state = {
+        "tokens": _state_in.tokens, "pos": _state_in.pos, "z_idx": _state_in.z_idx, "z_sym": _state_in.z_sym,
+        "z_bc": _state_in.z_bc, "node": _state_in.node, "result_reg": _state_in.result_reg, "stack": _state_in.stack
+    };
+    
+    let t = _state.tokens[_state.pos];
+    if t.type == "KW_LET" {
+        let name = "";
+        let _ps1 = _state.pos + 1;
+        if _ps1 < len(_state.tokens) { name = _state.tokens[_state.pos+1].val; }
+        let _next_pos = _state.pos + 3;
+        if _next_pos > len(_state.tokens) { _next_pos = len(_state.tokens); }
+        _state = {
+            "tokens": _state.tokens, "pos": _next_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+            "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+        };
+        _state = parse_expr(_state);
+        let _final_pos = _state.pos + 1;
+        if _final_pos > len(_state.tokens) { _final_pos = len(_state.tokens); }
+        _state = {
+            "tokens": _state.tokens, "pos": _final_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+            "z_bc": _state.z_bc, "node": {"type": "Let", "name": name, "value": _state.node}, 
+            "result_reg": _state.result_reg, "stack": _state.stack
+        };
+    } else {
+        if t.type == "KW_RETURN" {
+            let _next_pos = _state.pos + 1;
+            if _next_pos > len(_state.tokens) { _next_pos = len(_state.tokens); }
+            _state = {
+                "tokens": _state.tokens, "pos": _next_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+            };
+            _state = parse_expr(_state);
+            let _final_pos = _state.pos + 1;
+            if _final_pos > len(_state.tokens) { _final_pos = len(_state.tokens); }
+            _state = {
+                "tokens": _state.tokens, "pos": _final_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                "z_bc": _state.z_bc, "node": {"type": "Return", "value": _state.node}, 
+                "result_reg": _state.result_reg, "stack": _state.stack
+            };
+        } else {
+            if t.type == "KW_IF" {
+                let _next_pos = _state.pos + 1;
+                if _next_pos > len(_state.tokens) { _next_pos = len(_state.tokens); }
+                _state = {
+                    "tokens": _state.tokens, "pos": _next_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                    "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                };
+                _state = parse_expr(_state);
+                let cond = _state.node; 
+                let _body_pos = _state.pos + 1;
+                if _body_pos > len(_state.tokens) { _body_pos = len(_state.tokens); }
+                _state = {
+                    "tokens": _state.tokens, "pos": _body_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                    "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                };
+                let then = [];
+                loop (_state.pos < len(_state.tokens), 100000) {
+                    if _state.tokens[_state.pos].type == "RBRACE" { break; }
+                    _state = parse_stmt(_state);
+                    then = append(then, _state.node);
+                }
+                let _post_then_pos = _state.pos + 1;
+                if _post_then_pos > len(_state.tokens) { _post_then_pos = len(_state.tokens); }
+                _state = {
+                    "tokens": _state.tokens, "pos": _post_then_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                    "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                };
+                let els = [];
+                if _state.pos < len(_state.tokens) {
+                    if _state.tokens[_state.pos].type == "KW_ELSE" {
+                        let _else_start = _state.pos + 2;
+                        if _else_start > len(_state.tokens) { _else_start = len(_state.tokens); }
+                        _state = {
+                            "tokens": _state.tokens, "pos": _else_start, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                            "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                        };
+                        loop (_state.pos < len(_state.tokens), 100000) {
+                            if _state.tokens[_state.pos].type == "RBRACE" { break; }
+                            _state = parse_stmt(_state);
+                            els = append(els, _state.node);
+                        }
+                        let _final_pos = _state.pos + 1;
+                        if _final_pos > len(_state.tokens) { _final_pos = len(_state.tokens); }
+                        _state = {
+                            "tokens": _state.tokens, "pos": _final_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                            "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                        };
+                    }
+                }
+                _state = {
+                    "tokens": _state.tokens, "pos": _state.pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                    "z_bc": _state.z_bc, "node": {"type": "If", "cond": cond, "then": then, "else": els}, 
+                    "result_reg": _state.result_reg, "stack": _state.stack
+                };
+            } else {
+                if t.type == "KW_LOOP" {
+                    let _next_pos = _state.pos + 2; 
+                    if _next_pos > len(_state.tokens) { _next_pos = len(_state.tokens); }
+                    _state = {
+                        "tokens": _state.tokens, "pos": _next_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                        "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                    };
+                    _state = parse_expr(_state);
+                    let cond = _state.node; 
+                    let _post_cond = _state.pos + 1;
+                    if _post_cond > len(_state.tokens) { _post_cond = len(_state.tokens); }
+                    let mx = 0;
+                    if _post_cond < len(_state.tokens) { mx = _state.tokens[_post_cond].val; }
+                    let _body_start = _post_cond + 3;
+                    if _body_start > len(_state.tokens) { _body_start = len(_state.tokens); }
+                    _state = {
+                        "tokens": _state.tokens, "pos": _body_start, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                        "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                    };
+                    let bdy = [];
+                    loop (_state.pos < len(_state.tokens), 100000) {
+                        if _state.tokens[_state.pos].type == "RBRACE" { break; }
+                        _state = parse_stmt(_state);
+                        bdy = append(bdy, _state.node);
+                    }
+                    let _final_pos = _state.pos + 1;
+                    if _final_pos > len(_state.tokens) { _final_pos = len(_state.tokens); }
+                    _state = {
+                        "tokens": _state.tokens, "pos": _final_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                        "z_bc": _state.z_bc, "node": {"type": "Loop", "cond": cond, "body": bdy, "max": mx}, 
+                        "result_reg": _state.result_reg, "stack": _state.stack
+                    };
+                } else {
+                    if t.type == "KW_BREAK" {
+                        let _next_pos = _state.pos + 2; 
+                        if _next_pos > len(_state.tokens) { _next_pos = len(_state.tokens); }
+                        _state = {
+                            "tokens": _state.tokens, "pos": _next_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                            "z_bc": _state.z_bc, "node": {"type": "Break"}, 
+                            "result_reg": _state.result_reg, "stack": _state.stack
+                        };
+                    } else {
+                        if t.type == "KW_CONT" {
+                            let _next_pos = _state.pos + 2; 
+                            if _next_pos > len(_state.tokens) { _next_pos = len(_state.tokens); }
+                            _state = {
+                                "tokens": _state.tokens, "pos": _next_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                                "z_bc": _state.z_bc, "node": {"type": "Continue"}, 
+                                "result_reg": _state.result_reg, "stack": _state.stack
+                            };
+                        } else {
+                            _state = parse_expr(_state);
+                            let n = _state.node;
+                            let _final_node = n;
+                            if n.type == "BinOp" {
+                                if n.op == "Assign" {
+                                    _final_node = {"type": "Assign", "lhs": n.lhs, "rhs": n.rhs};
+                                }
+                            }
+                            let _final_pos = _state.pos + 1;
+                            if _final_pos > len(_state.tokens) { _final_pos = len(_state.tokens); }
+                            _state = {
+                                "tokens": _state.tokens, "pos": _final_pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                                "z_bc": _state.z_bc, "node": _final_node, 
+                                "result_reg": _state.result_reg, "stack": _state.stack
+                            };
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return _state;
+}
+fn compile_expr(_context_in, _expr) -> object {
+    if _context_in.z_bc == null {
+        print("FATAL: compile_expr ENTRY corrupted context! keys:", _context_in);
+    }
+    let _context = {
+        "tokens": _context_in.tokens,
+        "pos": _context_in.pos,
+        "z_idx": _context_in.z_idx,
+        "z_sym": _context_in.z_sym,
+        "z_bc": _context_in.z_bc,
+        "node": _context_in.node,
+        "result_reg": _context_in.result_reg,
+        "stack": _context_in.stack
+    };
+    let _t = _expr.type;
+    if _t == "Literal" {
+        let _r = _context.z_idx;
+        let _v = _expr.val;
+        if _expr.lit_type == "LIT_BOOL" {
+            if _v == "true" { _v = true; } else { _v = false; }
+        } else {
+            if _expr.lit_type == "LIT_NULL" { _v = null; }
+            else {
+                if _expr.lit_type == "LIT_INT" { _v = parse_int(_v); }
+            }
+        }
+        _context = {
+            "tokens": _context.tokens, "pos": _context.pos, "z_idx": _r + 1, "z_sym": _context.z_sym,
+            "z_bc": append(_context.z_bc, {"op": "Constant", "out": _r, "val": _v}),
+            "node": _context.node, "result_reg": _r, "stack": _context.stack
+        };
+    } else {
+        if _t == "Ident" {
+            let _r = 0;
+            if has_key(_context.z_sym, _expr.name) { _r = _context.z_sym[_expr.name]; }
+            _context = {
+                "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx, "z_sym": _context.z_sym,
+                "z_bc": _context.z_bc, "node": _context.node, "result_reg": _r, "stack": _context.stack
+            };
+        } else {
+            if _t == "BinOp" {
+                _context = compile_expr(_context, _expr.lhs);
+                _context = {
+                    "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx, "z_sym": _context.z_sym,
+                    "z_bc": _context.z_bc, "node": _context.node, "result_reg": _context.result_reg,
+                    "stack": append(_context.stack, _context.result_reg)
+                };
+                _context = compile_expr(_context, _expr.rhs);
+                _context = {
+                    "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx + 1, "z_sym": _context.z_sym,
+                    "z_bc": append(_context.z_bc, {
+                        "op": _expr.op, "out": _context.z_idx,
+                        "lhs": _context.stack[len(_context.stack)-1], "rhs": _context.result_reg
+                    }),
+                    "node": _context.node, "result_reg": _context.z_idx,
+                    "stack": slice(_context.stack, 0, len(_context.stack) - 1)
+                };
+            } else {
+                if _t == "Call" {
+                    let _j = 0;
+                    loop (_j < len(_expr.args), 100000) {
+                        _context = compile_expr(_context, _expr.args[_j]);
+                        _context = {
+                            "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx, "z_sym": _context.z_sym,
+                            "z_bc": _context.z_bc, "node": _context.node, "result_reg": _context.result_reg,
+                            "stack": append(_context.stack, _context.result_reg)
+                        };
+                        _j = _j + 1;
+                    }
+                    _context = {
+                        "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx + 1, "z_sym": _context.z_sym,
+                        "z_bc": append(_context.z_bc, {"op": "Call", "out": _context.z_idx, "func": _expr.func, "args": slice(_context.stack, len(_context.stack) - len(_expr.args), len(_expr.args))}),
+                        "node": _context.node, "result_reg": _context.z_idx,
+                        "stack": slice(_context.stack, 0, len(_context.stack) - len(_expr.args))
+                    };
+                } else {
+                    if _t == "Index" {
+                        _context = compile_expr(_context, _expr.object);
+                        _context = {
+                            "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx, "z_sym": _context.z_sym,
+                            "z_bc": _context.z_bc, "node": _context.node, "result_reg": _context.result_reg,
+                            "stack": append(_context.stack, _context.result_reg)
+                        };
+                        _context = compile_expr(_context, _expr.index);
+                        _context = {
+                            "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx + 1, "z_sym": _context.z_sym,
+                            "z_bc": append(_context.z_bc, {"op": "Index", "out": _context.z_idx, "container": _context.stack[len(_context.stack)-1], "index": _context.result_reg}),
+                            "node": _context.node, "result_reg": _context.z_idx,
+                            "stack": slice(_context.stack, 0, len(_context.stack)-1)
+                        };
+                    } else {
+                        if _t == "Field" {
+                            _context = compile_expr(_context, _expr.object);
+                            _context = {
+                                "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx + 2, "z_sym": _context.z_sym,
+                                "z_bc": append(
+                                    append(_context.z_bc, {"op": "Constant", "out": _context.z_idx, "val": _expr.field}),
+                                    {"op": "Index", "out": _context.z_idx + 1, "container": _context.result_reg, "index": _context.z_idx}
+                                ),
+                                "node": _context.node, "result_reg": _context.z_idx + 1, "stack": _context.stack
+                            };
+                        } else {
+                            if _t == "Array" {
+                                let _j = 0;
+                                loop (_j < len(_expr.elements), 100000) {
+                                    _context = compile_expr(_context, _expr.elements[_j]);
+                                    _context = {
+                                        "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx, "z_sym": _context.z_sym,
+                                        "z_bc": _context.z_bc, "node": _context.node, "result_reg": _context.result_reg,
+                                        "stack": append(_context.stack, _context.result_reg)
+                                    };
+                                    _j = _j + 1;
+                                }
+                                _context = {
+                                    "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx + 1, "z_sym": _context.z_sym,
+                                    "z_bc": append(_context.z_bc, {"op": "ArrayCreate", "out": _context.z_idx, "elements": slice(_context.stack, len(_context.stack) - len(_expr.elements), len(_expr.elements))}),
+                                    "node": _context.node, "result_reg": _context.z_idx,
+                                    "stack": slice(_context.stack, 0, len(_context.stack) - len(_expr.elements))
+                                };
+                            } else {
+                                if _t == "Object" {
+                                    let _j = 0;
+                                    loop (_j < len(_expr.values), 100000) {
+                                        _context = compile_expr(_context, _expr.values[_j]);
+                                        _context = {
+                                            "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx, "z_sym": _context.z_sym,
+                                            "z_bc": _context.z_bc, "node": _context.node, "result_reg": _context.result_reg,
+                                            "stack": append(_context.stack, _context.result_reg)
+                                        };
+                                        _j = _j + 1;
+                                    }
+                                    _context = {
+                                        "tokens": _context.tokens, "pos": _context.pos, "z_idx": _context.z_idx + 1, "z_sym": _context.z_sym,
+                                        "z_bc": append(_context.z_bc, {"op": "ObjectCreate", "out": _context.z_idx, "keys": _expr.keys, "values": slice(_context.stack, len(_context.stack) - len(_expr.values), len(_expr.values))}),
+                                        "node": _context.node, "result_reg": _context.z_idx,
+                                        "stack": slice(_context.stack, 0, len(_context.stack) - len(_expr.values))
+                                    };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return _context;
+}
+fn compile_stmt(_state_in, _stmt) -> object {
+    if _state_in == null { return null; }
+    let _state = {
+        "tokens": _state_in.tokens, "pos": _state_in.pos, "z_idx": _state_in.z_idx, "z_sym": _state_in.z_sym,
+        "z_bc": _state_in.z_bc, "node": _state_in.node, "result_reg": _state_in.result_reg, "stack": _state_in.stack
+    };
+    if _stmt == null { return _state; }
+    
+    let _t = _stmt.type;
+    if _t == "Let" {
+        _state = compile_expr(_state, _stmt.value);
+        let _m = _state.z_sym; _m[_stmt.name] = _state.result_reg;
+        _state = {
+            "tokens": _state.tokens, "pos": _state.pos, "z_idx": _state.z_idx, "z_sym": _m,
+            "z_bc": _state.z_bc, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+        };
+    } else {
+        if _t == "Assign" {
+            _state = compile_expr(_state, _stmt.rhs); 
+            let _v = _state.result_reg;
+            
+            if _stmt.lhs.type == "Ident" {
+                let _out_reg = 0;
+                if has_key(_state.z_sym, _stmt.lhs.name) { _out_reg = _state.z_sym[_stmt.lhs.name]; }
+                _state = {
+                    "tokens": _state.tokens, "pos": _state.pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                    "z_bc": append(_state.z_bc, {"op": "Move", "out": _out_reg, "src": _v}),
+                    "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                };
+            } else {
+                if _stmt.lhs.type == "Index" {
+                    _state = compile_expr(_state, _stmt.lhs.object); 
+                    let _o = _state.result_reg;
+                    _state = compile_expr(_state, _stmt.lhs.index);
+                    _state = {
+                        "tokens": _state.tokens, "pos": _state.pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                        "z_bc": append(_state.z_bc, {"op": "Store", "container": _o, "index": _state.result_reg, "value": _v}),
+                        "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                    };
+                } else {
+                    if _stmt.lhs.type == "Field" {
+                        _state = compile_expr(_state, _stmt.lhs.object); 
+                        let _o = _state.result_reg;
+                        let _k = _state.z_idx;
+                        _state = {
+                            "tokens": _state.tokens, "pos": _state.pos, "z_idx": _k + 1, "z_sym": _state.z_sym,
+                            "z_bc": append(
+                                append(_state.z_bc, {"op": "Constant", "out": _k, "val": _stmt.lhs.field}),
+                                {"op": "Store", "container": _o, "index": _k, "value": _v}
+                            ),
+                            "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                        };
+                    }
+                }
+            }
+        } else {
+            if _t == "Return" {
+                _state = compile_expr(_state, _stmt.value);
+                _state = {
+                    "tokens": _state.tokens, "pos": _state.pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                    "z_bc": append(_state.z_bc, {"op": "Return", "val": _state.result_reg}),
+                    "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                };
+            } else {
+                if _t == "If" {
+                    _state = compile_expr(_state, _stmt.cond);
+                    let _c = _state.result_reg;
+                    let _if_idx = len(_state.z_bc);
+                    _state = {
+                        "tokens": _state.tokens, "pos": _state.pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                        "z_bc": append(_state.z_bc, {"op": "If", "cond": _c, "then": _if_idx + 1, "else_target": 0}),
+                        "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                    };
+                    let _j = 0; loop (_j < len(_stmt.then), 100000) {
+                        _state = compile_stmt(_state, _stmt.then[_j]);
+                        _j = _j + 1;
+                    }
+                    let _jump_idx = len(_state.z_bc);
+                    _state = {
+                        "tokens": _state.tokens, "pos": _state.pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                        "z_bc": append(_state.z_bc, {"op": "Jump", "target": 0}),
+                        "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                    };
+                    let _else_start = len(_state.z_bc);
+                    let _else_stmts = _stmt["else"];
+                    let _k = 0; loop (_k < len(_else_stmts), 100000) {
+                        _state = compile_stmt(_state, _else_stmts[_k]);
+                        _k = _k + 1;
+                    }
+                    let _end_idx = len(_state.z_bc);
+                    let _is = _state.z_bc;
+                    let _if_node = _is[_if_idx];
+                    let _new_if = {"op": "If", "cond": _if_node.cond, "then": _if_node.then, "else_target": _else_start};
+                    _is[_if_idx] = _new_if;
+                    let _new_jump = {"op": "Jump", "target": _end_idx};
+                    _is[_jump_idx] = _new_jump;
+                    _state = {
+                        "tokens": _state.tokens, "pos": _state.pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                        "z_bc": _is, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                    };
+                } else {
+                    if _t == "Loop" {
+                        let _start = len(_state.z_bc); 
+                        _state = compile_expr(_state, _stmt.cond); 
+                        let _c = _state.result_reg;
+                        let _loop_idx = len(_state.z_bc);
+                        let _mx = parse_int(_stmt.max);
+                        _state = {
+                            "tokens": _state.tokens, "pos": _state.pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                            "z_bc": append(_state.z_bc, {"op": "Loop", "cond": _c, "body": _loop_idx + 1, "exit": 0, "max_iter": _mx}),
+                            "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                        };
+                        let _j = 0; loop (_j < len(_stmt.body), 100000) { 
+                            _state = compile_stmt(_state, _stmt.body[_j]); 
+                            _j = _j + 1; 
+                        }
+                        _state = {
+                            "tokens": _state.tokens, "pos": _state.pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                            "z_bc": append(_state.z_bc, {"op": "Jump", "target": _start}),
+                            "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                        };
+                        let _is = _state.z_bc; 
+                        let _ln = _is[_loop_idx]; 
+                        let _new_ln = {"op": "Loop", "cond": _ln.cond, "body": _ln.body, "exit": len(_is), "max_iter": _ln.max_iter};
+                        _is[_loop_idx] = _new_ln;
+                        _state = {
+                            "tokens": _state.tokens, "pos": _state.pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                            "z_bc": _is, "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                        };
+                    } else {
+                        if _t == "Break" {
+                            _state = {
+                                "tokens": _state.tokens, "pos": _state.pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                                "z_bc": append(_state.z_bc, {"op": "Break"}),
+                                "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                            };
+                        } else {
+                            if _t == "Continue" {
+                                _state = {
+                                    "tokens": _state.tokens, "pos": _state.pos, "z_idx": _state.z_idx, "z_sym": _state.z_sym,
+                                    "z_bc": append(_state.z_bc, {"op": "Continue"}),
+                                    "node": _state.node, "result_reg": _state.result_reg, "stack": _state.stack
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return _state;
+}
+
+fn main(source) -> object {
+    let tokens = native_tokenize(source);
+    let ir = compile(tokens);
+    return ir;
+}
+
+fn compile(_tokens) -> object {
+    let _global_state = {
+        "tokens": _tokens, "pos": 0, "z_idx": 0, "z_sym": {}, "z_bc": [],
+        "node": null, "result_reg": 0, "stack": []
+    };
+    let _lt = len(_tokens);
+    loop (_global_state.pos < _lt, 1000000) {
+        if _global_state.pos >= _lt { break; }
+        let _t = _tokens[_global_state.pos];
+        if _t.type == "KW_FN" {
+            let _name = "";
+            let _gsp1 = _global_state.pos + 1;
+            if _gsp1 < _lt { _name = _tokens[_global_state.pos+1].val; }
+            _global_state.pos = _global_state.pos + 3; 
+            if _global_state.pos > _lt { _global_state.pos = _lt; }
+            let _params = [];
+            loop (_global_state.pos < _lt, 1000000) {
+                if _global_state.tokens[_global_state.pos].type == "RPAREN" { break; }
+                _params = append(_params, _global_state.tokens[_global_state.pos].val);
+                _global_state.pos = _global_state.pos + 1;
+                if _global_state.pos < _lt {
+                    if _global_state.tokens[_global_state.pos].type == "COMMA" { _global_state.pos = _global_state.pos + 1; }
+                }
+            }
+            _global_state.pos = _global_state.pos + 1; // Skip RPAREN
+            if _global_state.pos < _lt {
+                if _global_state.tokens[_global_state.pos].type == "OP_ARROW" {
+                    _global_state.pos = _global_state.pos + 2; // Skip -> and type
+                }
+            }
+            if _global_state.pos > _lt { _global_state.pos = _lt; }
+            
+            // Should be at LBRACE now
+            _global_state.pos = _global_state.pos + 1; 
+            let _old_next = _global_state.z_idx;
+            let _old_map = _global_state.z_sym;
+            _global_state.z_idx = 0;
+            _global_state.z_sym = {};
+            let _param_regs = [];
+            let _j = 0;
+            loop (_j < len(_params), 1000000) {
+                let _r = _global_state.z_idx;
+                let _m = _global_state.z_sym; _m[_params[_j]] = _r; _global_state.z_sym = _m;
+                _global_state.z_idx = _r + 1;
+                _param_regs = append(_param_regs, _r);
+                _j = _j + 1;
+            }
+            let _start_pc = len(_global_state.z_bc);
+            loop (_global_state.pos < _lt, 10000000) {
+                if _global_state.tokens[_global_state.pos].type == "RBRACE" { break; }
+                _global_state = parse_stmt(_global_state);
+                if _global_state != null { _global_state = compile_stmt(_global_state, _global_state.node); }
+                if _global_state == null { break; }
+            }
+            if _global_state == null { break; }
+            let _after_rbrace = _global_state.pos + 1;
+            if _after_rbrace > _lt { _after_rbrace = _lt; }
+            let _new_bc = append(_global_state.z_bc, {"op": "FuncDef", "name": _name, "params": _param_regs, "body": _start_pc});
+            _global_state = {
+                "tokens": _global_state.tokens, "pos": _after_rbrace, "z_idx": _old_next, "z_sym": _old_map,
+                "z_bc": _new_bc, "node": _global_state.node, "result_reg": _global_state.result_reg, "stack": _global_state.stack
+            };
+        } else {
+            let _next_pos = _global_state.pos + 1;
+            if _next_pos > _lt { _next_pos = _lt; }
+            _global_state = {
+                "tokens": _global_state.tokens, "pos": _next_pos, "z_idx": _global_state.z_idx, "z_sym": _global_state.z_sym,
+                "z_bc": _global_state.z_bc, "node": _global_state.node, "result_reg": _global_state.result_reg, "stack": _global_state.stack
+            };
+        }
+    }
+    return _global_state.z_bc;
+}

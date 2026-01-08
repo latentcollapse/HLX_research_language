@@ -243,6 +243,77 @@ impl Value {
             }),
         }
     }
+
+    // === JSON Conversion ===
+
+    pub fn from_json(sjv: serde_json::Value) -> Result<Self> {
+        match sjv {
+            serde_json::Value::Null => Ok(Value::Null),
+            serde_json::Value::Bool(b) => Ok(Value::Boolean(b)),
+            serde_json::Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Ok(Value::Integer(i))
+                } else if let Some(f) = n.as_f64() {
+                    Value::float(f)
+                } else {
+                    Err(HlxError::ValidationFail { message: "Invalid JSON number".to_string() })
+                }
+            }
+            serde_json::Value::String(s) => Ok(Value::String(s)),
+            serde_json::Value::Array(arr) => {
+                let mut vec = Vector::new();
+                for v in arr {
+                    vec.push_back(Value::from_json(v)?);
+                }
+                Ok(Value::Array(vec))
+            }
+            serde_json::Value::Object(obj) => {
+                let mut map = OrdMap::new();
+                for (k, v) in obj {
+                    map.insert(k, Value::from_json(v)?);
+                }
+                Ok(Value::Object(map))
+            }
+        }
+    }
+
+    pub fn to_json(&self) -> Result<serde_json::Value> {
+        match self {
+            Value::Null => Ok(serde_json::Value::Null),
+            Value::Boolean(b) => Ok(serde_json::Value::Bool(*b)),
+            Value::Integer(i) => Ok(serde_json::Value::Number((*i).into())),
+            Value::Float(f) => {
+                let n = serde_json::Number::from_f64(*f).ok_or_else(|| HlxError::ValidationFail { 
+                    message: "Invalid float for JSON".to_string() 
+                })?;
+                Ok(serde_json::Value::Number(n))
+            }
+            Value::String(s) => Ok(serde_json::Value::String(s.clone())),
+            Value::Array(arr) => {
+                let mut vec = Vec::new();
+                for val in arr {
+                    vec.push(val.to_json()?);
+                }
+                Ok(serde_json::Value::Array(vec))
+            }
+            Value::Object(obj) => {
+                let mut map = serde_json::Map::new();
+                for (k, val) in obj {
+                    map.insert(k.clone(), val.to_json()?);
+                }
+                Ok(serde_json::Value::Object(map))
+            }
+            Value::Contract(c) => {
+                let mut map = serde_json::Map::new();
+                map.insert("__contract_id".to_string(), serde_json::Value::Number((c.id as i64).into()));
+                for (idx, val) in &c.fields {
+                    map.insert(format!("field_{}", idx), val.to_json()?);
+                }
+                Ok(serde_json::Value::Object(map))
+            }
+            Value::Handle(h) => Ok(serde_json::Value::String(format!("hlx://handle/{}", h))),
+        }
+    }
 }
 
 impl Contract {

@@ -1,0 +1,18 @@
+program contract_test {
+    fn main() {
+        // Type @ below and see autocomplete
+
+
+        // Hover these to see docs:
+        let x = @14 { @0: 42 };           // Int
+        let s = @16 { @0: "hello" };      // String
+        let arr = @18 { @0: [1,2,3] };    // Array
+
+        // Math operations
+        let sum = @200 { lhs: 5, rhs: 10 };  // Add
+        let prod = @202 { lhs: 3, rhs: 4 };  // Mul
+
+        // GPU operations (hover to see performance notes)
+        let result = @906 { A: matrix_a, B: matrix_b };  // GEMM
+    }
+}

@@ -1,0 +1,17 @@
+// Stress test: 10 statements in one function
+program stress_test {
+    fn main() {
+        let result = 0;
+        result = (result + 1);
+        result = (result + 2);
+        result = (result + 3);
+        result = (result + 4);
+        result = (result + 5);
+        result = (result + 6);
+        result = (result + 7);
+        result = (result + 8);
+        result = (result + 9);
+        result = (result + 10);
+        return result;
+    }
+}

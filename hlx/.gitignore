@@ -32,10 +32,22 @@ benchmarks/results/*.json
 *.swp
 *~
 
+# Performance and Debugging
+perf.data
+perf.data.old
+*.lcb
+*.lcc
+reactor_dump.json
+
 # Node.js / VS Code Extension
 node_modules/
 vscode-hlx/node_modules/
 vscode-hlx/out/
+
+# Personal / Documentation
+_docs/*.png
+screenshots for gemini/
+_audits/
 
 # OS
 .DS_Store

@@ -1,0 +1,57 @@
+// Stress test: 50 statements in one function
+program stress_test {
+    fn main() {
+        let result = 0;
+        result = (result + 1);
+        result = (result + 2);
+        result = (result + 3);
+        result = (result + 4);
+        result = (result + 5);
+        result = (result + 6);
+        result = (result + 7);
+        result = (result + 8);
+        result = (result + 9);
+        result = (result + 10);
+        result = (result + 11);
+        result = (result + 12);
+        result = (result + 13);
+        result = (result + 14);
+        result = (result + 15);
+        result = (result + 16);
+        result = (result + 17);
+        result = (result + 18);
+        result = (result + 19);
+        result = (result + 20);
+        result = (result + 21);
+        result = (result + 22);
+        result = (result + 23);
+        result = (result + 24);
+        result = (result + 25);
+        result = (result + 26);
+        result = (result + 27);
+        result = (result + 28);
+        result = (result + 29);
+        result = (result + 30);
+        result = (result + 31);
+        result = (result + 32);
+        result = (result + 33);
+        result = (result + 34);
+        result = (result + 35);
+        result = (result + 36);
+        result = (result + 37);
+        result = (result + 38);
+        result = (result + 39);
+        result = (result + 40);
+        result = (result + 41);
+        result = (result + 42);
+        result = (result + 43);
+        result = (result + 44);
+        result = (result + 45);
+        result = (result + 46);
+        result = (result + 47);
+        result = (result + 48);
+        result = (result + 49);
+        result = (result + 50);
+        return result;
+    }
+}

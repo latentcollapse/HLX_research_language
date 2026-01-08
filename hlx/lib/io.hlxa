@@ -31,4 +31,14 @@ program std_io {
     fn file_tell(handle) {
         return ftell(handle);
     }
+
+    // Capture full system state and save to JSON
+    fn save_snapshot(path) {
+        let handle = snapshot();
+        return write_snapshot(path, handle);
+    }
+
+    fn read_text_file(path) {
+        return read_file(path);
+    }
 }

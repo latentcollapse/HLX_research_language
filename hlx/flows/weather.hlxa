@@ -1,0 +1,29 @@
+program weather {
+    fn main(input_str) {
+        let input = json_parse(input_str);
+        let city = input.city;
+        
+        print("Fetching weather for:");
+        print(city);
+        
+        let url = "https://wttr.in/" + city + "?format=j1";
+        let resp = http_request("GET", url, null, {});
+        
+        if (resp.status == 200) {
+            let data = json_parse(resp.body);
+            let current = data.current_condition[0];
+            
+            let result = {
+                "city": city,
+                "temp_C": current.temp_C,
+                "weather": current.weatherDesc[0].value,
+                "humidity": current.humidity,
+                "processed_by": "HLX-Flow"
+            };
+            
+            return result;
+        } else {
+            return { "error": "Failed to fetch weather", "status": resp.status };
+        }
+    }
+}

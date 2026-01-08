@@ -127,6 +127,12 @@ enum Commands {
         output: PathBuf,
     },
 
+    /// Replay a crash dump (snapshot)
+    Replay {
+        /// Path to the snapshot JSON file
+        input: PathBuf,
+    },
+
     /// Run smoke tests
     Test,
 }
@@ -162,6 +168,9 @@ fn main() -> Result<()> {
         }
         Commands::BuildCrate { input, output } => {
             build_crate(&input, &output)?;
+        }
+        Commands::Replay { input } => {
+            replay(&input)?;
         }
         Commands::Test => {
             run_tests()?;
@@ -574,6 +583,54 @@ fn value_to_json(value: &Value) -> serde_json::Value {
                     .collect::<serde_json::Map<String, serde_json::Value>>()
             })
         }
-        Value::Handle(h) => serde_json::Value::String(h.clone()),
-    }
-}
+                Value::Handle(h) => serde_json::Value::String(h.clone()),
+            }
+        }
+        
+        fn replay(input: &PathBuf) -> Result<()> {
+            let content = fs::read_to_string(input).context("Failed to read snapshot file")?;
+            let snap: serde_json::Value = serde_json::from_str(&content).context("Invalid snapshot JSON")?;
+        
+            println!("=== HLX FLIGHT RECORDER: POST-MORTEM INVESTIGATION ===");
+            println!("File: {}", input.display());
+            if let Some(ts) = snap.get("timestamp").and_then(|v| v.as_i64()) {
+                println!("Timestamp: {}", ts);
+            }
+            println!("Instruction Pointer (PC): {}", snap.get("pc").unwrap_or(&serde_json::json!(0)));
+            println!("------------------------------------------------------");
+        
+            if let Some(stack) = snap.get("call_stack").and_then(|v| v.as_array()) {
+                println!("Call Stack ({} frames):", stack.len());
+                for (i, frame) in stack.iter().enumerate().rev() {
+                    println!("\n[Frame {}]", i);
+                    if let Some(ret) = frame.get("return_pc") {
+                        if ret.is_null() {
+                            println!("  Return PC: <ENTRY>");
+                        } else {
+                            println!("  Return PC: {}", ret);
+                        }
+                    }
+                    if let Some(out) = frame.get("out_reg") {
+                        println!("  Output Reg: r{}", out);
+                    }
+                    if let Some(regs) = frame.get("registers").and_then(|v| v.as_object()) {
+                        println!("  Registers:");
+                        let mut keys: Vec<_> = regs.keys().collect();
+                        keys.sort_by_key(|k| {
+                            if k.starts_with('r') {
+                                k[1..].parse::<u32>().unwrap_or(0)
+                            } else {
+                                0
+                            }
+                        });
+                        for k in keys {
+                            println!("    {:4}: {}", k, regs.get(k).unwrap());
+                        }
+                    }
+                }
+            }
+        
+            println!("\n=== END OF INVESTIGATION ===");
+            Ok(())
+        }
+        

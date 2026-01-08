@@ -7,9 +7,10 @@ license.workspace = true
 description = "Core types and IR for the HLX deterministic ML substrate"
 
 [dependencies]
-serde.workspace = true
-bincode.workspace = true
-blake3.workspace = true
+serde = { workspace = true, features = ["derive", "rc"] }
+serde_json = { workspace = true }
+bincode = { workspace = true }
+blake3 = { workspace = true }
 thiserror.workspace = true
 hex.workspace = true
 im = { version = "15.1", features = ["serde"] }

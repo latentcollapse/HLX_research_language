@@ -1,0 +1,754 @@
+{
+  "version": "1.1.1",
+  "last_updated": "2026-01-08",
+  "total_contracts": 47,
+  "contract_id_space": "0-∞ (no artificial limits)",
+  "tier_system": {
+    "T0": "0-99: Core Language (types, operators)",
+    "T1": "100-199: AST/Compiler (blocks, expressions)",
+    "T2": "200-799: Reserved for future expansion",
+    "T3": "800-899: Parser/Binary",
+    "T4": "900-999: GPU/Vulkan",
+    "T5+": "1000+: Application-specific, user-defined"
+  },
+  "contracts": {
+    "14": {
+      "name": "Int",
+      "tier": "T0-Core",
+      "signature": "@14 { @0: i64 }",
+      "description": "Integer literal value",
+      "fields": {
+        "@0": {
+          "type": "i64",
+          "description": "The integer value",
+          "required": true
+        }
+      },
+      "example": "@14 { @0: 42 }",
+      "usage": "let x = @14 { @0: 42 };",
+      "related": ["15", "16"],
+      "status": "stable"
+    },
+    "15": {
+      "name": "Float",
+      "tier": "T0-Core",
+      "signature": "@15 { @0: f64 }",
+      "description": "Floating-point literal value",
+      "fields": {
+        "@0": {
+          "type": "f64",
+          "description": "The floating-point value",
+          "required": true
+        }
+      },
+      "example": "@15 { @0: 3.14159 }",
+      "usage": "let pi = @15 { @0: 3.14159 };",
+      "related": ["14"],
+      "status": "stable"
+    },
+    "16": {
+      "name": "String",
+      "tier": "T0-Core",
+      "signature": "@16 { @0: String }",
+      "description": "String literal value",
+      "fields": {
+        "@0": {
+          "type": "String",
+          "description": "The string content",
+          "required": true
+        }
+      },
+      "example": "@16 { @0: \"Hello, World!\" }",
+      "usage": "let greeting = @16 { @0: \"Hello, World!\" };",
+      "related": ["14", "15"],
+      "status": "stable"
+    },
+    "17": {
+      "name": "Bytes",
+      "tier": "T0-Core",
+      "signature": "@17 { @0: bytes }",
+      "description": "Binary data literal",
+      "fields": {
+        "@0": {
+          "type": "bytes",
+          "description": "Raw byte array",
+          "required": true
+        }
+      },
+      "example": "@17 { @0: [0x48, 0x65, 0x6C, 0x6C, 0x6F] }",
+      "usage": "let data = @17 { @0: [0xFF, 0xEE] };",
+      "related": ["16", "18"],
+      "status": "stable"
+    },
+    "18": {
+      "name": "Array",
+      "tier": "T0-Core",
+      "signature": "@18 { @0: [Value] }",
+      "description": "Array/list literal",
+      "fields": {
+        "@0": {
+          "type": "[Value]",
+          "description": "Array of any values",
+          "required": true
+        }
+      },
+      "example": "@18 { @0: [1, 2, 3] }",
+      "usage": "let numbers = @18 { @0: [1, 2, 3, 4, 5] };",
+      "related": ["19"],
+      "status": "stable"
+    },
+    "19": {
+      "name": "Object",
+      "tier": "T0-Core",
+      "signature": "@19 { @0: {String: Value} }",
+      "description": "Object/dictionary literal",
+      "fields": {
+        "@0": {
+          "type": "{String: Value}",
+          "description": "Key-value map",
+          "required": true
+        }
+      },
+      "example": "@19 { @0: {\"name\": \"Alice\", \"age\": 30} }",
+      "usage": "let person = @19 { @0: {\"name\": \"Alice\", \"age\": 30} };",
+      "related": ["18"],
+      "status": "stable"
+    },
+    "20": {
+      "name": "Handle",
+      "tier": "T0-Core",
+      "signature": "@20 { @0: String }",
+      "description": "Resource handle reference (e.g., &h_shader_123)",
+      "fields": {
+        "@0": {
+          "type": "String",
+          "description": "Handle identifier (starts with &h_)",
+          "required": true
+        }
+      },
+      "example": "@20 { @0: \"&h_shader_abc123\" }",
+      "usage": "let shader_ref = @20 { @0: \"&h_shader_abc123\" };",
+      "related": ["900", "901"],
+      "status": "stable"
+    },
+    "21": {
+      "name": "Null",
+      "tier": "T0-Core",
+      "signature": "@21 { }",
+      "description": "Null/nil value",
+      "fields": {},
+      "example": "@21 { }",
+      "usage": "let empty = @21 { };",
+      "related": [],
+      "status": "stable"
+    },
+    "22": {
+      "name": "Bool",
+      "tier": "T0-Core",
+      "signature": "@22 { @0: bool }",
+      "description": "Boolean true/false value",
+      "fields": {
+        "@0": {
+          "type": "bool",
+          "description": "true or false",
+          "required": true
+        }
+      },
+      "example": "@22 { @0: true }",
+      "usage": "let flag = @22 { @0: false };",
+      "related": [],
+      "status": "stable"
+    },
+    "100": {
+      "name": "Block",
+      "tier": "T1-AST",
+      "signature": "@100 { @0: [Statement] }",
+      "description": "Code block (collection of statements)",
+      "fields": {
+        "@0": {
+          "type": "[Statement]",
+          "description": "List of statements",
+          "required": true
+        }
+      },
+      "example": "@100 { @0: [stmt1, stmt2, stmt3] }",
+      "usage": "Internal compiler representation",
+      "related": ["101", "102"],
+      "status": "compiler-internal"
+    },
+    "101": {
+      "name": "Expr",
+      "tier": "T1-AST",
+      "signature": "@101 { @0: Expression }",
+      "description": "Expression AST node",
+      "fields": {
+        "@0": {
+          "type": "Expression",
+          "description": "Expression tree",
+          "required": true
+        }
+      },
+      "example": "@101 { @0: (a + b) }",
+      "usage": "Internal compiler representation",
+      "related": ["100", "102"],
+      "status": "compiler-internal"
+    },
+    "102": {
+      "name": "VarRef",
+      "tier": "T1-AST",
+      "signature": "@102 { @0: String }",
+      "description": "Variable reference",
+      "fields": {
+        "@0": {
+          "type": "String",
+          "description": "Variable name",
+          "required": true
+        }
+      },
+      "example": "@102 { @0: \"my_var\" }",
+      "usage": "Internal compiler representation",
+      "related": ["103"],
+      "status": "compiler-internal"
+    },
+    "103": {
+      "name": "Assignment",
+      "tier": "T1-AST",
+      "signature": "@103 { @0: VarRef, @1: Expr }",
+      "description": "Variable assignment",
+      "fields": {
+        "@0": {
+          "type": "VarRef",
+          "description": "Target variable",
+          "required": true
+        },
+        "@1": {
+          "type": "Expr",
+          "description": "Value expression",
+          "required": true
+        }
+      },
+      "example": "@103 { @0: \"x\", @1: 42 }",
+      "usage": "Internal compiler representation",
+      "related": ["102"],
+      "status": "compiler-internal"
+    },
+    "104": {
+      "name": "FunctionDef",
+      "tier": "T1-AST",
+      "signature": "@104 { @0: String, @1: [String], @2: Block }",
+      "description": "Function definition",
+      "fields": {
+        "@0": {
+          "type": "String",
+          "description": "Function name",
+          "required": true
+        },
+        "@1": {
+          "type": "[String]",
+          "description": "Parameter names",
+          "required": true
+        },
+        "@2": {
+          "type": "Block",
+          "description": "Function body",
+          "required": true
+        }
+      },
+      "example": "@104 { @0: \"add\", @1: [\"a\", \"b\"], @2: block }",
+      "usage": "Internal compiler representation",
+      "related": ["105"],
+      "status": "compiler-internal"
+    },
+    "105": {
+      "name": "FunctionCall",
+      "tier": "T1-AST",
+      "signature": "@105 { @0: String, @1: [Expr] }",
+      "description": "Function call",
+      "fields": {
+        "@0": {
+          "type": "String",
+          "description": "Function name",
+          "required": true
+        },
+        "@1": {
+          "type": "[Expr]",
+          "description": "Arguments",
+          "required": true
+        }
+      },
+      "example": "@105 { @0: \"add\", @1: [5, 10] }",
+      "usage": "Internal compiler representation",
+      "related": ["104"],
+      "status": "compiler-internal"
+    },
+    "200": {
+      "name": "Add",
+      "tier": "T2-Reserved",
+      "signature": "@200 { lhs: Number, rhs: Number } -> Number",
+      "description": "Addition (a + b)",
+      "fields": {
+        "lhs": { "type": "Number", "description": "Left operand", "required": true },
+        "rhs": { "type": "Number", "description": "Right operand", "required": true }
+      },
+      "example": "@200 { lhs: 5, rhs: 10 }",
+      "usage": "Arithmetic addition",
+      "related": ["201", "202", "203"],
+      "status": "stable"
+    },
+    "201": {
+      "name": "Sub",
+      "tier": "T2-Reserved",
+      "signature": "@201 { lhs: Number, rhs: Number } -> Number",
+      "description": "Subtraction (a - b)",
+      "fields": {
+        "lhs": { "type": "Number", "description": "Left operand", "required": true },
+        "rhs": { "type": "Number", "description": "Right operand", "required": true }
+      },
+      "example": "@201 { lhs: 10, rhs: 5 }",
+      "usage": "Arithmetic subtraction",
+      "related": ["200", "202", "203"],
+      "status": "stable"
+    },
+    "202": {
+      "name": "Mul",
+      "tier": "T2-Reserved",
+      "signature": "@202 { lhs: Number, rhs: Number } -> Number",
+      "description": "Multiplication (a * b)",
+      "fields": {
+        "lhs": { "type": "Number", "description": "Left operand", "required": true },
+        "rhs": { "type": "Number", "description": "Right operand", "required": true }
+      },
+      "example": "@202 { lhs: 3, rhs: 4 }",
+      "usage": "Arithmetic multiplication",
+      "related": ["200", "201", "203"],
+      "status": "stable"
+    },
+    "203": {
+      "name": "Div",
+      "tier": "T2-Reserved",
+      "signature": "@203 { lhs: Number, rhs: Number } -> Number",
+      "description": "Division (a / b)",
+      "fields": {
+        "lhs": { "type": "Number", "description": "Numerator", "required": true },
+        "rhs": { "type": "Number", "description": "Denominator", "required": true }
+      },
+      "example": "@203 { lhs: 10, rhs: 2 }",
+      "usage": "Arithmetic division",
+      "related": ["200", "201", "202", "204"],
+      "status": "stable"
+    },
+    "204": {
+      "name": "Mod",
+      "tier": "T2-Reserved",
+      "signature": "@204 { lhs: Integer, rhs: Integer } -> Integer",
+      "description": "Modulo (a % b)",
+      "fields": {
+        "lhs": { "type": "Integer", "description": "Dividend", "required": true },
+        "rhs": { "type": "Integer", "description": "Divisor", "required": true }
+      },
+      "example": "@204 { lhs: 10, rhs: 3 }",
+      "usage": "Integer remainder",
+      "related": ["203"],
+      "status": "stable"
+    },
+    "205": {
+      "name": "Pow",
+      "tier": "T2-Reserved",
+      "signature": "@205 { base: Number, exp: Number } -> Number",
+      "description": "Power (base ^ exp)",
+      "fields": {
+        "base": { "type": "Number", "description": "Base value", "required": true },
+        "exp": { "type": "Number", "description": "Exponent", "required": true }
+      },
+      "example": "@205 { base: 2, exp: 3 }",
+      "usage": "Exponentiation",
+      "related": ["206"],
+      "status": "stable"
+    },
+    "206": {
+      "name": "Sqrt",
+      "tier": "T2-Reserved",
+      "signature": "@206 { val: Number } -> Float",
+      "description": "Square root",
+      "fields": {
+        "val": { "type": "Number", "description": "Value", "required": true }
+      },
+      "example": "@206 { val: 16 }",
+      "usage": "Square root calculation",
+      "related": ["205"],
+      "status": "stable"
+    },
+    "300": {
+      "name": "Concat",
+      "tier": "T2-Reserved",
+      "signature": "@300 { lhs: String, rhs: String } -> String",
+      "description": "String concatenation",
+      "fields": {
+        "lhs": { "type": "String", "description": "First string", "required": true },
+        "rhs": { "type": "String", "description": "Second string", "required": true }
+      },
+      "example": "@300 { lhs: \"Hello\", rhs: \"World\" }",
+      "usage": "Joining strings",
+      "related": ["301", "16"],
+      "status": "stable"
+    },
+    "301": {
+      "name": "StrLen",
+      "tier": "T2-Reserved",
+      "signature": "@301 { val: String } -> Integer",
+      "description": "String length",
+      "fields": {
+        "val": { "type": "String", "description": "Input string", "required": true }
+      },
+      "example": "@301 { val: \"abc\" }",
+      "usage": "Get character count",
+      "related": ["300", "400"],
+      "status": "stable"
+    },
+    "400": {
+      "name": "ArrLen",
+      "tier": "T2-Reserved",
+      "signature": "@400 { val: Array } -> Integer",
+      "description": "Array length",
+      "fields": {
+        "val": { "type": "Array", "description": "Input array", "required": true }
+      },
+      "example": "@400 { val: [1, 2, 3] }",
+      "usage": "Get element count",
+      "related": ["401", "301"],
+      "status": "stable"
+    },
+    "401": {
+      "name": "ArrGet",
+      "tier": "T2-Reserved",
+      "signature": "@401 { arr: Array, idx: Integer } -> Value",
+      "description": "Get array element at index",
+      "fields": {
+        "arr": { "type": "Array", "description": "Target array", "required": true },
+        "idx": { "type": "Integer", "description": "Index", "required": true }
+      },
+      "example": "@401 { arr: [10, 20], idx: 0 }",
+      "usage": "Array indexing",
+      "related": ["400", "403"],
+      "status": "stable"
+    },
+    "403": {
+      "name": "ArrPush",
+      "tier": "T2-Reserved",
+      "signature": "@403 { arr: Array, val: Value } -> Array",
+      "description": "Append item to array",
+      "fields": {
+        "arr": { "type": "Array", "description": "Target array", "required": true },
+        "val": { "type": "Value", "description": "Item to append", "required": true }
+      },
+      "example": "@403 { arr: [1], val: 2 }",
+      "usage": "Grow array",
+      "related": ["400", "401"],
+      "status": "stable"
+    },
+    "500": {
+      "name": "If",
+      "tier": "T2-Reserved",
+      "signature": "@500 { cond: Bool, then: Block, else: Block }",
+      "description": "Conditional execution",
+      "fields": {
+        "cond": { "type": "Bool", "description": "Condition", "required": true },
+        "then": { "type": "Block", "description": "Executed if true", "required": true },
+        "else": { "type": "Block", "description": "Executed if false", "required": false }
+      },
+      "example": "@500 { cond: true, then: ..., else: ... }",
+      "usage": "Branching logic",
+      "related": ["22"],
+      "status": "stable"
+    },
+    "600": {
+      "name": "Print",
+      "tier": "T2-Reserved",
+      "signature": "@600 { val: Value } -> Null",
+      "description": "Print to stdout",
+      "fields": {
+        "val": { "type": "Value", "description": "Value to print", "required": true }
+      },
+      "example": "@600 { val: \"Hello\" }",
+      "usage": "Debug output",
+      "related": ["16", "21"],
+      "status": "stable"
+    },
+    "603": {
+      "name": "HttpRequest",
+      "tier": "T2-Reserved",
+      "signature": "@603 { method: String, url: String, body: Value, headers: Object } -> Object",
+      "description": "Make HTTP request",
+      "fields": {
+        "method": { "type": "String", "description": "HTTP method (GET, POST)", "required": true },
+        "url": { "type": "String", "description": "Target URL", "required": true },
+        "body": { "type": "Value", "description": "Request body", "required": false },
+        "headers": { "type": "Object", "description": "Request headers", "required": false }
+      },
+      "example": "@603 { method: \"GET\", url: \"https://api.com\" }",
+      "usage": "Network calls",
+      "related": ["604", "19"],
+      "status": "stable"
+    },
+    "604": {
+      "name": "JsonParse",
+      "tier": "T2-Reserved",
+      "signature": "@604 { json: String } -> Value",
+      "description": "Parse JSON string",
+      "fields": {
+        "json": { "type": "String", "description": "JSON string", "required": true }
+      },
+      "example": "@604 { json: \"{\"a\":1}\" }",
+      "usage": "Data parsing",
+      "related": ["603", "19"],
+      "status": "stable"
+    },
+    "605": {
+      "name": "Snapshot",
+      "tier": "T2-Reserved",
+      "signature": "@605 { } -> Handle",
+      "description": "Capture full execution state (PC, Stack, Registers)",
+      "fields": {},
+      "example": "let h = @605 { };",
+      "usage": "Flight recording and debugging",
+      "related": ["606", "20"],
+      "status": "stable"
+    },
+    "606": {
+      "name": "WriteSnapshot",
+      "tier": "T2-Reserved",
+      "signature": "@606 { path: String, handle: Handle } -> Bool",
+      "description": "Write a snapshot handle to a JSON file",
+      "fields": {
+        "path": { "type": "String", "description": "Output file path", "required": true },
+        "handle": { "type": "Handle", "description": "Snapshot handle", "required": true }
+      },
+      "example": "@606 { path: \"dump.json\", handle: h }",
+      "usage": "Persisting crash dumps",
+      "related": ["605"],
+      "status": "stable"
+    },
+    "900": {
+      "name": "VulkanShader",
+      "tier": "T4-GPU",
+      "signature": "@900 { spirv_binary: bytes, entry_point: String, shader_stage: String, descriptor_bindings: [Binding] }",
+      "description": "Vulkan SPIR-V shader specification",
+      "fields": {
+        "spirv_binary": {
+          "type": "bytes",
+          "description": "Compiled SPIR-V bytecode",
+          "required": true
+        },
+        "entry_point": {
+          "type": "String",
+          "description": "Shader entry point function name",
+          "required": true
+        },
+        "shader_stage": {
+          "type": "String",
+          "description": "Shader stage (vertex, fragment, compute)",
+          "required": true
+        },
+        "descriptor_bindings": {
+          "type": "[Binding]",
+          "description": "Resource bindings (buffers, textures)",
+          "required": true
+        }
+      },
+      "example": "@900 { spirv_binary: [...], entry_point: \"main\", shader_stage: \"compute\", descriptor_bindings: [...] }",
+      "usage": "GPU shader compilation and execution",
+      "related": ["901", "902"],
+      "status": "stable"
+    },
+    "901": {
+      "name": "ComputeKernel",
+      "tier": "T4-GPU",
+      "signature": "@901 { kernel_name: String, shader_handle: Handle, workgroup_size: [u32; 3], shared_memory_bytes: u32, push_constants_layout: String }",
+      "description": "GPU compute kernel configuration",
+      "fields": {
+        "kernel_name": {
+          "type": "String",
+          "description": "Kernel identifier",
+          "required": true
+        },
+        "shader_handle": {
+          "type": "Handle",
+          "description": "Reference to compiled shader",
+          "required": true
+        },
+        "workgroup_size": {
+          "type": "[u32; 3]",
+          "description": "Local workgroup dimensions (x, y, z)",
+          "required": true
+        },
+        "shared_memory_bytes": {
+          "type": "u32",
+          "description": "Shared memory allocation size",
+          "required": true
+        },
+        "push_constants_layout": {
+          "type": "String",
+          "description": "Push constant layout specification",
+          "required": true
+        }
+      },
+      "example": "@901 { kernel_name: \"matrix_mul\", shader_handle: \"&h_shader_123\", workgroup_size: [16, 16, 1], shared_memory_bytes: 4096, push_constants_layout: \"standard\" }",
+      "usage": "GPU compute kernel dispatch",
+      "related": ["900", "906"],
+      "status": "stable"
+    },
+    "902": {
+      "name": "PipelineConfig",
+      "tier": "T4-GPU",
+      "signature": "@902 { pipeline_id: String, stages: [ShaderStage], sync_barriers: [Barrier], output_image: String }",
+      "description": "Vulkan graphics/compute pipeline configuration",
+      "fields": {
+        "pipeline_id": {
+          "type": "String",
+          "description": "Pipeline identifier",
+          "required": true
+        },
+        "stages": {
+          "type": "[ShaderStage]",
+          "description": "Pipeline shader stages",
+          "required": true
+        },
+        "sync_barriers": {
+          "type": "[Barrier]",
+          "description": "Synchronization barriers",
+          "required": true
+        },
+        "output_image": {
+          "type": "String",
+          "description": "Output render target",
+          "required": true
+        }
+      },
+      "example": "@902 { pipeline_id: \"main_render\", stages: [...], sync_barriers: [...], output_image: \"framebuffer_0\" }",
+      "usage": "Graphics/compute pipeline creation",
+      "related": ["900", "901"],
+      "status": "stable"
+    },
+    "906": {
+      "name": "GEMM",
+      "tier": "T4-GPU",
+      "signature": "@906 { A: Tensor<M×K>, B: Tensor<K×N> } -> Tensor<M×N>",
+      "description": "General Matrix Multiply (C = A @ B)",
+      "fields": {
+        "A": {
+          "type": "Tensor<M×K>",
+          "description": "Left matrix (M rows, K columns)",
+          "required": true
+        },
+        "B": {
+          "type": "Tensor<K×N>",
+          "description": "Right matrix (K rows, N columns)",
+          "required": true
+        }
+      },
+      "example": "let C = @906 { A: matrix_a, B: matrix_b };",
+      "usage": "Matrix multiplication for neural networks, linear algebra",
+      "performance": "O(M×N×K), GPU-accelerated (900+ GFLOPS on RTX 4070)",
+      "related": ["907", "908"],
+      "status": "stable",
+      "implementation": "Vulkan compute shader (hlx-vulkan/shaders/gemm.comp)"
+    },
+    "907": {
+      "name": "LayerNorm",
+      "tier": "T4-GPU",
+      "signature": "@907 { x: Tensor, epsilon: f32 } -> Tensor",
+      "description": "Layer Normalization (numerically stable)",
+      "fields": {
+        "x": {
+          "type": "Tensor",
+          "description": "Input tensor",
+          "required": true
+        },
+        "epsilon": {
+          "type": "f32",
+          "description": "Small constant for numerical stability (default: 1e-5)",
+          "required": false
+        }
+      },
+      "example": "let normalized = @907 { x: activations, epsilon: 1e-5 };",
+      "usage": "Transformer normalization layers",
+      "performance": "O(N), GPU-accelerated",
+      "related": ["906", "908"],
+      "status": "stable"
+    },
+    "908": {
+      "name": "GELU",
+      "tier": "T4-GPU",
+      "signature": "@908 { x: Tensor } -> Tensor",
+      "description": "Gaussian Error Linear Unit activation function",
+      "fields": {
+        "x": {
+          "type": "Tensor",
+          "description": "Input tensor",
+          "required": true
+        }
+      },
+      "example": "let activated = @908 { x: linear_output };",
+      "usage": "Transformer activation function (modern alternative to ReLU)",
+      "performance": "O(N), GPU-accelerated",
+      "related": ["907", "909"],
+      "status": "stable"
+    },
+    "909": {
+      "name": "Softmax",
+      "tier": "T4-GPU",
+      "signature": "@909 { x: Tensor } -> Tensor",
+      "description": "Softmax normalization (numerically stable)",
+      "fields": {
+        "x": {
+          "type": "Tensor",
+          "description": "Input logits",
+          "required": true
+        }
+      },
+      "example": "let probs = @909 { x: logits };",
+      "usage": "Attention mechanism, classification output",
+      "performance": "O(N), GPU-accelerated",
+      "related": ["908", "910"],
+      "status": "stable"
+    },
+    "910": {
+      "name": "CrossEntropy",
+      "tier": "T4-GPU",
+      "signature": "@910 { predictions: Tensor, targets: Tensor } -> f32",
+      "description": "Cross-entropy loss computation",
+      "fields": {
+        "predictions": {
+          "type": "Tensor",
+          "description": "Model predictions (probabilities)",
+          "required": true
+        },
+        "targets": {
+          "type": "Tensor",
+          "description": "Ground truth labels",
+          "required": true
+        }
+      },
+      "example": "let loss = @910 { predictions: model_out, targets: labels };",
+      "usage": "Training loss for classification tasks",
+      "performance": "O(N), GPU-accelerated",
+      "related": ["909"],
+      "status": "stable"
+    }
+  },
+  "open_slots": {
+    "T0": "23-99 (77 slots available)",
+    "T1": "106-199 (94 slots available)",
+    "T2": "200-799 (600 slots - fully open)",
+    "T3": "800-899 (100 slots - parser tier, mostly open)",
+    "T4": "911-999 (89 slots available for GPU contracts)",
+    "T5+": "1000-∞ (unlimited user-defined contracts)"
+  },
+  "notes": [
+    "Contract IDs are permanent and immutable once assigned",
+    "Each tier has semantic meaning - respect the tier boundaries",
+    "GPU contracts (T4) require Vulkan runtime support",
+    "Compiler-internal contracts (T1) are not directly user-accessible",
+    "Application-specific contracts (T5+) have no central registration requirement"
+  ]
+}

@@ -5,6 +5,7 @@ members = [
     "hlx_compiler",
     "hlx_runtime",
     "hlx_cli", "hlx_backend_llvm", "hlx_lsp",
+    "autograph",
 ]
 
 [workspace.package]
@@ -39,6 +40,12 @@ gpu-allocator = "0.25"
 
 # CLI
 clap = { version = "4.4", features = ["derive"] }
+
+# Network
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+tokio = { version = "1.35", features = ["full"] }
+axum = "0.7"
+tower-http = { version = "0.5", features = ["cors"] }
 
 # Testing & Benchmarks
 criterion = "0.5"

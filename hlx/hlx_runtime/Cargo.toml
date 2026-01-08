@@ -18,9 +18,11 @@ thiserror.workspace = true
 serde.workspace = true
 blake3.workspace = true
 tracing.workspace = true
-hex.workspace = true
-bytemuck.workspace = true
+hex = "0.4"
+bytemuck = "1.14"
 im = { version = "15.1", features = ["serde"] }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
 
 # CPU backend
 ndarray = { workspace = true, optional = true }

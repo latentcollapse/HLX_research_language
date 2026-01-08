@@ -125,9 +125,7 @@ enum Postfix {
     Field(String),
 }
 
-#[instrument(skip(input), fields(preview = %&input[..input.len().min(30)].replace('\n', " ")))]
 fn atom_expr(input: &str) -> ParseResult<'_, Expr> {
-    debug!("Parsing atom");
     let (input, atom) = alt((
         map(preceded(ws, literal), Expr::Literal),
         array_literal,
@@ -186,9 +184,7 @@ fn bin_op(input: &str) -> ParseResult<'_, BinOp> {
     )))(input)
 }
 
-#[instrument(skip(input), fields(preview = %&input[..input.len().min(30)].replace('\n', " ")))]
 fn expr(input: &str) -> ParseResult<'_, Expr> {
-    debug!("Parsing expr");
     let (input, lhs) = unary_expr(input)?;
     let (input, op_opt) = opt(bin_op)(input)?;
     
@@ -207,9 +203,7 @@ fn expr(input: &str) -> ParseResult<'_, Expr> {
     }
 }
 
-#[instrument(skip(input), fields(preview = %&input[..input.len().min(50)].replace('\n', " ")))]
 fn statement(input: &str) -> ParseResult<'_, Statement> {
-    debug!("Parsing statement");
     alt((
         map(tuple((preceded(ws, tag("let")), preceded(ws, ident), preceded(ws, char('=')), expr, preceded(ws, char(';')))), 
             |(_, n, _, v, _)| Statement::Let { name: n, value: Spanned::dummy(v) }),
@@ -250,9 +244,7 @@ fn statement(input: &str) -> ParseResult<'_, Statement> {
                 map(preceded(ws, terminated(expr, preceded(ws, char(';')))), |e| Statement::Expr(Spanned::dummy(e))),    ))(input)
 }
 
-#[instrument(skip(input), fields(preview = %&input[..input.len().min(50)].replace('\n', " ")))]
 fn block(input: &str) -> ParseResult<'_, Block> {
-    debug!("Parsing block");
     alt((
         map(tuple((
             preceded(ws, tag("fn")), preceded(ws, ident), preceded(ws, char('(')),
@@ -274,9 +266,7 @@ fn block(input: &str) -> ParseResult<'_, Block> {
     ))(input)
 }
 
-#[instrument(skip(input), fields(preview = %&input[..input.len().min(50)].replace('\n', " ")))]
 fn parse_program(input: &str) -> ParseResult<'_, Program> {
-    debug!("Starting program parse");
     let (input, _) = preceded(ws, tag("program"))(input)?;
     let (input, name) = preceded(ws, ident)(input)?;
     let (input, _) = preceded(ws, char('{'))(input)?;

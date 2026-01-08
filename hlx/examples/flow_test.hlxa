@@ -1,0 +1,32 @@
+program flow_test {
+    fn main() {
+        print("--- JSON Test ---");
+        let s = "{\"name\": \"HLX\", \"version\": 1, \"active\": true}";
+        let data = json_parse(s);
+        print("Parsed data:");
+        print(data);
+        
+        data.version = 2;
+        data.author = "Gemini";
+        
+        let s2 = json_stringify(data);
+        print("Stringified data:");
+        print(s2);
+
+        print("");
+        print("--- HTTP Test ---");
+        let resp = http_request("GET", "https://httpbin.org/get", null, {});
+        print("Status code:");
+        print(resp.status);
+        
+        if (resp.status == 200) {
+            let body = json_parse(resp.body);
+            print("Response origin:");
+            print(body.origin);
+        } else {
+            print("Request failed");
+        }
+        
+        return data;
+    }
+}

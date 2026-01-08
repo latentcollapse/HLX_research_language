@@ -1,0 +1,9 @@
+// HLX JSON Standard Library
+
+fn parse(s) {
+    return json_parse(s);
+}
+
+fn stringify(v) {
+    return json_stringify(v);
+}

@@ -548,19 +548,42 @@ impl ExecutionContext {
             }
             
             Instruction::Snapshot { handle_out } => {
-                // Create a snapshot of all registers
-                let regs_map = if let Some(frame) = self.call_stack.last() {
-                    frame.registers.clone()
-                } else {
-                    HashMap::new()
-                };
+                // Create a full system snapshot (Digital Twin)
+                let mut snap_obj = OrdMap::new();
                 
-                let mut map = OrdMap::new();
-                for (k, v) in regs_map {
-                    map.insert(format!("r{}", k), v);
+                // 1. Instruction Pointer
+                snap_obj.insert("pc".to_string(), Value::Integer(pc as i64));
+                
+                // 2. Call Stack
+                let mut stack_arr = im::Vector::new();
+                for frame in &self.call_stack {
+                    let mut frame_obj = OrdMap::new();
+                    frame_obj.insert("return_pc".to_string(), if frame.return_pc == usize::MAX { Value::Null } else { Value::Integer(frame.return_pc as i64) });
+                    frame_obj.insert("out_reg".to_string(), Value::Integer(frame.out_register as i64));
+                    
+                    let mut regs = OrdMap::new();
+                    for (k, v) in &frame.registers {
+                        regs.insert(format!("r{}", k), v.clone());
+                    }
+                    frame_obj.insert("registers".to_string(), Value::Object(regs));
+                    stack_arr.push_back(Value::Object(frame_obj));
                 }
+                snap_obj.insert("call_stack".to_string(), Value::Array(stack_arr));
+                
+                // 3. Loop Stack
+                let mut loop_arr = im::Vector::new();
+                for (entry, exit) in &self.loop_stack {
+                    let mut l = im::Vector::new();
+                    l.push_back(Value::Integer(*entry as i64));
+                    l.push_back(Value::Integer(*exit as i64));
+                    loop_arr.push_back(Value::Array(l));
+                }
+                snap_obj.insert("loop_stack".to_string(), Value::Array(loop_arr));
 
-                let snapshot = Value::Object(map);
+                // 4. Metadata
+                snap_obj.insert("timestamp".to_string(), Value::Integer(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64));
+
+                let snapshot = Value::Object(snap_obj);
                 let handle = self.cas.store(snapshot)?;
                 self.set_reg(*handle_out, Value::Handle(handle));
             }
@@ -711,6 +734,40 @@ impl ExecutionContext {
         match func {
             "DEFAULT_MAX_ITER" => {
                 Ok(Value::Integer(1000000))
+            }
+            "snapshot" => {
+                // Return a full system snapshot (Digital Twin) handle
+                let mut snap_obj = OrdMap::new();
+                snap_obj.insert("pc".to_string(), Value::Integer(0)); // Builtin call context
+                
+                let mut stack_arr = im::Vector::new();
+                for frame in &self.call_stack {
+                    let mut frame_obj = OrdMap::new();
+                    frame_obj.insert("return_pc".to_string(), if frame.return_pc == usize::MAX { Value::Null } else { Value::Integer(frame.return_pc as i64) });
+                    frame_obj.insert("out_reg".to_string(), Value::Integer(frame.out_register as i64));
+                    
+                    let mut regs = OrdMap::new();
+                    for (k, v) in &frame.registers {
+                        regs.insert(format!("r{}", k), v.clone());
+                    }
+                    frame_obj.insert("registers".to_string(), Value::Object(regs));
+                    stack_arr.push_back(Value::Object(frame_obj));
+                }
+                snap_obj.insert("call_stack".to_string(), Value::Array(stack_arr));
+                
+                let mut loop_arr = im::Vector::new();
+                for (entry, exit) in &self.loop_stack {
+                    let mut l = im::Vector::new();
+                    l.push_back(Value::Integer(*entry as i64));
+                    l.push_back(Value::Integer(*exit as i64));
+                    loop_arr.push_back(Value::Array(l));
+                }
+                snap_obj.insert("loop_stack".to_string(), Value::Array(loop_arr));
+                snap_obj.insert("timestamp".to_string(), Value::Integer(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64));
+
+                let snapshot = Value::Object(snap_obj);
+                let handle = self.cas.store(snapshot)?;
+                Ok(Value::Handle(handle))
             }
             "print" => {
                 for arg in args {
@@ -888,6 +945,102 @@ impl ExecutionContext {
                     }),
                 }
             }
+            "json_parse" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "json_parse() takes exactly 1 argument (string)".to_string(),
+                    });
+                }
+                let json_str = match self.get_reg(args[0])? {
+                    Value::String(s) => s.as_str(),
+                    v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }),
+                };
+                let sjv: serde_json::Value = serde_json::from_str(json_str).map_err(|e| HlxError::BackendError {
+                    message: format!("JSON parse error: {}", e),
+                })?;
+                Ok(Value::from_json(sjv)?)
+            }
+            "json_stringify" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "json_stringify() takes exactly 1 argument (value)".to_string(),
+                    });
+                }
+                let val = self.get_reg(args[0])?;
+                let sjv = val.to_json()?;
+                let s = serde_json::to_string(&sjv).map_err(|e| HlxError::BackendError {
+                    message: format!("JSON stringify error: {}", e),
+                })?;
+                Ok(Value::String(s))
+            }
+            "http_request" => {
+                // http_request(method, url, body, headers)
+                if args.len() < 2 {
+                    return Err(HlxError::ValidationFail {
+                        message: "http_request() takes at least 2 arguments (method, url)".to_string(),
+                    });
+                }
+                let method_str = match self.get_reg(args[0])? {
+                    Value::String(s) => s.to_uppercase(),
+                    v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }),
+                };
+                let url = match self.get_reg(args[1])? {
+                    Value::String(s) => s.as_str(),
+                    v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }),
+                };
+                
+                let client = reqwest::blocking::Client::new();
+                let method = match method_str.as_str() {
+                    "GET" => reqwest::Method::GET,
+                    "POST" => reqwest::Method::POST,
+                    "PUT" => reqwest::Method::PUT,
+                    "DELETE" => reqwest::Method::DELETE,
+                    _ => return Err(HlxError::ValidationFail { message: format!("Invalid HTTP method: {}", method_str) }),
+                };
+                
+                let mut rb = client.request(method, url);
+                
+                if args.len() >= 3 {
+                    let body_val = self.get_reg(args[2])?;
+                    match body_val {
+                        Value::String(s) => { rb = rb.body(s.clone()); }
+                        Value::Null => {}
+                        _ => {
+                            let sjv = body_val.to_json()?;
+                            let json_body = serde_json::to_string(&sjv).map_err(|e| HlxError::BackendError {
+                                message: format!("JSON stringify error for body: {}", e),
+                            })?;
+                            rb = rb.body(json_body).header("Content-Type", "application/json");
+                        }
+                    }
+                }
+                
+                if args.len() >= 4 {
+                    let headers_val = self.get_reg(args[3])?;
+                    if let Value::Object(headers) = headers_val {
+                        for (k, v) in headers {
+                            if let Value::String(vs) = v {
+                                rb = rb.header(k, vs);
+                            }
+                        }
+                    }
+                }
+                
+                let resp = rb.send().map_err(|e| HlxError::BackendError {
+                    message: format!("HTTP request failed: {}", e),
+                })?;
+                
+                let status = resp.status().as_u16() as i64;
+                let text = resp.text().map_err(|e| HlxError::BackendError {
+                    message: format!("Failed to read HTTP response: {}", e),
+                })?;
+                
+                let mut res_obj = im::OrdMap::new();
+                res_obj.insert("status".to_string(), Value::Integer(status));
+                res_obj.insert("body".to_string(), Value::String(text));
+                
+                Ok(Value::Object(res_obj))
+            }
             "read_file" => {
                 if args.len() != 1 {
                     return Err(HlxError::ValidationFail {
@@ -906,6 +1059,34 @@ impl ExecutionContext {
                     message: format!("Failed to read file {}: {}", path, e) 
                 })?;
                 Ok(Value::String(content))
+            }
+            "write_snapshot" => {
+                // write_snapshot(path, handle)
+                if args.len() != 2 {
+                    return Err(HlxError::ValidationFail {
+                        message: "write_snapshot() takes exactly 2 arguments (path, handle)".to_string(),
+                    });
+                }
+                let path = match self.get_reg(args[0])? {
+                    Value::String(s) => s.clone(),
+                    v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }),
+                };
+                let handle = match self.get_reg(args[1])? {
+                    Value::Handle(h) => h.clone(),
+                    v => return Err(HlxError::TypeError { expected: "handle".to_string(), got: v.type_name().to_string() }),
+                };
+                
+                let snapshot_val = self.cas.retrieve(&handle)?;
+                let sjv = snapshot_val.to_json()?;
+                let json_str = serde_json::to_string_pretty(&sjv).map_err(|e| HlxError::BackendError {
+                    message: format!("Failed to serialize snapshot: {}", e),
+                })?;
+                
+                std::fs::write(&path, json_str).map_err(|e| HlxError::BackendError {
+                    message: format!("Failed to write snapshot to {}: {}", path, e),
+                })?;
+                
+                Ok(Value::Boolean(true))
             }
             "native_tokenize" => {
                 // Native tokenizer - runs in Rust to bypass O(n²) interpreted string ops

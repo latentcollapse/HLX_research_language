@@ -1,0 +1,304 @@
+// Stress test: call chain depth 100
+program stress_test {
+    fn f1() {
+        return f2();
+    }
+    fn f2() {
+        return f3();
+    }
+    fn f3() {
+        return f4();
+    }
+    fn f4() {
+        return f5();
+    }
+    fn f5() {
+        return f6();
+    }
+    fn f6() {
+        return f7();
+    }
+    fn f7() {
+        return f8();
+    }
+    fn f8() {
+        return f9();
+    }
+    fn f9() {
+        return f10();
+    }
+    fn f10() {
+        return f11();
+    }
+    fn f11() {
+        return f12();
+    }
+    fn f12() {
+        return f13();
+    }
+    fn f13() {
+        return f14();
+    }
+    fn f14() {
+        return f15();
+    }
+    fn f15() {
+        return f16();
+    }
+    fn f16() {
+        return f17();
+    }
+    fn f17() {
+        return f18();
+    }
+    fn f18() {
+        return f19();
+    }
+    fn f19() {
+        return f20();
+    }
+    fn f20() {
+        return f21();
+    }
+    fn f21() {
+        return f22();
+    }
+    fn f22() {
+        return f23();
+    }
+    fn f23() {
+        return f24();
+    }
+    fn f24() {
+        return f25();
+    }
+    fn f25() {
+        return f26();
+    }
+    fn f26() {
+        return f27();
+    }
+    fn f27() {
+        return f28();
+    }
+    fn f28() {
+        return f29();
+    }
+    fn f29() {
+        return f30();
+    }
+    fn f30() {
+        return f31();
+    }
+    fn f31() {
+        return f32();
+    }
+    fn f32() {
+        return f33();
+    }
+    fn f33() {
+        return f34();
+    }
+    fn f34() {
+        return f35();
+    }
+    fn f35() {
+        return f36();
+    }
+    fn f36() {
+        return f37();
+    }
+    fn f37() {
+        return f38();
+    }
+    fn f38() {
+        return f39();
+    }
+    fn f39() {
+        return f40();
+    }
+    fn f40() {
+        return f41();
+    }
+    fn f41() {
+        return f42();
+    }
+    fn f42() {
+        return f43();
+    }
+    fn f43() {
+        return f44();
+    }
+    fn f44() {
+        return f45();
+    }
+    fn f45() {
+        return f46();
+    }
+    fn f46() {
+        return f47();
+    }
+    fn f47() {
+        return f48();
+    }
+    fn f48() {
+        return f49();
+    }
+    fn f49() {
+        return f50();
+    }
+    fn f50() {
+        return f51();
+    }
+    fn f51() {
+        return f52();
+    }
+    fn f52() {
+        return f53();
+    }
+    fn f53() {
+        return f54();
+    }
+    fn f54() {
+        return f55();
+    }
+    fn f55() {
+        return f56();
+    }
+    fn f56() {
+        return f57();
+    }
+    fn f57() {
+        return f58();
+    }
+    fn f58() {
+        return f59();
+    }
+    fn f59() {
+        return f60();
+    }
+    fn f60() {
+        return f61();
+    }
+    fn f61() {
+        return f62();
+    }
+    fn f62() {
+        return f63();
+    }
+    fn f63() {
+        return f64();
+    }
+    fn f64() {
+        return f65();
+    }
+    fn f65() {
+        return f66();
+    }
+    fn f66() {
+        return f67();
+    }
+    fn f67() {
+        return f68();
+    }
+    fn f68() {
+        return f69();
+    }
+    fn f69() {
+        return f70();
+    }
+    fn f70() {
+        return f71();
+    }
+    fn f71() {
+        return f72();
+    }
+    fn f72() {
+        return f73();
+    }
+    fn f73() {
+        return f74();
+    }
+    fn f74() {
+        return f75();
+    }
+    fn f75() {
+        return f76();
+    }
+    fn f76() {
+        return f77();
+    }
+    fn f77() {
+        return f78();
+    }
+    fn f78() {
+        return f79();
+    }
+    fn f79() {
+        return f80();
+    }
+    fn f80() {
+        return f81();
+    }
+    fn f81() {
+        return f82();
+    }
+    fn f82() {
+        return f83();
+    }
+    fn f83() {
+        return f84();
+    }
+    fn f84() {
+        return f85();
+    }
+    fn f85() {
+        return f86();
+    }
+    fn f86() {
+        return f87();
+    }
+    fn f87() {
+        return f88();
+    }
+    fn f88() {
+        return f89();
+    }
+    fn f89() {
+        return f90();
+    }
+    fn f90() {
+        return f91();
+    }
+    fn f91() {
+        return f92();
+    }
+    fn f92() {
+        return f93();
+    }
+    fn f93() {
+        return f94();
+    }
+    fn f94() {
+        return f95();
+    }
+    fn f95() {
+        return f96();
+    }
+    fn f96() {
+        return f97();
+    }
+    fn f97() {
+        return f98();
+    }
+    fn f98() {
+        return f99();
+    }
+    fn f99() {
+        return f100();
+    }
+    fn f100() {
+        return 100;
+    }
+    fn main() { return f1(); }
+}
