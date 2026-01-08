@@ -15,3 +15,4 @@ tracing = { workspace = true }
 hlx_core = { path = "../hlx_core" }
 hlx_compiler = { path = "../hlx_compiler" }
 dashmap = "6.1.0"
+regex = "1.10"

@@ -43,7 +43,15 @@ pub struct VulkanBackend {
     pipelines: std::collections::HashMap<String, vk::Pipeline>,
 }
 
+// Include all compiled shaders
 const SHADER_ADD: &[u8] = include_bytes!("vulkan/shaders/pointwise_add.spv");
+const SHADER_GEMM: &[u8] = include_bytes!("vulkan/shaders/gemm.spv");
+const SHADER_ACTIVATION: &[u8] = include_bytes!("vulkan/shaders/activation.spv");
+const SHADER_SOFTMAX: &[u8] = include_bytes!("vulkan/shaders/softmax.spv");
+const SHADER_LAYERNORM: &[u8] = include_bytes!("vulkan/shaders/layernorm.spv");
+const SHADER_CROSS_ENTROPY: &[u8] = include_bytes!("vulkan/shaders/cross_entropy.spv");
+const SHADER_ELEMENTWISE: &[u8] = include_bytes!("vulkan/shaders/elementwise.spv");
+const SHADER_REDUCTION: &[u8] = include_bytes!("vulkan/shaders/reduction.spv");
 
 impl VulkanBackend {
     pub fn new(_config: &RuntimeConfig) -> Result<Self> {
@@ -173,7 +181,7 @@ impl VulkanBackend {
             let push_constant_range = vk::PushConstantRange::builder()
                 .stage_flags(vk::ShaderStageFlags::COMPUTE)
                 .offset(0)
-                .size(4); // single uint32 for 'n'
+                .size(128); // Support up to 128 bytes for complex shaders
 
             let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder()
                 .set_layouts(std::slice::from_ref(&descriptor_set_layout))
@@ -216,9 +224,22 @@ impl VulkanBackend {
         }
 
         unsafe {
+            // Convert SPIR-V bytes to u32 words safely (no alignment requirements)
+            let code_len = spv.len() / 4;
+            let mut code = Vec::with_capacity(code_len);
+            for i in 0..code_len {
+                let bytes = [
+                    spv[i * 4],
+                    spv[i * 4 + 1],
+                    spv[i * 4 + 2],
+                    spv[i * 4 + 3],
+                ];
+                code.push(u32::from_le_bytes(bytes));
+            }
+
             let shader_module_info = vk::ShaderModuleCreateInfo::builder()
-                .code(bytemuck::cast_slice(spv));
-            
+                .code(&code);
+
             let shader_module = self.device.create_shader_module(&shader_module_info, None)
                 .map_err(|e| HlxError::BackendError { message: format!("Shader module failed: {}", e) })?;
 
@@ -239,6 +260,102 @@ impl VulkanBackend {
             self.pipelines.insert(name.to_string(), pipeline);
             Ok(pipeline)
         }
+    }
+
+    /// Helper for activation functions (ReLU, GELU, Sigmoid, Tanh)
+    /// mode: 0=ReLU, 1=GELU, 2=Sigmoid, 3=Tanh
+    fn activation(&mut self, input: TensorHandle, out: TensorHandle, mode: u32) -> Result<()> {
+        let meta = self.tensor_meta(input)?;
+        let n = meta.shape.iter().product::<usize>() as u32;
+
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        struct ActivationPushConstants {
+            n: u32,
+            mode: u32,
+        }
+        unsafe impl bytemuck::Pod for ActivationPushConstants {}
+        unsafe impl bytemuck::Zeroable for ActivationPushConstants {}
+
+        unsafe {
+            let pipeline = self.get_or_create_pipeline("activation", SHADER_ACTIVATION)?;
+
+            // Descriptor Pool & Set
+            let pool_sizes = [vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 2,
+            }];
+            let pool_info = vk::DescriptorPoolCreateInfo::builder()
+                .max_sets(1)
+                .pool_sizes(&pool_sizes);
+            let descriptor_pool = self.device.create_descriptor_pool(&pool_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Pool failed: {}", e) })?;
+
+            let set_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(descriptor_pool)
+                .set_layouts(std::slice::from_ref(&self.descriptor_set_layout));
+            let descriptor_set = self.device.allocate_descriptor_sets(&set_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Set alloc failed: {}", e) })?[0];
+
+            // Update Descriptor Set
+            let buf_in = self.buffers.get(&input.0).unwrap().0;
+            let buf_out = self.buffers.get(&out.0).unwrap().0;
+
+            let info_in = vk::DescriptorBufferInfo { buffer: buf_in, offset: 0, range: vk::WHOLE_SIZE };
+            let info_out = vk::DescriptorBufferInfo { buffer: buf_out, offset: 0, range: vk::WHOLE_SIZE };
+
+            let writes = [
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set)
+                    .dst_binding(0)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(std::slice::from_ref(&info_in))
+                    .build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set)
+                    .dst_binding(1)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(std::slice::from_ref(&info_out))
+                    .build(),
+            ];
+
+            self.device.update_descriptor_sets(&writes, &[]);
+
+            // Push Constants
+            let push_constants = ActivationPushConstants { n, mode };
+            let push_bytes = bytemuck::bytes_of(&push_constants);
+
+            // Record & Submit
+            let begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            self.device.begin_command_buffer(self.transfer_command_buffer, &begin_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Begin failed: {}", e) })?;
+
+            self.device.cmd_bind_pipeline(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, pipeline);
+            self.device.cmd_bind_descriptor_sets(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, 0, &[descriptor_set], &[]);
+            self.device.cmd_push_constants(self.transfer_command_buffer, self.pipeline_layout, vk::ShaderStageFlags::COMPUTE, 0, push_bytes);
+
+            let group_count = (n + 255) / 256;
+            self.device.cmd_dispatch(self.transfer_command_buffer, group_count, 1, 1);
+
+            self.device.end_command_buffer(self.transfer_command_buffer)
+                .map_err(|e| HlxError::BackendError { message: format!("End failed: {}", e) })?;
+
+            let submit_info = vk::SubmitInfo::builder()
+                .command_buffers(std::slice::from_ref(&self.transfer_command_buffer));
+            self.device.queue_submit(self.queue, &[submit_info.build()], self.transfer_fence)
+                .map_err(|e| HlxError::BackendError { message: format!("Submit failed: {}", e) })?;
+
+            self.device.wait_for_fences(&[self.transfer_fence], true, u64::MAX)
+                .map_err(|e| HlxError::BackendError { message: format!("Wait failed: {}", e) })?;
+            self.device.reset_fences(&[self.transfer_fence])
+                .map_err(|e| HlxError::BackendError { message: format!("Reset failed: {}", e) })?;
+
+            // Cleanup
+            self.device.destroy_descriptor_pool(descriptor_pool, None);
+        }
+
+        Ok(())
     }
 }
 
@@ -556,18 +673,625 @@ impl Backend for VulkanBackend {
         Ok(())
     }
 
-    fn matmul(&mut self, _a: TensorHandle, _b: TensorHandle, _out: TensorHandle) -> Result<()> {
-        // TODO: Record command buffer
+    fn matmul(&mut self, a: TensorHandle, b: TensorHandle, out: TensorHandle) -> Result<()> {
+        // GEMM: C = A @ B (alpha=1.0, beta=0.0)
+        let meta_a = self.metadata.get(&a.0).ok_or(HlxError::BackendError {
+            message: "Tensor A not found".to_string()
+        })?;
+        let meta_b = self.metadata.get(&b.0).ok_or(HlxError::BackendError {
+            message: "Tensor B not found".to_string()
+        })?;
+
+        // Get dimensions: A is (M x K), B is (K x N), C is (M x N)
+        let m = meta_a.shape[0] as u32;
+        let k = meta_a.shape[1] as u32;
+        let n = meta_b.shape[1] as u32;
+
+        unsafe {
+            // 1. Get/Create Pipeline
+            let pipeline = self.get_or_create_pipeline("gemm", SHADER_GEMM)?;
+
+            // 2. Descriptor Pool & Set
+            let pool_sizes = [vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 3,
+            }];
+            let pool_info = vk::DescriptorPoolCreateInfo::builder()
+                .pool_sizes(&pool_sizes)
+                .max_sets(1);
+            let descriptor_pool = self.device.create_descriptor_pool(&pool_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Pool failed: {}", e) })?;
+
+            let alloc_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(descriptor_pool)
+                .set_layouts(std::slice::from_ref(&self.descriptor_set_layout));
+            let descriptor_set = self.device.allocate_descriptor_sets(&alloc_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Set alloc failed: {}", e) })?[0];
+
+            // 3. Update Descriptor Sets
+            let buf_a = self.buffers.get(&a.0).unwrap().0;
+            let buf_b = self.buffers.get(&b.0).unwrap().0;
+            let buf_out = self.buffers.get(&out.0).unwrap().0;
+
+            let info_a = vk::DescriptorBufferInfo { buffer: buf_a, offset: 0, range: vk::WHOLE_SIZE };
+            let info_b = vk::DescriptorBufferInfo { buffer: buf_b, offset: 0, range: vk::WHOLE_SIZE };
+            let info_out = vk::DescriptorBufferInfo { buffer: buf_out, offset: 0, range: vk::WHOLE_SIZE };
+
+            let writes = [
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set)
+                    .dst_binding(0)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(std::slice::from_ref(&info_a))
+                    .build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set)
+                    .dst_binding(1)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(std::slice::from_ref(&info_b))
+                    .build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set)
+                    .dst_binding(2)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(std::slice::from_ref(&info_out))
+                    .build(),
+            ];
+
+            self.device.update_descriptor_sets(&writes, &[]);
+
+            // 4. Push Constants: M, N, K, alpha, beta
+            #[repr(C)]
+            #[derive(Copy, Clone)]
+            struct GemmPushConstants {
+                m: u32,
+                n: u32,
+                k: u32,
+                alpha: f32,
+                beta: f32,
+            }
+            unsafe impl bytemuck::Pod for GemmPushConstants {}
+            unsafe impl bytemuck::Zeroable for GemmPushConstants {}
+            let push_constants = GemmPushConstants {
+                m, n, k,
+                alpha: 1.0,
+                beta: 0.0,
+            };
+            let push_bytes = bytemuck::bytes_of(&push_constants);
+
+            // 5. Record & Submit
+            let begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            self.device.begin_command_buffer(self.transfer_command_buffer, &begin_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Begin failed: {}", e) })?;
+
+            self.device.cmd_bind_pipeline(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, pipeline);
+            self.device.cmd_bind_descriptor_sets(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, 0, &[descriptor_set], &[]);
+            self.device.cmd_push_constants(self.transfer_command_buffer, self.pipeline_layout, vk::ShaderStageFlags::COMPUTE, 0, push_bytes);
+
+            // Dispatch with 16x16 workgroups (matching shader's local_size)
+            let group_x = (n + 15) / 16;
+            let group_y = (m + 15) / 16;
+            self.device.cmd_dispatch(self.transfer_command_buffer, group_x, group_y, 1);
+
+            self.device.end_command_buffer(self.transfer_command_buffer)
+                .map_err(|e| HlxError::BackendError { message: format!("End failed: {}", e) })?;
+
+            let submit_info = vk::SubmitInfo::builder()
+                .command_buffers(std::slice::from_ref(&self.transfer_command_buffer));
+            self.device.queue_submit(self.queue, &[submit_info.build()], self.transfer_fence)
+                .map_err(|e| HlxError::BackendError { message: format!("Submit failed: {}", e) })?;
+
+            self.device.wait_for_fences(&[self.transfer_fence], true, u64::MAX)
+                .map_err(|e| HlxError::BackendError { message: format!("Wait failed: {}", e) })?;
+            self.device.reset_fences(&[self.transfer_fence])
+                .map_err(|e| HlxError::BackendError { message: format!("Reset failed: {}", e) })?;
+
+            // 6. Cleanup
+            self.device.destroy_descriptor_pool(descriptor_pool, None);
+        }
+
         Ok(())
     }
 
     fn matmul_bias(&mut self, _a: TensorHandle, _b: TensorHandle, _bias: TensorHandle, _out: TensorHandle) -> Result<()> { Ok(()) }
-    fn layer_norm(&mut self, _input: TensorHandle, _gamma: TensorHandle, _beta: TensorHandle, _out: TensorHandle, _eps: f64) -> Result<()> { Ok(()) }
-    fn softmax(&mut self, _input: TensorHandle, _out: TensorHandle, _dim: i32) -> Result<()> { Ok(()) }
-    fn gelu(&mut self, _input: TensorHandle, _out: TensorHandle) -> Result<()> { Ok(()) }
-    fn relu(&mut self, _input: TensorHandle, _out: TensorHandle) -> Result<()> { Ok(()) }
+
+    fn relu(&mut self, input: TensorHandle, out: TensorHandle) -> Result<()> {
+        self.activation(input, out, 0) // mode 0 = ReLU
+    }
+
+    fn gelu(&mut self, input: TensorHandle, out: TensorHandle) -> Result<()> {
+        self.activation(input, out, 1) // mode 1 = GELU
+    }
+
+    fn layer_norm(&mut self, input: TensorHandle, gamma: TensorHandle, beta: TensorHandle, out: TensorHandle, eps: f64) -> Result<()> {
+        let meta = self.tensor_meta(input)?;
+
+        // Assume shape is (batch_size, hidden_size)
+        if meta.shape.len() != 2 {
+            return Err(HlxError::ValidationFail {
+                message: "LayerNorm requires 2D tensor (batch_size, hidden_size)".to_string()
+            });
+        }
+
+        let batch_size = meta.shape[0] as u32;
+        let hidden_size = meta.shape[1] as u32;
+
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        struct LayerNormPushConstants {
+            batch_size: u32,
+            hidden_size: u32,
+            epsilon: f32,
+            pass: u32,
+        }
+        unsafe impl bytemuck::Pod for LayerNormPushConstants {}
+        unsafe impl bytemuck::Zeroable for LayerNormPushConstants {}
+
+        unsafe {
+            let pipeline = self.get_or_create_pipeline("layernorm", SHADER_LAYERNORM)?;
+
+            // Allocate temporary buffers for statistics (means and variances)
+            let stats_size = (batch_size * std::mem::size_of::<f32>() as u32) as u64;
+
+            let mean_buffer_info = vk::BufferCreateInfo::builder()
+                .size(stats_size)
+                .usage(vk::BufferUsageFlags::STORAGE_BUFFER)
+                .sharing_mode(vk::SharingMode::EXCLUSIVE);
+            let mean_buffer = self.device.create_buffer(&mean_buffer_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Mean buffer failed: {}", e) })?;
+
+            let var_buffer_info = vk::BufferCreateInfo::builder()
+                .size(stats_size)
+                .usage(vk::BufferUsageFlags::STORAGE_BUFFER)
+                .sharing_mode(vk::SharingMode::EXCLUSIVE);
+            let var_buffer = self.device.create_buffer(&var_buffer_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Var buffer failed: {}", e) })?;
+
+            let mean_reqs = self.device.get_buffer_memory_requirements(mean_buffer);
+            let var_reqs = self.device.get_buffer_memory_requirements(var_buffer);
+
+            let mut allocator = self.allocator.lock().unwrap();
+            let mean_alloc = allocator.allocate(&AllocationCreateDesc {
+                name: "LayerNorm Mean",
+                requirements: mean_reqs,
+                location: MemoryLocation::GpuOnly,
+                linear: true,
+                allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+            }).map_err(|e| HlxError::BackendError { message: format!("Mean alloc failed: {}", e) })?;
+
+            let var_alloc = allocator.allocate(&AllocationCreateDesc {
+                name: "LayerNorm Variance",
+                requirements: var_reqs,
+                location: MemoryLocation::GpuOnly,
+                linear: true,
+                allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+            }).map_err(|e| HlxError::BackendError { message: format!("Var alloc failed: {}", e) })?;
+            drop(allocator);
+
+            self.device.bind_buffer_memory(mean_buffer, mean_alloc.memory(), mean_alloc.offset())
+                .map_err(|e| HlxError::BackendError { message: format!("Mean bind failed: {}", e) })?;
+            self.device.bind_buffer_memory(var_buffer, var_alloc.memory(), var_alloc.offset())
+                .map_err(|e| HlxError::BackendError { message: format!("Var bind failed: {}", e) })?;
+
+            // Create descriptor pool (6 buffers)
+            let pool_sizes = [vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 6,
+            }];
+            let pool_info = vk::DescriptorPoolCreateInfo::builder()
+                .max_sets(1)
+                .pool_sizes(&pool_sizes);
+            let descriptor_pool = self.device.create_descriptor_pool(&pool_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Pool failed: {}", e) })?;
+
+            // Allocate descriptor set
+            let bindings = [
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(0).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE).build(),
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(1).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE).build(),
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(2).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE).build(),
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(3).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE).build(),
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(4).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE).build(),
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(5).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE).build(),
+            ];
+            let layout_info = vk::DescriptorSetLayoutCreateInfo::builder()
+                .bindings(&bindings);
+            let layernorm_layout = self.device.create_descriptor_set_layout(&layout_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Layout failed: {}", e) })?;
+
+            let set_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(descriptor_pool)
+                .set_layouts(std::slice::from_ref(&layernorm_layout));
+            let descriptor_set = self.device.allocate_descriptor_sets(&set_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Set alloc failed: {}", e) })?[0];
+
+            // Update descriptor sets
+            let buf_in = self.buffers.get(&input.0).unwrap().0;
+            let buf_out = self.buffers.get(&out.0).unwrap().0;
+            let buf_gamma = self.buffers.get(&gamma.0).unwrap().0;
+            let buf_beta = self.buffers.get(&beta.0).unwrap().0;
+
+            let writes = [
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set).dst_binding(0).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[vk::DescriptorBufferInfo { buffer: buf_in, offset: 0, range: vk::WHOLE_SIZE }]).build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set).dst_binding(1).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[vk::DescriptorBufferInfo { buffer: buf_out, offset: 0, range: vk::WHOLE_SIZE }]).build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set).dst_binding(2).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[vk::DescriptorBufferInfo { buffer: buf_gamma, offset: 0, range: vk::WHOLE_SIZE }]).build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set).dst_binding(3).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[vk::DescriptorBufferInfo { buffer: buf_beta, offset: 0, range: vk::WHOLE_SIZE }]).build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set).dst_binding(4).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[vk::DescriptorBufferInfo { buffer: mean_buffer, offset: 0, range: vk::WHOLE_SIZE }]).build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set).dst_binding(5).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[vk::DescriptorBufferInfo { buffer: var_buffer, offset: 0, range: vk::WHOLE_SIZE }]).build(),
+            ];
+            self.device.update_descriptor_sets(&writes, &[]);
+
+            // Pass 0: Compute statistics
+            let push_pass0 = LayerNormPushConstants { batch_size, hidden_size, epsilon: eps as f32, pass: 0 };
+            let push_bytes0 = bytemuck::bytes_of(&push_pass0);
+
+            let begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            self.device.begin_command_buffer(self.transfer_command_buffer, &begin_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Begin failed: {}", e) })?;
+
+            self.device.cmd_bind_pipeline(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, pipeline);
+            self.device.cmd_bind_descriptor_sets(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, 0, &[descriptor_set], &[]);
+            self.device.cmd_push_constants(self.transfer_command_buffer, self.pipeline_layout, vk::ShaderStageFlags::COMPUTE, 0, push_bytes0);
+            self.device.cmd_dispatch(self.transfer_command_buffer, 1, batch_size, 1);
+
+            // Memory barrier between passes
+            let barrier = vk::MemoryBarrier::builder()
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ);
+            self.device.cmd_pipeline_barrier(
+                self.transfer_command_buffer,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[barrier.build()],
+                &[],
+                &[],
+            );
+
+            // Pass 1: Normalize
+            let push_pass1 = LayerNormPushConstants { batch_size, hidden_size, epsilon: eps as f32, pass: 1 };
+            let push_bytes1 = bytemuck::bytes_of(&push_pass1);
+            self.device.cmd_push_constants(self.transfer_command_buffer, self.pipeline_layout, vk::ShaderStageFlags::COMPUTE, 0, push_bytes1);
+            self.device.cmd_dispatch(self.transfer_command_buffer, 1, batch_size, 1);
+
+            self.device.end_command_buffer(self.transfer_command_buffer)
+                .map_err(|e| HlxError::BackendError { message: format!("End failed: {}", e) })?;
+
+            // Submit
+            let submit_info = vk::SubmitInfo::builder()
+                .command_buffers(std::slice::from_ref(&self.transfer_command_buffer));
+            self.device.queue_submit(self.queue, &[submit_info.build()], self.transfer_fence)
+                .map_err(|e| HlxError::BackendError { message: format!("Submit failed: {}", e) })?;
+            self.device.wait_for_fences(&[self.transfer_fence], true, u64::MAX)
+                .map_err(|e| HlxError::BackendError { message: format!("Wait failed: {}", e) })?;
+            self.device.reset_fences(&[self.transfer_fence])
+                .map_err(|e| HlxError::BackendError { message: format!("Reset failed: {}", e) })?;
+
+            // Cleanup
+            self.device.destroy_descriptor_set_layout(layernorm_layout, None);
+            self.device.destroy_descriptor_pool(descriptor_pool, None);
+            self.device.destroy_buffer(mean_buffer, None);
+            self.device.destroy_buffer(var_buffer, None);
+            let mut allocator = self.allocator.lock().unwrap();
+            allocator.free(mean_alloc).map_err(|e| HlxError::BackendError { message: format!("Free mean failed: {}", e) })?;
+            allocator.free(var_alloc).map_err(|e| HlxError::BackendError { message: format!("Free var failed: {}", e) })?;
+        }
+
+        Ok(())
+    }
+    fn softmax(&mut self, input: TensorHandle, out: TensorHandle, _dim: i32) -> Result<()> {
+        let meta = self.tensor_meta(input)?;
+
+        // Assume shape is (batch_size, seq_len)
+        if meta.shape.len() != 2 {
+            return Err(HlxError::ValidationFail {
+                message: "Softmax requires 2D tensor (batch_size, seq_len)".to_string()
+            });
+        }
+
+        let batch_size = meta.shape[0] as u32;
+        let seq_len = meta.shape[1] as u32;
+
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        struct SoftmaxPushConstants {
+            batch_size: u32,
+            seq_len: u32,
+            pass: u32,
+            _padding: u32,
+        }
+        unsafe impl bytemuck::Pod for SoftmaxPushConstants {}
+        unsafe impl bytemuck::Zeroable for SoftmaxPushConstants {}
+
+        unsafe {
+            let pipeline = self.get_or_create_pipeline("softmax", SHADER_SOFTMAX)?;
+
+            // Allocate temporary buffers for max and sum
+            let stats_size = (batch_size * std::mem::size_of::<f32>() as u32) as u64;
+
+            let max_buffer_info = vk::BufferCreateInfo::builder()
+                .size(stats_size)
+                .usage(vk::BufferUsageFlags::STORAGE_BUFFER)
+                .sharing_mode(vk::SharingMode::EXCLUSIVE);
+            let max_buffer = self.device.create_buffer(&max_buffer_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Max buffer failed: {}", e) })?;
+
+            let sum_buffer_info = vk::BufferCreateInfo::builder()
+                .size(stats_size)
+                .usage(vk::BufferUsageFlags::STORAGE_BUFFER)
+                .sharing_mode(vk::SharingMode::EXCLUSIVE);
+            let sum_buffer = self.device.create_buffer(&sum_buffer_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Sum buffer failed: {}", e) })?;
+
+            let max_reqs = self.device.get_buffer_memory_requirements(max_buffer);
+            let sum_reqs = self.device.get_buffer_memory_requirements(sum_buffer);
+
+            let mut allocator = self.allocator.lock().unwrap();
+            let max_alloc = allocator.allocate(&AllocationCreateDesc {
+                name: "Softmax Max",
+                requirements: max_reqs,
+                location: MemoryLocation::GpuOnly,
+                linear: true,
+                allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+            }).map_err(|e| HlxError::BackendError { message: format!("Max alloc failed: {}", e) })?;
+
+            let sum_alloc = allocator.allocate(&AllocationCreateDesc {
+                name: "Softmax Sum",
+                requirements: sum_reqs,
+                location: MemoryLocation::GpuOnly,
+                linear: true,
+                allocation_scheme: AllocationScheme::GpuAllocatorManaged,
+            }).map_err(|e| HlxError::BackendError { message: format!("Sum alloc failed: {}", e) })?;
+            drop(allocator);
+
+            self.device.bind_buffer_memory(max_buffer, max_alloc.memory(), max_alloc.offset())
+                .map_err(|e| HlxError::BackendError { message: format!("Max bind failed: {}", e) })?;
+            self.device.bind_buffer_memory(sum_buffer, sum_alloc.memory(), sum_alloc.offset())
+                .map_err(|e| HlxError::BackendError { message: format!("Sum bind failed: {}", e) })?;
+
+            // Create descriptor pool (4 buffers)
+            let pool_sizes = [vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 4,
+            }];
+            let pool_info = vk::DescriptorPoolCreateInfo::builder()
+                .max_sets(1)
+                .pool_sizes(&pool_sizes);
+            let descriptor_pool = self.device.create_descriptor_pool(&pool_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Pool failed: {}", e) })?;
+
+            // Allocate descriptor set
+            let bindings = [
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(0).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE).build(),
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(1).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE).build(),
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(2).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE).build(),
+                vk::DescriptorSetLayoutBinding::builder()
+                    .binding(3).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .descriptor_count(1).stage_flags(vk::ShaderStageFlags::COMPUTE).build(),
+            ];
+            let layout_info = vk::DescriptorSetLayoutCreateInfo::builder()
+                .bindings(&bindings);
+            let softmax_layout = self.device.create_descriptor_set_layout(&layout_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Layout failed: {}", e) })?;
+
+            let set_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(descriptor_pool)
+                .set_layouts(std::slice::from_ref(&softmax_layout));
+            let descriptor_set = self.device.allocate_descriptor_sets(&set_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Set alloc failed: {}", e) })?[0];
+
+            // Update descriptor sets
+            let buf_in = self.buffers.get(&input.0).unwrap().0;
+            let buf_out = self.buffers.get(&out.0).unwrap().0;
+
+            let writes = [
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set).dst_binding(0).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[vk::DescriptorBufferInfo { buffer: buf_in, offset: 0, range: vk::WHOLE_SIZE }]).build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set).dst_binding(1).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[vk::DescriptorBufferInfo { buffer: buf_out, offset: 0, range: vk::WHOLE_SIZE }]).build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set).dst_binding(2).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[vk::DescriptorBufferInfo { buffer: max_buffer, offset: 0, range: vk::WHOLE_SIZE }]).build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set).dst_binding(3).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[vk::DescriptorBufferInfo { buffer: sum_buffer, offset: 0, range: vk::WHOLE_SIZE }]).build(),
+            ];
+            self.device.update_descriptor_sets(&writes, &[]);
+
+            // Pass 0: Compute max and sum
+            let push_pass0 = SoftmaxPushConstants { batch_size, seq_len, pass: 0, _padding: 0 };
+            let push_bytes0 = bytemuck::bytes_of(&push_pass0);
+
+            let begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            self.device.begin_command_buffer(self.transfer_command_buffer, &begin_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Begin failed: {}", e) })?;
+
+            self.device.cmd_bind_pipeline(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, pipeline);
+            self.device.cmd_bind_descriptor_sets(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, 0, &[descriptor_set], &[]);
+            self.device.cmd_push_constants(self.transfer_command_buffer, self.pipeline_layout, vk::ShaderStageFlags::COMPUTE, 0, push_bytes0);
+            self.device.cmd_dispatch(self.transfer_command_buffer, 1, batch_size, 1);
+
+            // Memory barrier between passes
+            let barrier = vk::MemoryBarrier::builder()
+                .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ);
+            self.device.cmd_pipeline_barrier(
+                self.transfer_command_buffer,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::DependencyFlags::empty(),
+                &[barrier.build()],
+                &[],
+                &[],
+            );
+
+            // Pass 1: Normalize
+            let push_pass1 = SoftmaxPushConstants { batch_size, seq_len, pass: 1, _padding: 0 };
+            let push_bytes1 = bytemuck::bytes_of(&push_pass1);
+            self.device.cmd_push_constants(self.transfer_command_buffer, self.pipeline_layout, vk::ShaderStageFlags::COMPUTE, 0, push_bytes1);
+            self.device.cmd_dispatch(self.transfer_command_buffer, 1, batch_size, 1);
+
+            self.device.end_command_buffer(self.transfer_command_buffer)
+                .map_err(|e| HlxError::BackendError { message: format!("End failed: {}", e) })?;
+
+            // Submit
+            let submit_info = vk::SubmitInfo::builder()
+                .command_buffers(std::slice::from_ref(&self.transfer_command_buffer));
+            self.device.queue_submit(self.queue, &[submit_info.build()], self.transfer_fence)
+                .map_err(|e| HlxError::BackendError { message: format!("Submit failed: {}", e) })?;
+            self.device.wait_for_fences(&[self.transfer_fence], true, u64::MAX)
+                .map_err(|e| HlxError::BackendError { message: format!("Wait failed: {}", e) })?;
+            self.device.reset_fences(&[self.transfer_fence])
+                .map_err(|e| HlxError::BackendError { message: format!("Reset failed: {}", e) })?;
+
+            // Cleanup
+            self.device.destroy_descriptor_set_layout(softmax_layout, None);
+            self.device.destroy_descriptor_pool(descriptor_pool, None);
+            self.device.destroy_buffer(max_buffer, None);
+            self.device.destroy_buffer(sum_buffer, None);
+            let mut allocator = self.allocator.lock().unwrap();
+            allocator.free(max_alloc).map_err(|e| HlxError::BackendError { message: format!("Free max failed: {}", e) })?;
+            allocator.free(sum_alloc).map_err(|e| HlxError::BackendError { message: format!("Free sum failed: {}", e) })?;
+        }
+
+        Ok(())
+    }
     fn attention(&mut self, _q: TensorHandle, _k: TensorHandle, _v: TensorHandle, _out: TensorHandle, _mask: Option<TensorHandle>, _scale: f64) -> Result<()> { Ok(()) }
-    fn cross_entropy(&mut self, _logits: TensorHandle, _targets: TensorHandle, _loss_out: TensorHandle, _probs_out: TensorHandle) -> Result<()> { Ok(()) }
+    fn cross_entropy(&mut self, logits: TensorHandle, targets: TensorHandle, loss_out: TensorHandle, _probs_out: TensorHandle) -> Result<()> {
+        // logits should already be probabilities (after softmax)
+        let meta = self.tensor_meta(logits)?;
+
+        // Assume shape is (batch_size, num_classes)
+        if meta.shape.len() != 2 {
+            return Err(HlxError::ValidationFail {
+                message: "CrossEntropy requires 2D tensor (batch_size, num_classes)".to_string()
+            });
+        }
+
+        let batch_size = meta.shape[0] as u32;
+        let num_classes = meta.shape[1] as u32;
+
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        struct CrossEntropyPushConstants {
+            batch_size: u32,
+            num_classes: u32,
+            epsilon: f32,
+            reduction: u32,  // 0 = none, 1 = mean, 2 = sum
+        }
+        unsafe impl bytemuck::Pod for CrossEntropyPushConstants {}
+        unsafe impl bytemuck::Zeroable for CrossEntropyPushConstants {}
+
+        unsafe {
+            let pipeline = self.get_or_create_pipeline("cross_entropy", SHADER_CROSS_ENTROPY)?;
+
+            // Descriptor Pool (3 buffers)
+            let pool_sizes = [vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 3,
+            }];
+            let pool_info = vk::DescriptorPoolCreateInfo::builder()
+                .max_sets(1)
+                .pool_sizes(&pool_sizes);
+            let descriptor_pool = self.device.create_descriptor_pool(&pool_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Pool failed: {}", e) })?;
+
+            let set_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(descriptor_pool)
+                .set_layouts(std::slice::from_ref(&self.descriptor_set_layout));
+            let descriptor_set = self.device.allocate_descriptor_sets(&set_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Set alloc failed: {}", e) })?[0];
+
+            // Update Descriptor Sets
+            let buf_logits = self.buffers.get(&logits.0).unwrap().0;
+            let buf_targets = self.buffers.get(&targets.0).unwrap().0;
+            let buf_loss = self.buffers.get(&loss_out.0).unwrap().0;
+
+            let writes = [
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set).dst_binding(0).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[vk::DescriptorBufferInfo { buffer: buf_logits, offset: 0, range: vk::WHOLE_SIZE }]).build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set).dst_binding(1).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[vk::DescriptorBufferInfo { buffer: buf_targets, offset: 0, range: vk::WHOLE_SIZE }]).build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set).dst_binding(2).descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(&[vk::DescriptorBufferInfo { buffer: buf_loss, offset: 0, range: vk::WHOLE_SIZE }]).build(),
+            ];
+            self.device.update_descriptor_sets(&writes, &[]);
+
+            // Push Constants (reduction = 0 for per-sample loss)
+            let push_constants = CrossEntropyPushConstants {
+                batch_size,
+                num_classes,
+                epsilon: 1e-8,
+                reduction: 0,  // No reduction
+            };
+            let push_bytes = bytemuck::bytes_of(&push_constants);
+
+            // Record & Submit
+            let begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            self.device.begin_command_buffer(self.transfer_command_buffer, &begin_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Begin failed: {}", e) })?;
+
+            self.device.cmd_bind_pipeline(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, pipeline);
+            self.device.cmd_bind_descriptor_sets(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, 0, &[descriptor_set], &[]);
+            self.device.cmd_push_constants(self.transfer_command_buffer, self.pipeline_layout, vk::ShaderStageFlags::COMPUTE, 0, push_bytes);
+            self.device.cmd_dispatch(self.transfer_command_buffer, 1, batch_size, 1);
+
+            self.device.end_command_buffer(self.transfer_command_buffer)
+                .map_err(|e| HlxError::BackendError { message: format!("End failed: {}", e) })?;
+
+            let submit_info = vk::SubmitInfo::builder()
+                .command_buffers(std::slice::from_ref(&self.transfer_command_buffer));
+            self.device.queue_submit(self.queue, &[submit_info.build()], self.transfer_fence)
+                .map_err(|e| HlxError::BackendError { message: format!("Submit failed: {}", e) })?;
+            self.device.wait_for_fences(&[self.transfer_fence], true, u64::MAX)
+                .map_err(|e| HlxError::BackendError { message: format!("Wait failed: {}", e) })?;
+            self.device.reset_fences(&[self.transfer_fence])
+                .map_err(|e| HlxError::BackendError { message: format!("Reset failed: {}", e) })?;
+
+            // Cleanup
+            self.device.destroy_descriptor_pool(descriptor_pool, None);
+        }
+
+        Ok(())
+    }
     fn reduce_sum(&mut self, _input: TensorHandle, _out: TensorHandle, _dim: Option<i32>) -> Result<()> { Ok(()) }
     fn embedding(&mut self, _indices: TensorHandle, _weight: TensorHandle, _out: TensorHandle) -> Result<()> { Ok(()) }
     fn adam_update(&mut self, _param: TensorHandle, _grad: TensorHandle, _m: TensorHandle, _v: TensorHandle, _lr: f64, _beta1: f64, _beta2: f64, _eps: f64, _step: u64) -> Result<()> { Ok(()) }
@@ -584,8 +1308,24 @@ impl Backend for VulkanBackend {
 impl Drop for VulkanBackend {
     fn drop(&mut self) {
         unsafe {
+            // Wait for all GPU operations to complete
+            let _ = self.device.device_wait_idle();
+
+            // Free all GPU buffers and their allocations
+            let mut allocator = self.allocator.lock().unwrap();
+            for (_handle, (buffer, allocation)) in self.buffers.drain() {
+                self.device.destroy_buffer(buffer, None);
+                let _ = allocator.free(allocation);
+            }
+            drop(allocator); // Drop the MutexGuard
+
+            // Destroy device and instance
+            // Note: Vulkan spec allows destroying device while child resources exist
+            // (they are implicitly destroyed), but explicit cleanup is better practice
             self.device.destroy_device(None);
             self.instance.destroy_instance(None);
+
+            // Arc<Mutex<Allocator>> will be automatically dropped after this
         }
     }
 }

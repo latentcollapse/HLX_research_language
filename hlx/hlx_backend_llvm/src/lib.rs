@@ -26,24 +26,52 @@ pub struct CodeGen<'ctx> {
 use std::env;
 
 impl<'ctx> CodeGen<'ctx> {
+    /// Create a new code generator with default (host) target
     pub fn new(context: &'ctx Context, module_name: &str) -> Self {
+        Self::with_target(context, module_name, None)
+    }
+
+    /// Create a new code generator with a specific target triple
+    ///
+    /// # Examples
+    /// - `None` - Use host target (default)
+    /// - `Some("x86_64-unknown-none-elf")` - Bare metal x86_64
+    /// - `Some("aarch64-unknown-none")` - Bare metal ARM64
+    /// - `Some("riscv64gc-unknown-none-elf")` - Bare metal RISC-V
+    pub fn with_target(context: &'ctx Context, module_name: &str, target_triple: Option<&str>) -> Self {
         Target::initialize_native(&InitializationConfig::default()).unwrap();
-        
+
         // Load symbols from current executable so JIT can find printf, malloc, etc.
-        if let Ok(exe) = env::current_exe() {
-            let _ = inkwell::support::load_library_permanently(&exe);
+        // (Only for hosted targets)
+        if target_triple.is_none() || !target_triple.unwrap().contains("none") {
+            if let Ok(exe) = env::current_exe() {
+                let _ = inkwell::support::load_library_permanently(&exe);
+            }
+
+            // Load SDL2 library for graphics support
+            let _ = inkwell::support::load_library_permanently(std::path::Path::new("/usr/lib/libSDL2.so"));
         }
 
-        // Load SDL2 library for graphics support
-        let _ = inkwell::support::load_library_permanently(std::path::Path::new("/usr/lib/libSDL2.so"));
-        
         let module = context.create_module(module_name);
         let builder = context.create_builder();
-        
-        let triple = TargetMachine::get_default_triple();
+
+        // Use provided target triple or default to host
+        let triple = if let Some(target_str) = target_triple {
+            inkwell::targets::TargetTriple::create(target_str)
+        } else {
+            TargetMachine::get_default_triple()
+        };
+
         let target = Target::from_triple(&triple).unwrap();
-        let cpu = TargetMachine::get_host_cpu_name().to_string();
-        let features = TargetMachine::get_host_cpu_features().to_string();
+
+        // For bare metal targets, use generic CPU features
+        let (cpu, features) = if target_triple.map_or(false, |t| t.contains("none")) {
+            ("generic".to_string(), "".to_string())
+        } else {
+            (TargetMachine::get_host_cpu_name().to_string(),
+             TargetMachine::get_host_cpu_features().to_string())
+        };
+
         let target_machine = target.create_target_machine(
             &triple,
             &cpu,
@@ -52,7 +80,7 @@ impl<'ctx> CodeGen<'ctx> {
             inkwell::targets::RelocMode::Default,
             inkwell::targets::CodeModel::Default,
         ).unwrap();
-        
+
         module.set_data_layout(&target_machine.get_target_data().get_data_layout());
         module.set_triple(&triple);
         
@@ -553,7 +581,39 @@ impl<'ctx> CodeGen<'ctx> {
                 let gep = unsafe { self.builder.build_gep(fmt.get_type(), g.as_pointer_value(), &[self.context.i32_type().const_int(0, false), self.context.i32_type().const_int(0, false)], "fg")? };
                 self.builder.build_call(f, &[gep.into(), v.into()], "pc")?;
             }
-            _ => {} 
+            Instruction::Asm { out, template, constraints, side_effects } => {
+                // Build inline assembly using inkwell Context API
+                let asm_type = if out.is_some() {
+                    // If there's an output, assembly returns i64
+                    i64_t.fn_type(&[], false)
+                } else {
+                    // Otherwise, it's void
+                    self.context.void_type().fn_type(&[], false)
+                };
+
+                let asm_fn_ptr = self.context.create_inline_asm(
+                    asm_type,
+                    template.clone(),
+                    constraints.clone(),
+                    *side_effects,
+                    false,  // align_stack
+                    None,   // dialect (None = AT&T default)
+                    false   // can_throw
+                );
+
+                // Call the inline assembly using indirect call
+                let result = self.builder.build_indirect_call(asm_type, asm_fn_ptr, &[], "asm_result")?;
+
+                // If there's an output register, store the result
+                if let Some(out_reg) = out {
+                    if let Some(val) = result.try_as_basic_value().left() {
+                        if val.is_int_value() {
+                            self.store_reg(*out_reg, val.into_int_value())?;
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -600,5 +660,83 @@ impl<'ctx> CodeGen<'ctx> {
             let func = ee.get_function::<unsafe extern "C" fn() -> i64>("main")?;
             Ok(func.call())
         }
+    }
+
+    /// Emit native object file (.o)
+    pub fn emit_object(&self, output_path: &std::path::Path) -> Result<()> {
+        let triple = self.module.get_triple();
+        let target = Target::from_triple(&triple)
+            .map_err(|e| anyhow!("Target error: {}", e))?;
+
+        let triple_str = triple.as_str().to_str().unwrap();
+        let is_bare_metal = triple_str.contains("none");
+
+        let cpu_name = TargetMachine::get_host_cpu_name();
+        let cpu_features = TargetMachine::get_host_cpu_features();
+
+        let cpu = if is_bare_metal {
+            "generic"
+        } else {
+            cpu_name.to_str().unwrap()
+        };
+
+        let features = if is_bare_metal {
+            ""
+        } else {
+            cpu_features.to_str().unwrap()
+        };
+
+        let target_machine = target.create_target_machine(
+            &triple,
+            cpu,
+            features,
+            OptimizationLevel::Default,
+            inkwell::targets::RelocMode::Default,
+            inkwell::targets::CodeModel::Default,
+        ).ok_or_else(|| anyhow!("Failed to create target machine"))?;
+
+        target_machine.write_to_file(&self.module, inkwell::targets::FileType::Object, output_path)
+            .map_err(|e| anyhow!("Failed to write object file: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Emit native assembly (.s)
+    pub fn emit_assembly(&self, output_path: &std::path::Path) -> Result<()> {
+        let triple = self.module.get_triple();
+        let target = Target::from_triple(&triple)
+            .map_err(|e| anyhow!("Target error: {}", e))?;
+
+        let triple_str = triple.as_str().to_str().unwrap();
+        let is_bare_metal = triple_str.contains("none");
+
+        let cpu_name = TargetMachine::get_host_cpu_name();
+        let cpu_features = TargetMachine::get_host_cpu_features();
+
+        let cpu = if is_bare_metal {
+            "generic"
+        } else {
+            cpu_name.to_str().unwrap()
+        };
+
+        let features = if is_bare_metal {
+            ""
+        } else {
+            cpu_features.to_str().unwrap()
+        };
+
+        let target_machine = target.create_target_machine(
+            &triple,
+            cpu,
+            features,
+            OptimizationLevel::Default,
+            inkwell::targets::RelocMode::Default,
+            inkwell::targets::CodeModel::Default,
+        ).ok_or_else(|| anyhow!("Failed to create target machine"))?;
+
+        target_machine.write_to_file(&self.module, inkwell::targets::FileType::Assembly, output_path)
+            .map_err(|e| anyhow!("Failed to write assembly file: {}", e))?;
+
+        Ok(())
     }
 }

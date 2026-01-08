@@ -434,6 +434,14 @@ pub enum Instruction {
         handle_out: Register,
     },
 
+    /// Inline Assembly (for kernel/bare metal)
+    Asm {
+        out: Option<Register>,
+        template: String,
+        constraints: String,
+        side_effects: bool,
+    },
+
     // === No-op (for padding/alignment) ===
     Nop,
 }
@@ -483,6 +491,7 @@ impl Instruction {
             Instruction::Collapse { handle_out, .. } => Some(*handle_out),
             Instruction::Resolve { val_out, .. } => Some(*val_out),
             Instruction::Snapshot { handle_out } => Some(*handle_out),
+            Instruction::Asm { out, .. } => *out,
             // These don't produce output registers
             Instruction::If { .. } => None,
             Instruction::Jump { .. } => None,
@@ -558,6 +567,7 @@ impl Instruction {
             Instruction::Collapse { val, .. } => vec![*val],
             Instruction::Resolve { handle, .. } => vec![*handle],
             Instruction::Snapshot { .. } => vec![],
+            Instruction::Asm { .. } => vec![],
             Instruction::Nop => vec![],
         }
     }
@@ -570,6 +580,7 @@ impl Instruction {
             Instruction::AdamUpdate { .. } |
             Instruction::Collapse { .. } |
             Instruction::Snapshot { .. } |
+            Instruction::Asm { side_effects: true, .. } |
             Instruction::Call { .. } |
             Instruction::Return { .. } |
             Instruction::Break |

@@ -1,0 +1,111 @@
+#version 450
+
+// Softmax - Numerically Stable Implementation
+// Computes: softmax(x)_i = exp(x_i - max(x)) / sum(exp(x_j - max(x)))
+//
+// Two-pass algorithm:
+// Pass 1: Find max and compute sum of exponentials
+// Pass 2: Normalize by dividing by sum
+//
+// This shader handles one row/sequence at a time
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform PushConstants {
+    uint batch_size;    // Number of rows/sequences
+    uint seq_len;       // Length of each sequence
+    uint pass;          // 0 = max+sum pass, 1 = normalize pass
+} params;
+
+layout(std430, binding = 0) readonly buffer InputBuffer {
+    float input_data[];
+};
+
+layout(std430, binding = 1) buffer OutputBuffer {
+    float output_data[];
+};
+
+// Intermediate storage for max values and sums
+layout(std430, binding = 2) buffer MaxBuffer {
+    float max_vals[];
+};
+
+layout(std430, binding = 3) buffer SumBuffer {
+    float sum_vals[];
+};
+
+// Shared memory for reduction
+shared float shared_data[256];
+
+void main() {
+    uint batch_idx = gl_WorkGroupID.y;
+    uint local_id = gl_LocalInvocationID.x;
+    uint local_size = gl_WorkGroupSize.x;
+
+    if (batch_idx >= params.batch_size) {
+        return;
+    }
+
+    uint row_offset = batch_idx * params.seq_len;
+
+    if (params.pass == 0) {
+        // PASS 1: Find max and compute sum of exponentials
+
+        // Find max using parallel reduction
+        float local_max = -1.0 / 0.0;  // -infinity
+
+        for (uint i = local_id; i < params.seq_len; i += local_size) {
+            local_max = max(local_max, input_data[row_offset + i]);
+        }
+
+        shared_data[local_id] = local_max;
+        barrier();
+
+        // Reduce to find global max
+        for (uint stride = local_size / 2; stride > 0; stride /= 2) {
+            if (local_id < stride) {
+                shared_data[local_id] = max(shared_data[local_id], shared_data[local_id + stride]);
+            }
+            barrier();
+        }
+
+        float global_max = shared_data[0];
+        barrier();
+
+        // Compute sum of exponentials
+        float local_sum = 0.0;
+
+        for (uint i = local_id; i < params.seq_len; i += local_size) {
+            float val = input_data[row_offset + i];
+            float exp_val = exp(val - global_max);
+            output_data[row_offset + i] = exp_val;  // Store intermediate result
+            local_sum += exp_val;
+        }
+
+        shared_data[local_id] = local_sum;
+        barrier();
+
+        // Reduce to find global sum
+        for (uint stride = local_size / 2; stride > 0; stride /= 2) {
+            if (local_id < stride) {
+                shared_data[local_id] += shared_data[local_id + stride];
+            }
+            barrier();
+        }
+
+        // Store max and sum for pass 2
+        if (local_id == 0) {
+            max_vals[batch_idx] = global_max;
+            sum_vals[batch_idx] = shared_data[0];
+        }
+
+    } else {
+        // PASS 2: Normalize by dividing by sum
+
+        float sum = sum_vals[batch_idx];
+
+        for (uint i = local_id; i < params.seq_len; i += local_size) {
+            output_data[row_offset + i] = output_data[row_offset + i] / sum;
+        }
+    }
+}

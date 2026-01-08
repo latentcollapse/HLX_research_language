@@ -1,0 +1,7 @@
+// Simple bare metal test - returns 42
+program bare_metal_test {
+    fn main() {
+        let answer = 42;
+        return answer;
+    }
+}

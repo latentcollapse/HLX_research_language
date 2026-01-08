@@ -1,0 +1,75 @@
+program runegraph_v2 {
+    fn work(n) { return n * n; }
+
+    fn get_glyph(op) {
+        // Simple mapping based on first char or length
+        let c = substring(op, 0, 1);
+        if (c == "A") { return "+"; } // Add
+        if (c == "S") { return "-"; } // Sub
+        if (c == "M") { return "*"; } // Mul/Move
+        if (c == "L") { return "<"; } // Lt/Loop
+        if (c == "G") { return ">"; } // Gt
+        if (c == "I") { return "?"; } // If
+        if (c == "J") { return "↷"; } // Jump
+        if (c == "C") { return "📞"; } // Call/Constant
+        if (c == "R") { return "⏎"; } // Return
+        return "▪";
+    }
+    
+    // Polyfill substring (simulated)
+    fn substring(s, start, len) {
+        // Since we don't have real substring yet, we hack it by checking first char via cast?
+        // No, let's just return "▪" if we can't parse.
+        // Wait, I can use the 'op' string length to guess type.
+        return "▪"; 
+    }
+
+    fn main() {
+        print("Runegraph V2");
+        let i = 0;
+        loop(i < 5, 20) { work(i); i = i + 1; }
+
+        let trace = export_trace();
+        let len_trace = len(trace);
+        
+        let w = len_trace * 50;
+        if (w < 800) { w = 800; }
+        
+        let svg = "<svg xmlns='http://www.w3.org/2000/svg' width='" + to_string(w) + "' height='200' style='background:#282a36'>";
+        svg = svg + "<style>.n { font: 14px monospace; fill: #fff; text-anchor: middle; } .l { stroke: #6272a4; width: 2; }</style>";
+        
+        let x = 40; let y = 100; let step = 50;
+        let j = 0;
+        
+        loop(j < len_trace, 1000) {
+            let item = trace[j];
+            let pc = item["pc"];
+            let op = item["op"];
+            
+            if (j < len_trace - 1) {
+                let nx = x + step;
+                svg = svg + "<line x1='" + to_string(x) + "' y1='" + to_string(y) + "' x2='" + to_string(nx) + "' y2='" + to_string(y) + "' class='l' />";
+            }
+            
+            // Color based on string length (hash-like)
+            let clr = "#8be9fd";
+            if (len(op) > 10) { clr = "#bd93f9"; }
+            if (len(op) > 20) { clr = "#ff79c6"; }
+            
+            let tip = "PC:" + to_string(pc) + " " + op;
+            
+            svg = svg + "<g><title>" + tip + "</title>";
+            svg = svg + "<circle cx='" + to_string(x) + "' cy='" + to_string(y) + "' r='15' fill='" + clr + "' />";
+            // Just use PC as label for now since substring is missing
+            svg = svg + "<text x='" + to_string(x) + "' y='" + to_string(y+5) + "' class='n'>" + to_string(pc) + "</text>";
+            svg = svg + "</g>";
+            
+            x = x + step;
+            j = j + 1;
+        }
+        
+        svg = svg + "</svg>";
+        write_file("runegraph.svg", svg);
+        return {"file": "runegraph.svg"};
+    }
+}

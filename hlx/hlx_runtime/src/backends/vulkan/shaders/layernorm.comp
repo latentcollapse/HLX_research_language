@@ -1,0 +1,126 @@
+#version 450
+
+// Layer Normalization
+// Computes: output = gamma * (x - mean) / sqrt(variance + epsilon) + beta
+//
+// where:
+//   mean = sum(x) / N
+//   variance = sum((x - mean)^2) / N
+//
+// Two-pass algorithm:
+// Pass 1: Compute mean and variance
+// Pass 2: Normalize and apply affine transform
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform PushConstants {
+    uint batch_size;      // Number of sequences
+    uint hidden_size;     // Size of hidden dimension
+    float epsilon;        // Small constant for numerical stability (typically 1e-5)
+    uint pass;            // 0 = stats pass, 1 = normalize pass
+} params;
+
+layout(std430, binding = 0) readonly buffer InputBuffer {
+    float input_data[];
+};
+
+layout(std430, binding = 1) buffer OutputBuffer {
+    float output_data[];
+};
+
+// Learnable parameters
+layout(std430, binding = 2) readonly buffer GammaBuffer {
+    float gamma[];  // Scale parameter (size: hidden_size)
+};
+
+layout(std430, binding = 3) readonly buffer BetaBuffer {
+    float beta[];   // Shift parameter (size: hidden_size)
+};
+
+// Intermediate storage for statistics
+layout(std430, binding = 4) buffer MeanBuffer {
+    float means[];  // One per batch element
+};
+
+layout(std430, binding = 5) buffer VarianceBuffer {
+    float variances[];  // One per batch element
+};
+
+// Shared memory for reduction
+shared float shared_data[256];
+
+void main() {
+    uint batch_idx = gl_WorkGroupID.y;
+    uint local_id = gl_LocalInvocationID.x;
+    uint local_size = gl_WorkGroupSize.x;
+
+    if (batch_idx >= params.batch_size) {
+        return;
+    }
+
+    uint row_offset = batch_idx * params.hidden_size;
+
+    if (params.pass == 0) {
+        // PASS 1: Compute mean and variance
+
+        // Compute local sum for mean
+        float local_sum = 0.0;
+        for (uint i = local_id; i < params.hidden_size; i += local_size) {
+            local_sum += input_data[row_offset + i];
+        }
+
+        shared_data[local_id] = local_sum;
+        barrier();
+
+        // Reduce to get global sum
+        for (uint stride = local_size / 2; stride > 0; stride /= 2) {
+            if (local_id < stride) {
+                shared_data[local_id] += shared_data[local_id + stride];
+            }
+            barrier();
+        }
+
+        float mean = shared_data[0] / float(params.hidden_size);
+        barrier();
+
+        // Compute local sum of squared differences for variance
+        float local_sq_diff = 0.0;
+        for (uint i = local_id; i < params.hidden_size; i += local_size) {
+            float diff = input_data[row_offset + i] - mean;
+            local_sq_diff += diff * diff;
+        }
+
+        shared_data[local_id] = local_sq_diff;
+        barrier();
+
+        // Reduce to get global sum of squared differences
+        for (uint stride = local_size / 2; stride > 0; stride /= 2) {
+            if (local_id < stride) {
+                shared_data[local_id] += shared_data[local_id + stride];
+            }
+            barrier();
+        }
+
+        float variance = shared_data[0] / float(params.hidden_size);
+
+        // Store statistics for pass 2
+        if (local_id == 0) {
+            means[batch_idx] = mean;
+            variances[batch_idx] = variance;
+        }
+
+    } else {
+        // PASS 2: Normalize and apply affine transform
+
+        float mean = means[batch_idx];
+        float variance = variances[batch_idx];
+        float inv_std = 1.0 / sqrt(variance + params.epsilon);
+
+        // Apply normalization and affine transform
+        for (uint i = local_id; i < params.hidden_size; i += local_size) {
+            float x = input_data[row_offset + i];
+            float normalized = (x - mean) * inv_std;
+            output_data[row_offset + i] = gamma[i] * normalized + beta[i];
+        }
+    }
+}

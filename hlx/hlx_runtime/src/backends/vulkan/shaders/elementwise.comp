@@ -1,0 +1,109 @@
+#version 450
+
+// Element-wise Operations
+// Supports: add, sub, mul, div, pow, sqrt, abs, neg, exp, log
+// Can be binary (a op b) or unary (op a)
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+// Operation modes
+const uint OP_ADD = 0;
+const uint OP_SUB = 1;
+const uint OP_MUL = 2;
+const uint OP_DIV = 3;
+const uint OP_POW = 4;
+const uint OP_SQRT = 5;
+const uint OP_ABS = 6;
+const uint OP_NEG = 7;
+const uint OP_EXP = 8;
+const uint OP_LOG = 9;
+const uint OP_MIN = 10;
+const uint OP_MAX = 11;
+
+layout(push_constant) uniform PushConstants {
+    uint size;          // Total number of elements
+    uint op;            // Operation to perform
+    uint is_binary;     // 0 = unary, 1 = binary
+    float scalar;       // Optional scalar operand
+} params;
+
+layout(std430, binding = 0) readonly buffer InputA {
+    float a[];
+};
+
+layout(std430, binding = 1) readonly buffer InputB {
+    float b[];  // Only used for binary ops
+};
+
+layout(std430, binding = 2) buffer Output {
+    float output_data[];
+};
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+
+    if (idx >= params.size) {
+        return;
+    }
+
+    float val_a = a[idx];
+    float val_b = (params.is_binary == 1) ? b[idx] : params.scalar;
+    float result;
+
+    // Apply operation
+    switch (params.op) {
+        case OP_ADD:
+            result = val_a + val_b;
+            break;
+
+        case OP_SUB:
+            result = val_a - val_b;
+            break;
+
+        case OP_MUL:
+            result = val_a * val_b;
+            break;
+
+        case OP_DIV:
+            result = val_a / val_b;
+            break;
+
+        case OP_POW:
+            result = pow(val_a, val_b);
+            break;
+
+        case OP_SQRT:
+            result = sqrt(val_a);
+            break;
+
+        case OP_ABS:
+            result = abs(val_a);
+            break;
+
+        case OP_NEG:
+            result = -val_a;
+            break;
+
+        case OP_EXP:
+            result = exp(val_a);
+            break;
+
+        case OP_LOG:
+            result = log(val_a);
+            break;
+
+        case OP_MIN:
+            result = min(val_a, val_b);
+            break;
+
+        case OP_MAX:
+            result = max(val_a, val_b);
+            break;
+
+        default:
+            result = val_a;  // Identity
+            break;
+    }
+
+    output_data[idx] = result;
+}

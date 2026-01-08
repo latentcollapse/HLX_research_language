@@ -1,7 +1,7 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.2",
   "last_updated": "2026-01-08",
-  "total_contracts": 124,
+  "total_contracts": 130,
   "contract_id_space": "0-∞ (no artificial limits)",
   "tier_system": {
     "T0": "0-99: Core Language (types, operators)",
@@ -1372,6 +1372,17 @@
       "usage": "Datagram networking",
       "status": "stable"
     },
+    "622": {
+      "name": "ExportTrace",
+      "tier": "T2-Reserved",
+      "signature": "@622 { } -> Array<Integer>",
+      "description": "Export the full instruction pointer trace",
+      "fields": {},
+      "example": "let t = @622 { };",
+      "usage": "Feeding data to Runegraph",
+      "related": ["605"],
+      "status": "stable"
+    },
     "700": {
       "name": "ScreenCapture",
       "tier": "T2-Reserved",
@@ -1834,6 +1845,70 @@
       "performance": "O(N), GPU-accelerated",
       "related": ["907"],
       "status": "stable"
+    },
+    "920": {
+      "name": "LoadImage",
+      "tier": "T4-GPU",
+      "signature": "@920 { path: String } -> Tensor<H,W,C>",
+      "description": "Load image file into tensor",
+      "fields": {
+        "path": { "type": "String", "description": "Path to image file (png, jpg)", "required": true }
+      },
+      "example": "let img = @920 { path: \"photo.jpg\" };",
+      "usage": "Computer vision input",
+      "status": "experimental"
+    },
+    "921": {
+      "name": "SaveImage",
+      "tier": "T4-GPU",
+      "signature": "@921 { path: String, tensor: Tensor<H,W,C> } -> Bool",
+      "description": "Save tensor to image file",
+      "fields": {
+        "path": { "type": "String", "description": "Output path", "required": true },
+        "tensor": { "type": "Tensor", "description": "Image data", "required": true }
+      },
+      "example": "@921 { path: \"output.png\", tensor: img };",
+      "usage": "Visualizing results",
+      "status": "experimental"
+    },
+    "922": {
+      "name": "Resize",
+      "tier": "T4-GPU",
+      "signature": "@922 { image: Tensor, width: Integer, height: Integer } -> Tensor",
+      "description": "Resize image tensor",
+      "fields": {
+        "image": { "type": "Tensor", "description": "Input image", "required": true },
+        "width": { "type": "Integer", "description": "Target width", "required": true },
+        "height": { "type": "Integer", "description": "Target height", "required": true }
+      },
+      "example": "let thumb = @922 { image: img, width: 128, height: 128 };",
+      "usage": "Preprocessing",
+      "status": "experimental"
+    },
+    "923": {
+      "name": "Blur",
+      "tier": "T4-GPU",
+      "signature": "@923 { image: Tensor, sigma: Float } -> Tensor",
+      "description": "Apply Gaussian blur",
+      "fields": {
+        "image": { "type": "Tensor", "description": "Input image", "required": true },
+        "sigma": { "type": "Float", "description": "Blur radius", "required": true }
+      },
+      "example": "let blurred = @923 { image: img, sigma: 2.0 };",
+      "usage": "Noise reduction",
+      "status": "experimental"
+    },
+    "924": {
+      "name": "EdgeDetect",
+      "tier": "T4-GPU",
+      "signature": "@924 { image: Tensor } -> Tensor",
+      "description": "Sobel edge detection",
+      "fields": {
+        "image": { "type": "Tensor", "description": "Input image (grayscale)", "required": true }
+      },
+      "example": "let edges = @924 { image: gray_img };",
+      "usage": "Feature extraction",
+      "status": "experimental"
     }
   },
   "open_slots": {

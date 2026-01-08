@@ -64,10 +64,12 @@ impl Executor {
         };
         
         while pc < krate.instructions.len() {
-            ctx.trace_buffer.push_back(pc);
-            if ctx.trace_buffer.len() > 50 { ctx.trace_buffer.pop_front(); }
-            
             let inst = &krate.instructions[pc];
+            ctx.trace_buffer.push_back((pc, format!("{:?}", inst)));
+            if !self.config.debug && ctx.trace_buffer.len() > 50 { 
+                ctx.trace_buffer.pop_front(); 
+            }
+            
             match ctx.execute_instruction(inst, pc, &mut *self.backend) {
                 Ok(flow) => match flow {
                     ControlFlow::Continue => pc += 1,
@@ -81,8 +83,8 @@ impl Executor {
                 Err(e) => {
                     println!("\n=== EXECUTION CRASH DUMP ===");
                     println!("Last 50 instructions executed:");
-                    for &trace_pc in &ctx.trace_buffer {
-                         println!("  PC {:04}: {:?}", trace_pc, krate.instructions[trace_pc]);
+                    for (trace_pc, op_str) in &ctx.trace_buffer {
+                         println!("  PC {:04}: {}", trace_pc, op_str);
                     }
                     println!("============================\n");
                     return Err(e);
@@ -136,8 +138,8 @@ struct ExecutionContext {
     /// Backend reference (we'll use a simple approach for now)
     config: RuntimeConfig,
 
-    /// Flight recorder: Last 50 PCs
-    trace_buffer: VecDeque<usize>,
+    /// Flight recorder: Last 50 PCs (PC, Instruction String)
+    trace_buffer: VecDeque<(usize, String)>,
 
     /// Subprocess pipes (handle_id -> Child)
     pipes: HashMap<u32, Child>,
@@ -778,6 +780,16 @@ impl ExecutionContext {
                 let handle = self.cas.store(snapshot)?;
                 Ok(Value::Handle(handle))
             }
+            "export_trace" => {
+                let mut trace_arr = im::Vector::new();
+                for (pc, op_str) in &self.trace_buffer {
+                    let mut obj = im::OrdMap::new();
+                    obj.insert("pc".to_string(), Value::Integer(*pc as i64));
+                    obj.insert("op".to_string(), Value::String(op_str.clone()));
+                    trace_arr.push_back(Value::Object(obj));
+                }
+                Ok(Value::Array(trace_arr))
+            }
             "print" => {
                 for arg in args {
                     let v = self.get_reg(*arg)?;
@@ -909,27 +921,116 @@ impl ExecutionContext {
             }
             "to_int" => {
                 if args.len() != 1 {
-                    return Err(HlxError::ValidationFail {
-                        message: "to_int() takes exactly 1 argument".to_string(),
-                    });
+                    return Err(HlxError::ValidationFail { message: "to_int() takes exactly 1 argument".to_string() });
                 }
                 let v = self.get_reg(args[0])?;
                 match v {
-                    Value::Integer(n) => Ok(Value::Integer(*n)),
+                    Value::Integer(i) => Ok(Value::Integer(*i)),
                     Value::Float(f) => Ok(Value::Integer(*f as i64)),
-                    Value::String(s) => {
-                         match s.parse::<i64>() {
-                            Ok(n) => Ok(Value::Integer(n)),
-                            Err(_) => Err(HlxError::ValidationFail {
-                                message: format!("to_int() cannot parse '{}' as integer", s),
-                            }),
-                        }
-                    }
-                    _ => Err(HlxError::TypeError {
-                        expected: "numeric or string".to_string(),
-                        got: v.type_name().to_string(),
-                    }),
+                    Value::String(s) => match s.parse::<i64>() {
+                        Ok(i) => Ok(Value::Integer(i)),
+                        Err(_) => Err(HlxError::ValidationFail { message: format!("to_int() cannot parse '{}' as integer", s) }),
+                    },
+                    _ => Err(HlxError::TypeError { expected: "numeric or string".to_string(), got: v.type_name().to_string() }),
                 }
+            }
+            "to_string" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail { message: "to_string() takes exactly 1 argument".to_string() });
+                }
+                let v = self.get_reg(args[0])?;
+                match v {
+                    Value::Integer(i) => Ok(Value::String(i.to_string())),
+                    Value::Float(f) => Ok(Value::String(f.to_string())),
+                    Value::String(s) => Ok(Value::String(s.clone())),
+                    Value::Boolean(b) => Ok(Value::String(b.to_string())),
+                    Value::Null => Ok(Value::String("null".to_string())),
+                    _ => Ok(Value::String(format!("[{}]", v.type_name()))),
+                }
+            }
+            "floor" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "floor() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Integer(f.floor() as i64)),
+                    Value::Integer(i) => Ok(Value::Integer(*i)),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "ceil" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "ceil() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Integer(f.ceil() as i64)),
+                    Value::Integer(i) => Ok(Value::Integer(*i)),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "round" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "round() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Integer(f.round() as i64)),
+                    Value::Integer(i) => Ok(Value::Integer(*i)),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "sqrt" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "sqrt() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.sqrt())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).sqrt())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "sin" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "sin() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.sin())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).sin())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "cos" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "cos() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.cos())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).cos())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "tan" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "tan() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.tan())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).tan())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "log" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "log() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.ln())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).ln())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "exp" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "exp() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.exp())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).exp())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "random" => {
+                let seed = if args.len() > 0 {
+                    match self.get_reg(args[0])? {
+                        Value::Integer(i) => *i as u64,
+                        _ => 42,
+                    }
+                } else {
+                    42
+                };
+                let res = ((seed.wrapping_mul(1103515245).wrapping_add(12345)) & 0x7fffffff) as f64 / 2147483647.0;
+                Ok(Value::Float(res))
             }
             "has_key" => {
                 if args.len() != 2 {
@@ -953,6 +1054,65 @@ impl ExecutionContext {
                         got: obj_val.type_name().to_string(),
                     }),
                 }
+            }
+            "concat" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "concat() takes 2 args".to_string() }); }
+                let lhs = self.get_reg(args[0])?.to_string();
+                let rhs = self.get_reg(args[1])?.to_string();
+                Ok(Value::String(format!("{}{}", lhs, rhs)))
+            }
+            "strlen" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "strlen() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::String(s) => Ok(Value::Integer(s.len() as i64)),
+                    v => Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "substring" => {
+                if args.len() != 3 { return Err(HlxError::ValidationFail { message: "substring(s, start, len) takes 3 args".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let start = match self.get_reg(args[1])? { Value::Integer(i) => *i as usize, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let length = match self.get_reg(args[2])? { Value::Integer(i) => *i as usize, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                
+                let end = (start + length).min(s.len());
+                if start > s.len() { return Ok(Value::String("".to_string())); }
+                Ok(Value::String(s[start..end].to_string()))
+            }
+            "index_of" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "index_of(haystack, needle) takes 2 args".to_string() }); }
+                let haystack = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let needle = match self.get_reg(args[1])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                match haystack.find(needle) {
+                    Some(i) => Ok(Value::Integer(i as i64)),
+                    None => Ok(Value::Integer(-1)),
+                }
+            }
+            "to_upper" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "to_upper() takes 1 arg".to_string() }); }
+                let s = self.get_reg(args[0])?.to_string();
+                Ok(Value::String(s.to_uppercase()))
+            }
+            "to_lower" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "to_lower() takes 1 arg".to_string() }); }
+                let s = self.get_reg(args[0])?.to_string();
+                Ok(Value::String(s.to_lowercase()))
+            }
+            "trim" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "trim() takes 1 arg".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.trim().to_string(), _ => self.get_reg(args[0])?.to_string().trim().to_string() };
+                Ok(Value::String(s))
+            }
+            "starts_with" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "starts_with(s, prefix) takes 2 args".to_string() }); }
+                let s = self.get_reg(args[0])?.to_string();
+                let prefix = self.get_reg(args[1])?.to_string();
+                Ok(Value::Boolean(s.starts_with(&prefix)))
+            }
+            "ends_with" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "ends_with(s, suffix) takes 2 args".to_string() }); }
+                let s = self.get_reg(args[0])?.to_string();
+                let suffix = self.get_reg(args[1])?.to_string();
+                Ok(Value::Boolean(s.ends_with(&suffix)))
             }
             "json_parse" => {
                 if args.len() != 1 {
@@ -1068,6 +1228,111 @@ impl ExecutionContext {
                     message: format!("Failed to read file {}: {}", path, e) 
                 })?;
                 Ok(Value::String(content))
+            }
+            "write_file" => {
+                if args.len() != 2 {
+                    return Err(HlxError::ValidationFail {
+                        message: "write_file() takes exactly 2 arguments (path, data)".to_string(),
+                    });
+                }
+                let path = match self.get_reg(args[0])? {
+                    Value::String(s) => s.clone(),
+                    v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }),
+                };
+                let data = match self.get_reg(args[1])? {
+                    Value::String(s) => s.clone(),
+                    v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }),
+                };
+                
+                std::fs::write(&path, data).map_err(|e| HlxError::BackendError { 
+                    message: format!("Failed to write file {}: {}", path, e) 
+                })?;
+                Ok(Value::Boolean(true))
+            }
+            "file_exists" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "file_exists() takes 1 arg".to_string() }); }
+                let path = self.get_reg(args[0])?.to_string();
+                Ok(Value::Boolean(std::path::Path::new(&path).exists()))
+            }
+            "delete_file" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "delete_file() takes 1 arg".to_string() }); }
+                let path = self.get_reg(args[0])?.to_string();
+                std::fs::remove_file(path).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
+                Ok(Value::Boolean(true))
+            }
+            "list_files" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "list_files() takes 1 arg".to_string() }); }
+                let path = self.get_reg(args[0])?.to_string();
+                let entries = std::fs::read_dir(path).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
+                let mut files = im::Vector::new();
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        files.push_back(Value::String(entry.file_name().to_string_lossy().to_string()));
+                    }
+                }
+                Ok(Value::Array(files))
+            }
+            "create_dir" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "create_dir() takes 1 arg".to_string() }); }
+                let path = self.get_reg(args[0])?.to_string();
+                std::fs::create_dir_all(path).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
+                Ok(Value::Boolean(true))
+            }
+            "arr_pop" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "arr_pop() takes 1 arg".to_string() }); }
+                let val = self.get_reg(args[0])?;
+                match val {
+                    Value::Array(arr) => {
+                        let mut new_arr = arr.clone();
+                        new_arr.pop_back();
+                        Ok(Value::Array(new_arr))
+                    }
+                    _ => Err(HlxError::TypeError { expected: "array".to_string(), got: val.type_name().to_string() }),
+                }
+            }
+            "arr_slice" => {
+                if args.len() != 3 { return Err(HlxError::ValidationFail { message: "arr_slice(arr, start, len) takes 3 args".to_string() }); }
+                let val = self.get_reg(args[0])?;
+                let start = match self.get_reg(args[1])? { Value::Integer(i) => *i as usize, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let length = match self.get_reg(args[2])? { Value::Integer(i) => *i as usize, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                
+                match val {
+                    Value::Array(arr) => {
+                        let end = (start + length).min(arr.len());
+                        if start > arr.len() { return Ok(Value::Array(im::Vector::new())); }
+                        Ok(Value::Array(arr.clone().slice(start..end)))
+                    }
+                    _ => Err(HlxError::TypeError { expected: "array".to_string(), got: val.type_name().to_string() }),
+                }
+            }
+            "arr_concat" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "arr_concat() takes 2 args".to_string() }); }
+                let lhs = self.get_reg(args[0])?;
+                let rhs = self.get_reg(args[1])?;
+                match (lhs, rhs) {
+                    (Value::Array(a), Value::Array(b)) => {
+                        let mut res = a.clone();
+                        res.append(b.clone());
+                        Ok(Value::Array(res))
+                    }
+                    _ => Err(HlxError::TypeError { expected: "two arrays".to_string(), got: format!("{}, {}", lhs.type_name(), rhs.type_name()) }),
+                }
+            }
+            "read_json" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "read_json() takes 1 arg".to_string() }); }
+                let path = self.get_reg(args[0])?.to_string();
+                let content = std::fs::read_to_string(path).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
+                let sjv: serde_json::Value = serde_json::from_str(&content).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
+                Ok(Value::from_json(sjv)?)
+            }
+            "write_json" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "write_json() takes 2 args".to_string() }); }
+                let path = self.get_reg(args[0])?.to_string();
+                let val = self.get_reg(args[1])?;
+                let sjv = val.to_json()?;
+                let content = serde_json::to_string_pretty(&sjv).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
+                std::fs::write(path, content).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
+                Ok(Value::Boolean(true))
             }
             "write_snapshot" => {
                 // write_snapshot(path, handle)
@@ -1524,7 +1789,7 @@ mod tests {
             Instruction::Constant { out: 1, val: Value::Integer(5) },    // 1
             Instruction::Constant { out: 2, val: Value::Integer(1) },    // 2
             Instruction::Lt { out: 3, lhs: 0, rhs: 1 },                  // 3: r3 = r0 < 5
-            Instruction::Loop { cond: 3, body: 6, max_iter: 10 },        // 4: if r3 jump 6 else continue
+            Instruction::Loop { cond: 3, body: 6, exit: 8, max_iter: 10 },        // 4: if r3 jump 6 else exit to 8
             Instruction::Jump { target: 8 },                             // 5: EXIT
             Instruction::Add { out: 0, lhs: 0, rhs: 2 },                 // 6: r0 = r0 + 1
             Instruction::Jump { target: 3 },                             // 7: jump back to condition
@@ -1539,7 +1804,7 @@ mod tests {
         let krate_panic = HlxCrate::new(vec![
             Instruction::Constant { out: 0, val: Value::Integer(0) },    // 0
             Instruction::Constant { out: 1, val: Value::Boolean(true) }, // 1
-            Instruction::Loop { cond: 1, body: 2, max_iter: 10 },        // 2: Loop point
+            Instruction::Loop { cond: 1, body: 2, exit: 4, max_iter: 10 },        // 2: Loop point, exit at 4
             Instruction::Jump { target: 2 },                             // 3: Jump back to loop
         ]);
         

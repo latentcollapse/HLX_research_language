@@ -135,6 +135,28 @@ enum Commands {
 
     /// Run smoke tests
     Test,
+
+    /// Compile to native code using LLVM backend
+    CompileNative {
+        /// Input source file
+        input: PathBuf,
+
+        /// Output file (.o object file or .s assembly)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Target triple (e.g., "x86_64-unknown-none-elf" for bare metal)
+        #[arg(long)]
+        target: Option<String>,
+
+        /// Emit assembly instead of object file
+        #[arg(long)]
+        asm: bool,
+
+        /// Print LLVM IR to stderr
+        #[arg(long)]
+        print_ir: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -175,8 +197,11 @@ fn main() -> Result<()> {
         Commands::Test => {
             run_tests()?;
         }
+        Commands::CompileNative { input, output, target, asm, print_ir } => {
+            compile_native(&input, output, target.as_deref(), asm, print_ir)?;
+        }
     }
-    
+
     Ok(())
 }
 
@@ -634,3 +659,76 @@ fn value_to_json(value: &Value) -> serde_json::Value {
             Ok(())
         }
         
+fn compile_native(
+    input: &PathBuf,
+    output: Option<PathBuf>,
+    target: Option<&str>,
+    emit_asm: bool,
+    print_ir: bool,
+) -> Result<()> {
+    use hlx_backend_llvm::CodeGen;
+    use inkwell::context::Context;
+
+    // Read and parse source
+    let source = fs::read_to_string(input)
+        .context("Failed to read input file")?;
+
+    let parser = HlxaParser::new();
+    let ast = parser.parse(&source)
+        .context("Parse error")?;
+
+    // Lower to crate
+    let krate = lower::lower_to_crate(&ast)
+        .context("Lowering failed")?;
+
+    // Create LLVM context and code generator
+    let context = Context::create();
+    let mut codegen = if let Some(target_triple) = target {
+        println!("Compiling for target: {}", target_triple);
+        CodeGen::with_target(&context, "hlx_program", Some(target_triple))
+    } else {
+        println!("Compiling for host target");
+        CodeGen::new(&context, "hlx_program")
+    };
+
+    // Compile crate to LLVM IR
+    codegen.compile_crate(&krate)
+        .context("LLVM compilation failed")?;
+
+    // Optionally print IR
+    if print_ir {
+        eprintln!("\n=== LLVM IR ===");
+        codegen.print_ir();
+        eprintln!("=== END IR ===\n");
+    }
+
+    // Determine output path
+    let output_path = output.unwrap_or_else(|| {
+        let mut p = input.clone();
+        if emit_asm {
+            p.set_extension("s");
+        } else {
+            p.set_extension("o");
+        }
+        p
+    });
+
+    // Emit native code
+    if emit_asm {
+        codegen.emit_assembly(&output_path)
+            .context("Failed to emit assembly")?;
+        println!("Assembly written to: {}", output_path.display());
+    } else {
+        codegen.emit_object(&output_path)
+            .context("Failed to emit object file")?;
+        println!("Object file written to: {}", output_path.display());
+    }
+
+    if target.is_some() {
+        println!("\nNext steps:");
+        println!("  1. Link with appropriate linker script for your target");
+        println!("  2. For bare metal: ld -T linker.ld {} -o kernel.elf", output_path.display());
+    }
+
+    Ok(())
+}

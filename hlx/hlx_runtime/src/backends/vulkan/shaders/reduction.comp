@@ -1,0 +1,120 @@
+#version 450
+
+// Reduction Operations
+// Computes: output = reduce(input, op, axis)
+// Supports: sum, max, min, mean, product
+//
+// Uses parallel reduction in shared memory
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+// Reduction operations
+const uint OP_SUM = 0;
+const uint OP_MAX = 1;
+const uint OP_MIN = 2;
+const uint OP_MEAN = 3;
+const uint OP_PRODUCT = 4;
+
+layout(push_constant) uniform PushConstants {
+    uint input_size;      // Total elements in input
+    uint reduce_size;     // Size of dimension to reduce
+    uint output_size;     // Total elements in output
+    uint op;              // Reduction operation
+} params;
+
+layout(std430, binding = 0) readonly buffer InputBuffer {
+    float input_data[];
+};
+
+layout(std430, binding = 1) buffer OutputBuffer {
+    float output_data[];
+};
+
+// Shared memory for parallel reduction
+shared float shared_data[256];
+
+// Identity values for each operation
+float get_identity(uint op) {
+    switch (op) {
+        case OP_SUM:
+        case OP_MEAN:
+            return 0.0;
+        case OP_MAX:
+            return -1.0 / 0.0;  // -infinity
+        case OP_MIN:
+            return 1.0 / 0.0;   // +infinity
+        case OP_PRODUCT:
+            return 1.0;
+        default:
+            return 0.0;
+    }
+}
+
+// Combine two values according to operation
+float combine(float a, float b, uint op) {
+    switch (op) {
+        case OP_SUM:
+        case OP_MEAN:
+            return a + b;
+        case OP_MAX:
+            return max(a, b);
+        case OP_MIN:
+            return min(a, b);
+        case OP_PRODUCT:
+            return a * b;
+        default:
+            return a;
+    }
+}
+
+void main() {
+    uint output_idx = gl_GlobalInvocationID.y;
+    uint local_id = gl_LocalInvocationID.x;
+    uint local_size = gl_WorkGroupSize.x;
+
+    if (output_idx >= params.output_size) {
+        return;
+    }
+
+    // Calculate input offset for this output element
+    uint input_offset = output_idx * params.reduce_size;
+
+    // Initialize with identity
+    float local_result = get_identity(params.op);
+
+    // Accumulate values assigned to this thread
+    for (uint i = local_id; i < params.reduce_size; i += local_size) {
+        if (input_offset + i < params.input_size) {
+            float val = input_data[input_offset + i];
+            local_result = combine(local_result, val, params.op);
+        }
+    }
+
+    // Store in shared memory
+    shared_data[local_id] = local_result;
+    barrier();
+
+    // Parallel reduction in shared memory
+    for (uint stride = local_size / 2; stride > 0; stride /= 2) {
+        if (local_id < stride) {
+            shared_data[local_id] = combine(
+                shared_data[local_id],
+                shared_data[local_id + stride],
+                params.op
+            );
+        }
+        barrier();
+    }
+
+    // Write result
+    if (local_id == 0) {
+        float result = shared_data[0];
+
+        // For mean, divide by count
+        if (params.op == OP_MEAN) {
+            result /= float(params.reduce_size);
+        }
+
+        output_data[output_idx] = result;
+    }
+}

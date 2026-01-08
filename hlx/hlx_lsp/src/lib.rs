@@ -4,22 +4,62 @@ use tower_lsp::{Client, LanguageServer};
 use hlx_compiler::HlxaParser;
 use dashmap::DashMap;
 use std::sync::Arc;
+use std::collections::HashMap;
 
 mod contracts;
 mod ai_diagnostics;
 mod patterns;
 mod confidence;
+mod contract_suggestions;
+mod auto_correct;
+mod inline_preview;
+mod state_viz;
+mod semantic_diff;
+mod constrained_grammar;
+mod symbol_index;
+mod signature_help;
+mod refactoring;
+mod performance_lens;
+mod code_lens;
+mod type_lens;
+mod rust_diagnostics;
 
 use contracts::{ContractCache, ContractCatalogue};
 use ai_diagnostics::AIDiagnosticBuilder;
 use patterns::PatternLibrary;
 use confidence::ConfidenceAnalyzer;
+use contract_suggestions::ContractSuggestionEngine;
+use auto_correct::AutoCorrector;
+use inline_preview::InlinePreviewEngine;
+use state_viz::StateVizEngine;
+use semantic_diff::SemanticDiffAnalyzer;
+use constrained_grammar::ConstrainedGrammarValidator;
+use symbol_index::SymbolIndex;
+use signature_help::{SignatureHelpProvider, SignatureContext};
+use refactoring::RefactoringEngine;
+use performance_lens::PerformanceLens;
+use code_lens::CodeLensProvider;
+use type_lens::TypeLens;
+use rust_diagnostics::RustDiagnostics;
 
 pub struct Backend {
     client: Client,
     document_map: DashMap<String, String>,
     contracts: Option<Arc<ContractCatalogue>>,
     patterns: Arc<PatternLibrary>,
+    suggestion_engine: Option<Arc<ContractSuggestionEngine>>,
+    auto_corrector: Arc<AutoCorrector>,
+    preview_engine: Arc<InlinePreviewEngine>,
+    state_viz_engine: Arc<StateVizEngine>,
+    semantic_diff: Arc<SemanticDiffAnalyzer>,
+    grammar_validator: Arc<ConstrainedGrammarValidator>,
+    symbol_index: Arc<SymbolIndex>,
+    signature_help_provider: Arc<SignatureHelpProvider>,
+    refactoring_engine: Arc<RefactoringEngine>,
+    performance_lens: Arc<PerformanceLens>,
+    code_lens_provider: Arc<CodeLensProvider>,
+    type_lens: Arc<TypeLens>,
+    rust_diagnostics: Arc<RustDiagnostics>,
 }
 
 #[tower_lsp::async_trait]
@@ -38,6 +78,24 @@ impl LanguageServer for Backend {
                     completion_item: None,
                 }),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+                inlay_hint_provider: Some(OneOf::Left(true)),
+                definition_provider: Some(OneOf::Left(true)),
+                references_provider: Some(OneOf::Left(true)),
+                document_symbol_provider: Some(OneOf::Left(true)),
+                workspace_symbol_provider: Some(OneOf::Left(true)),
+                signature_help_provider: Some(SignatureHelpOptions {
+                    trigger_characters: Some(vec!["{".to_string(), ",".to_string(), "(".to_string()]),
+                    retrigger_characters: None,
+                    work_done_progress_options: Default::default(),
+                }),
+                rename_provider: Some(OneOf::Right(RenameOptions {
+                    prepare_provider: Some(true),
+                    work_done_progress_options: Default::default(),
+                })),
+                code_lens_provider: Some(CodeLensOptions {
+                    resolve_provider: Some(false),
+                }),
                 ..Default::default()
             },
             ..Default::default()
@@ -56,6 +114,10 @@ impl LanguageServer for Backend {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         self.document_map.insert(params.text_document.uri.to_string(), params.text_document.text.clone());
+
+        // Index symbols
+        self.symbol_index.index_document(&params.text_document.uri, &params.text_document.text);
+
         self.validate_document(params.text_document.uri, params.text_document.text).await;
     }
 
@@ -63,8 +125,133 @@ impl LanguageServer for Backend {
         // Since we use Full sync, the last item has the full text
         if let Some(event) = params.content_changes.pop() {
             self.document_map.insert(params.text_document.uri.to_string(), event.text.clone());
+
+            // Re-index symbols
+            self.symbol_index.index_document(&params.text_document.uri, &event.text);
+
             self.validate_document(params.text_document.uri, event.text).await;
         }
+    }
+
+    async fn goto_definition(&self, params: GotoDefinitionParams) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let doc_ref = self.document_map.get(uri.as_str());
+        if let Some(doc) = doc_ref {
+            if let Some(location) = self.symbol_index.find_definition(&position, &uri, &doc) {
+                return Ok(Some(GotoDefinitionResponse::Scalar(location)));
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+
+        let doc_ref = self.document_map.get(uri.as_str());
+        if let Some(doc) = doc_ref {
+            let refs = self.symbol_index.find_references(&position, &uri, &doc);
+            if !refs.is_empty() {
+                return Ok(Some(refs));
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn document_symbol(&self, params: DocumentSymbolParams) -> Result<Option<DocumentSymbolResponse>> {
+        let uri = params.text_document.uri;
+
+        let symbols = self.symbol_index.get_document_symbols(&uri);
+        if !symbols.is_empty() {
+            return Ok(Some(DocumentSymbolResponse::Nested(symbols)));
+        }
+
+        Ok(None)
+    }
+
+    async fn symbol(&self, params: WorkspaceSymbolParams) -> Result<Option<Vec<SymbolInformation>>> {
+        let query = params.query;
+
+        let symbols = self.symbol_index.search_symbols(&query);
+        if !symbols.is_empty() {
+            return Ok(Some(symbols));
+        }
+
+        Ok(None)
+    }
+
+    async fn signature_help(&self, params: SignatureHelpParams) -> Result<Option<SignatureHelp>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let doc_ref = self.document_map.get(uri.as_str());
+        if let Some(doc) = doc_ref {
+            // Detect context (contract or function)
+            let context = self.signature_help_provider.detect_context(&doc, &position);
+
+            match context {
+                SignatureContext::Contract => {
+                    // Show contract field signatures
+                    if let Some(catalogue) = &self.contracts {
+                        return Ok(self.signature_help_provider.get_contract_signature(&doc, &position, catalogue));
+                    }
+                }
+                SignatureContext::Function(func_name) => {
+                    // Show function parameter signatures
+                    return Ok(self.signature_help_provider.get_function_signature(&doc, &position, &func_name));
+                }
+                SignatureContext::None => {}
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn prepare_rename(&self, params: TextDocumentPositionParams) -> Result<Option<PrepareRenameResponse>> {
+        let uri = params.text_document.uri;
+        let position = params.position;
+
+        let doc_ref = self.document_map.get(uri.as_str());
+        if let Some(doc) = doc_ref {
+            // Find the symbol at this position
+            if let Some(definition) = self.symbol_index.find_definition(&position, &uri, &doc) {
+                // Return the range of the symbol
+                return Ok(Some(PrepareRenameResponse::Range(definition.range)));
+            }
+        }
+
+        Ok(None)
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let new_name = params.new_name;
+
+        let doc_ref = self.document_map.get(uri.as_str());
+        if let Some(doc) = doc_ref {
+            return Ok(self.refactoring_engine.rename_symbol(&uri, &position, &new_name, &doc));
+        }
+
+        Ok(None)
+    }
+
+    async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
+        let uri = params.text_document.uri;
+
+        let doc_ref = self.document_map.get(uri.as_str());
+        if let Some(doc) = doc_ref {
+            let lenses = self.code_lens_provider.get_code_lenses(&uri, &doc);
+            if !lenses.is_empty() {
+                return Ok(Some(lenses));
+            }
+        }
+
+        Ok(None)
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
@@ -221,6 +408,190 @@ impl LanguageServer for Backend {
 
         Ok(None)
     }
+
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        let uri = params.text_document.uri;
+        let range = params.range;
+        let mut all_actions = Vec::new();
+
+        // Get the text in the range (usually a line with a comment)
+        let doc_ref = self.document_map.get(uri.as_str());
+        if let Some(doc) = doc_ref {
+            // 1. Check for auto-corrections
+            let corrections = self.auto_corrector.analyze_document(&doc);
+            for correction in corrections {
+                // Check if this correction overlaps with the requested range
+                if self.ranges_overlap(&correction.range, &range) {
+                    let action = self.auto_corrector.create_code_action(&correction, uri.clone());
+                    all_actions.push(CodeActionOrCommand::CodeAction(action));
+                }
+            }
+
+            // 2. Check for semantic diffs
+            let diffs = self.semantic_diff.analyze(&doc);
+            for diff in diffs {
+                // Check if this diff overlaps with the requested range
+                if self.ranges_overlap(&diff.range, &range) {
+                    let action = self.semantic_diff.create_code_action(&diff, uri.clone());
+                    all_actions.push(CodeActionOrCommand::CodeAction(action));
+                }
+            }
+
+            // 3. Check for contract suggestions from comments
+            let line_text = self.get_line_text(&doc, range.start.line as usize);
+
+            // Check if this line contains a comment
+            if let Some(comment_text) = self.extract_comment(&line_text) {
+                // Use suggestion engine to find matching contracts
+                if let (Some(engine), Some(catalogue)) = (&self.suggestion_engine, &self.contracts) {
+                    let suggestions = engine.suggest(&comment_text, catalogue, 3);
+
+                    if !suggestions.is_empty() {
+                        for suggestion in suggestions {
+                            // Get snippet for this contract
+                            if let Some(snippet) = catalogue.generate_snippet(&suggestion.contract_id) {
+                                // Create a code action to insert the contract
+                                let edit_range = Range {
+                                    start: Position {
+                                        line: range.end.line,
+                                        character: 0,
+                                    },
+                                    end: Position {
+                                        line: range.end.line,
+                                        character: 0,
+                                    },
+                                };
+
+                                let mut changes = HashMap::new();
+                                changes.insert(
+                                    uri.clone(),
+                                    vec![TextEdit {
+                                        range: edit_range,
+                                        new_text: format!("    {};\n", snippet.replace("$0", "").replace("$1", "_").replace("$2", "_")),
+                                    }],
+                                );
+
+                                let action = CodeAction {
+                                    title: format!("💡 Use {} (@{}) - {}",
+                                        suggestion.contract_name,
+                                        suggestion.contract_id,
+                                        suggestion.description
+                                    ),
+                                    kind: Some(CodeActionKind::QUICKFIX),
+                                    diagnostics: None,
+                                    edit: Some(WorkspaceEdit {
+                                        changes: Some(changes),
+                                        document_changes: None,
+                                        change_annotations: None,
+                                    }),
+                                    command: None,
+                                    is_preferred: Some(all_actions.is_empty()), // First one is preferred
+                                    disabled: None,
+                                    data: None,
+                                };
+
+                                all_actions.push(CodeActionOrCommand::CodeAction(action));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Refactoring actions
+            // Only show refactoring actions if there's a selection (not just cursor)
+            if range.start.line != range.end.line || range.start.character != range.end.character {
+                // Extract Function - only if selection is non-empty
+                if let Some(edits) = self.refactoring_engine.extract_function(
+                    &uri,
+                    &range,
+                    "extracted_function",
+                    &doc
+                ) {
+                    let action = self.refactoring_engine.create_refactor_action(
+                        "🔧 Extract Function".to_string(),
+                        uri.clone(),
+                        edits
+                    );
+                    all_actions.push(CodeActionOrCommand::CodeAction(action));
+                }
+
+                // Convert to Contract - check if selection looks like a binary operation
+                if let Some(edit) = self.refactoring_engine.convert_to_contract(&range, &doc) {
+                    let action = self.refactoring_engine.create_refactor_action(
+                        "⚡ Convert to Contract".to_string(),
+                        uri.clone(),
+                        vec![edit]
+                    );
+                    all_actions.push(CodeActionOrCommand::CodeAction(action));
+                }
+            }
+
+            // Inline Variable - only at cursor position on a variable
+            let cursor = Position {
+                line: range.start.line,
+                character: range.start.character,
+            };
+            if let Some(edits) = self.refactoring_engine.inline_variable(&uri, &cursor, &doc) {
+                let action = self.refactoring_engine.create_refactor_action(
+                    "🔧 Inline Variable".to_string(),
+                    uri.clone(),
+                    edits
+                );
+                all_actions.push(CodeActionOrCommand::CodeAction(action));
+            }
+        }
+
+        if !all_actions.is_empty() {
+            Ok(Some(all_actions))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
+        let uri = params.text_document.uri;
+        let mut all_hints = Vec::new();
+
+        let doc_ref = self.document_map.get(uri.as_str());
+        if let Some(doc) = doc_ref {
+            // 1. Generate inline execution previews
+            if let Some(catalogue) = &self.contracts {
+                let previews = self.preview_engine.generate_previews(&doc, catalogue);
+                let preview_hints: Vec<InlayHint> = previews
+                    .iter()
+                    .map(|preview| self.preview_engine.create_inlay_hint(preview))
+                    .collect();
+                all_hints.extend(preview_hints);
+
+                // 4. Generate performance cost hints
+                let costs = self.performance_lens.analyze(&doc, catalogue);
+                let cost_hints: Vec<InlayHint> = costs
+                    .iter()
+                    .map(|cost| self.performance_lens.create_inlay_hint(cost))
+                    .collect();
+                all_hints.extend(cost_hints);
+            }
+
+            // 2. Generate state visualization hints
+            let snapshots = self.state_viz_engine.analyze_state(&doc);
+            let state_hints = self.state_viz_engine.create_inlay_hints(&snapshots);
+            all_hints.extend(state_hints);
+
+            // 3. Generate type inference hints
+            let type_hints = self.type_lens.infer_types(&doc);
+            let type_inlay_hints: Vec<InlayHint> = type_hints
+                .iter()
+                .map(|hint| self.type_lens.create_inlay_hint(hint))
+                .collect();
+            all_hints.extend(type_inlay_hints);
+        }
+
+        if !all_hints.is_empty() {
+            Ok(Some(all_hints))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 impl Backend {
@@ -247,11 +618,79 @@ impl Backend {
         let patterns = Arc::new(PatternLibrary::new());
         eprintln!("✓ Loaded {} HLX patterns", patterns.patterns.len());
 
+        // Create suggestion engine if we have contracts
+        let suggestion_engine = contracts.as_ref().map(|cat| {
+            let engine = ContractSuggestionEngine::new(cat);
+            eprintln!("✓ Contract suggestion engine ready");
+            Arc::new(engine)
+        });
+
+        // Create auto-correction engine
+        let auto_corrector = Arc::new(AutoCorrector::new());
+        eprintln!("✓ Auto-correction engine ready");
+
+        // Create inline preview engine
+        let preview_engine = Arc::new(InlinePreviewEngine::new());
+        eprintln!("✓ Inline preview engine ready");
+
+        // Create state visualization engine
+        let state_viz_engine = Arc::new(StateVizEngine::new());
+        eprintln!("✓ State visualization engine ready");
+
+        // Create semantic diff analyzer
+        let semantic_diff = Arc::new(SemanticDiffAnalyzer::new(&patterns));
+        eprintln!("✓ Semantic diff analyzer ready");
+
+        // Create constrained grammar validator
+        let grammar_validator = Arc::new(ConstrainedGrammarValidator::new(false));
+        eprintln!("✓ Constrained grammar validator ready");
+
+        // Create symbol index
+        let symbol_index = Arc::new(SymbolIndex::new());
+        eprintln!("✓ Symbol index ready");
+
+        // Create signature help provider
+        let signature_help_provider = Arc::new(SignatureHelpProvider::new());
+        eprintln!("✓ Signature help provider ready");
+
+        // Create refactoring engine
+        let refactoring_engine = Arc::new(RefactoringEngine::new(symbol_index.clone()));
+        eprintln!("✓ Refactoring engine ready");
+
+        // Create performance lens
+        let performance_lens = Arc::new(PerformanceLens::new());
+        eprintln!("✓ Performance lens ready");
+
+        // Create code lens provider
+        let code_lens_provider = Arc::new(CodeLensProvider::new(symbol_index.clone()));
+        eprintln!("✓ Code lens provider ready");
+
+        // Create type lens
+        let type_lens = Arc::new(TypeLens::new());
+        eprintln!("✓ Type lens ready");
+
+        // Create Rust diagnostics (Stage 4)
+        let rust_diagnostics = Arc::new(RustDiagnostics::new());
+        eprintln!("✓ Rust diagnostics (Stage 4) ready");
+
         Self {
             client,
             document_map: DashMap::new(),
             contracts,
             patterns,
+            suggestion_engine,
+            auto_corrector,
+            preview_engine,
+            state_viz_engine,
+            semantic_diff,
+            grammar_validator,
+            symbol_index,
+            signature_help_provider,
+            refactoring_engine,
+            performance_lens,
+            code_lens_provider,
+            type_lens,
+            rust_diagnostics,
         }
     }
 
@@ -294,6 +733,42 @@ impl Backend {
             let contract_diags = self.validate_contract_signatures(&text, catalogue);
             diagnostics.extend(contract_diags);
         }
+
+        // Add auto-correction diagnostics
+        let corrections = self.auto_corrector.analyze_document(&text);
+        for correction in corrections {
+            let diagnostic = self.auto_corrector.create_diagnostic(&correction);
+            diagnostics.push(diagnostic);
+        }
+
+        // Add semantic diff diagnostics
+        let diffs = self.semantic_diff.analyze(&text);
+        for diff in diffs {
+            let diagnostic = self.semantic_diff.create_diagnostic(&diff);
+            diagnostics.push(diagnostic);
+        }
+
+        // Add grammar validation diagnostics
+        let violations = self.grammar_validator.validate(&text);
+        for violation in violations {
+            let diagnostic = self.grammar_validator.create_diagnostic(&violation);
+            diagnostics.push(diagnostic);
+        }
+
+        // Add performance lens diagnostics (warnings for very slow operations)
+        if let Some(catalogue) = &self.contracts {
+            let costs = self.performance_lens.analyze(&text, catalogue);
+            for cost in costs {
+                if let Some(diagnostic) = self.performance_lens.create_diagnostic(&cost) {
+                    diagnostics.push(diagnostic);
+                }
+            }
+        }
+
+        // Add Rust-specific diagnostics (Stage 4)
+        // Catch compilation errors before rustc sees them
+        let rust_diags = self.rust_diagnostics.analyze(&text);
+        diagnostics.extend(rust_diags);
 
         self.client.publish_diagnostics(uri, diagnostics, None).await;
     }
@@ -576,6 +1051,48 @@ impl Backend {
 
         // Default: show all user-facing contracts
         ContractContext::General
+    }
+
+    /// Get the text of a specific line
+    fn get_line_text(&self, text: &str, line: usize) -> String {
+        text.lines().nth(line).unwrap_or("").to_string()
+    }
+
+    /// Extract comment text from a line (supports // and /* */ style)
+    fn extract_comment(&self, line: &str) -> Option<String> {
+        // Single-line comment
+        if let Some(idx) = line.find("//") {
+            let comment = &line[idx + 2..].trim();
+            if !comment.is_empty() {
+                return Some(comment.to_string());
+            }
+        }
+
+        // Multi-line comment (simple case - comment on one line)
+        if let Some(start_idx) = line.find("/*") {
+            if let Some(end_idx) = line.find("*/") {
+                if end_idx > start_idx {
+                    let comment = &line[start_idx + 2..end_idx].trim();
+                    if !comment.is_empty() {
+                        return Some(comment.to_string());
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Check if two ranges overlap
+    fn ranges_overlap(&self, a: &Range, b: &Range) -> bool {
+        // Ranges overlap if they're on the same line or intersect
+        if a.start.line == b.start.line && a.end.line == b.end.line {
+            // Same line - check character positions
+            !(a.end.character <= b.start.character || b.end.character <= a.start.character)
+        } else {
+            // Multi-line overlap check
+            !(a.end.line < b.start.line || b.end.line < a.start.line)
+        }
     }
 }
 

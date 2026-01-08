@@ -501,8 +501,8 @@ mod tests {
         let shallow = Value::Integer(42);
         assert_eq!(shallow.depth(), 0);
 
-        let nested = Value::Array(Rc::new(vec![
-            Value::Array(Rc::new(vec![
+        let nested = Value::Array(Vector::from(vec![
+            Value::Array(Vector::from(vec![
                 Value::Integer(1),
             ])),
         ]));

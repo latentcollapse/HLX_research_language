@@ -1,0 +1,108 @@
+#version 450
+
+// Tensor Transpose
+// Supports arbitrary dimension permutations
+// For 2D: transposes matrix
+// For 4D (images): can reorder [batch, height, width, channels] arbitrarily
+//
+// Uses tiled algorithm with shared memory for 2D case (optimized)
+// Uses simple copy for general case
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(push_constant) uniform PushConstants {
+    uint dim0;       // Size of dimension 0
+    uint dim1;       // Size of dimension 1
+    uint dim2;       // Size of dimension 2 (1 if 2D)
+    uint dim3;       // Size of dimension 3 (1 if 2D/3D)
+    uint perm0;      // Target position for dimension 0
+    uint perm1;      // Target position for dimension 1
+    uint perm2;      // Target position for dimension 2
+    uint perm3;      // Target position for dimension 3
+    uint is_2d;      // 1 if simple 2D transpose, 0 for general case
+} params;
+
+layout(std430, binding = 0) readonly buffer InputBuffer {
+    float input_data[];
+};
+
+layout(std430, binding = 1) buffer OutputBuffer {
+    float output_data[];
+};
+
+// Shared memory for tiled transpose (2D case only)
+shared float tile[16][17];  // +1 to avoid bank conflicts
+
+void main() {
+    uint gx = gl_GlobalInvocationID.x;
+    uint gy = gl_GlobalInvocationID.y;
+    uint lx = gl_LocalInvocationID.x;
+    uint ly = gl_LocalInvocationID.y;
+
+    if (params.is_2d != 0) {
+        // Optimized 2D transpose with tiling
+
+        // Load tile from input (coalesced reads)
+        if (gx < params.dim1 && gy < params.dim0) {
+            uint input_idx = gy * params.dim1 + gx;
+            tile[ly][lx] = input_data[input_idx];
+        }
+
+        barrier();
+
+        // Compute transposed output position
+        uint out_x = gl_WorkGroupID.y * 16 + lx;
+        uint out_y = gl_WorkGroupID.x * 16 + ly;
+
+        // Write tile to output (coalesced writes)
+        if (out_x < params.dim0 && out_y < params.dim1) {
+            uint output_idx = out_y * params.dim0 + out_x;
+            output_data[output_idx] = tile[lx][ly];
+        }
+
+    } else {
+        // General N-dimensional transpose
+        uint idx = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * gl_NumWorkGroups.x * gl_WorkGroupSize.x;
+
+        uint total_size = params.dim0 * params.dim1 * params.dim2 * params.dim3;
+        if (idx >= total_size) {
+            return;
+        }
+
+        // Decode input indices
+        uint stride0 = params.dim1 * params.dim2 * params.dim3;
+        uint stride1 = params.dim2 * params.dim3;
+        uint stride2 = params.dim3;
+        uint stride3 = 1;
+
+        uint i0 = idx / stride0;
+        uint rem = idx % stride0;
+        uint i1 = rem / stride1;
+        rem = rem % stride1;
+        uint i2 = rem / stride2;
+        uint i3 = rem % stride2;
+
+        // Create permuted indices array
+        uint indices[4] = uint[](i0, i1, i2, i3);
+
+        // Compute output strides based on permutation
+        uint out_dims[4];
+        out_dims[params.perm0] = params.dim0;
+        out_dims[params.perm1] = params.dim1;
+        out_dims[params.perm2] = params.dim2;
+        out_dims[params.perm3] = params.dim3;
+
+        uint out_stride0 = out_dims[1] * out_dims[2] * out_dims[3];
+        uint out_stride1 = out_dims[2] * out_dims[3];
+        uint out_stride2 = out_dims[3];
+        uint out_stride3 = 1;
+
+        // Compute output index with permuted dimensions
+        uint output_idx = indices[params.perm0] * out_stride0
+                        + indices[params.perm1] * out_stride1
+                        + indices[params.perm2] * out_stride2
+                        + indices[params.perm3] * out_stride3;
+
+        output_data[output_idx] = input_data[idx];
+    }
+}
