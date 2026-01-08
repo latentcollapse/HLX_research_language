@@ -25,6 +25,7 @@ serde_json = { workspace = true }
 reqwest = { workspace = true }
 xcap = { workspace = true }
 image = { workspace = true }
+sdl2 = "0.37"
 
 # CPU backend
 ndarray = { workspace = true, optional = true }

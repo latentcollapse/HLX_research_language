@@ -1317,7 +1317,22 @@ impl Drop for VulkanBackend {
                 self.device.destroy_buffer(buffer, None);
                 let _ = allocator.free(allocation);
             }
-            drop(allocator); // Drop the MutexGuard
+            drop(allocator); // Drop the MutexGuard before destroying device
+
+            // Destroy compute pipelines
+            for (_name, pipeline) in self.pipelines.drain() {
+                self.device.destroy_pipeline(pipeline, None);
+            }
+
+            // Destroy pipeline layout and descriptor set layout
+            self.device.destroy_pipeline_layout(self.pipeline_layout, None);
+            self.device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
+
+            // Destroy synchronization primitives
+            self.device.destroy_fence(self.transfer_fence, None);
+
+            // Destroy command pool (this also frees command buffers)
+            self.device.destroy_command_pool(self.command_pool, None);
 
             // Destroy device and instance
             // Note: Vulkan spec allows destroying device while child resources exist

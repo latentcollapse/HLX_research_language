@@ -5,10 +5,10 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
     character::complete::{char, multispace1, digit1, one_of},
-    combinator::{opt, map, value},
+    combinator::{opt, map, value, cut},
     multi::{many0, separated_list0},
     sequence::{tuple, delimited, preceded, terminated},
-    error::VerboseError,
+    error::{VerboseError, context},
 };
 use tracing::{instrument, debug, trace};
 
@@ -205,73 +205,161 @@ fn expr(input: &str) -> ParseResult<'_, Expr> {
 
 fn statement(input: &str) -> ParseResult<'_, Statement> {
     alt((
-        map(tuple((preceded(ws, tag("let")), preceded(ws, ident), preceded(ws, char('=')), expr, preceded(ws, char(';')))), 
-            |(_, n, _, v, _)| Statement::Let { name: n, value: Spanned::dummy(v) }),
-        
-        map(tuple((preceded(ws, tag("return")), expr, preceded(ws, char(';')))), 
-            |(_, v, _)| Statement::Return { value: Spanned::dummy(v) }),
-            
-        map(tuple((
-            preceded(ws, tag("if")), 
-            alt((
-                delimited(preceded(ws, char('(')), expr, preceded(ws, char(')'))),
-                expr
-            )),
-            preceded(ws, char('{')), many0(map(preceded(ws, statement), Spanned::dummy)), preceded(ws, char('}')),
-            opt(tuple((preceded(ws, tag("else")), preceded(ws, char('{')), many0(map(preceded(ws, statement), Spanned::dummy)), preceded(ws, char('}')))))
-        )), |(_, cond, _, then_body, _, els)| {
-            Statement::If { condition: Spanned::dummy(cond), then_branch: then_body, else_branch: els.map(|(_, _, v, _)| v) }
-        }),
-        
-                map(tuple((
-                    preceded(ws, tag("loop")), preceded(ws, char('(')), expr, preceded(ws, char(',')),
+        // let name = value;
+        context("let statement",
+            map(tuple((
+                preceded(ws, tag("let")),
+                cut(tuple((
+                    context("variable name", preceded(ws, ident)),
+                    context("'=' after variable name", preceded(ws, char('='))),
+                    context("expression", expr),
+                    context("';' after let statement", preceded(ws, char(';')))
+                )))
+            )), |(_, (n, _, v, _))| Statement::Let { name: n, value: Spanned::dummy(v) })
+        ),
+
+        // return value;
+        context("return statement",
+            map(tuple((
+                preceded(ws, tag("return")),
+                cut(tuple((
+                    context("expression", expr),
+                    context("';' after return", preceded(ws, char(';')))
+                )))
+            )), |(_, (v, _))| Statement::Return { value: Spanned::dummy(v) })
+        ),
+
+        // if condition { ... } else { ... }
+        context("if statement",
+            map(tuple((
+                preceded(ws, tag("if")),
+                cut(tuple((
+                    context("condition", alt((
+                        delimited(preceded(ws, char('(')), expr, preceded(ws, char(')'))),
+                        expr
+                    ))),
+                    context("'{' after if condition", preceded(ws, char('{'))),
+                    many0(map(preceded(ws, statement), Spanned::dummy)),
+                    context("'}' to close if block", preceded(ws, char('}'))),
+                    opt(tuple((
+                        preceded(ws, tag("else")),
+                        preceded(ws, char('{')),
+                        many0(map(preceded(ws, statement), Spanned::dummy)),
+                        preceded(ws, char('}'))
+                    )))
+                )))
+            )), |(_, (cond, _, then_body, _, els))| {
+                Statement::If { condition: Spanned::dummy(cond), then_branch: then_body, else_branch: els.map(|(_, _, v, _)| v) }
+            })
+        ),
+
+        // loop(condition, max_iter) { ... }
+        context("loop statement",
+            map(tuple((
+                preceded(ws, tag("loop")),
+                cut(tuple((
+                    context("'(' after loop", preceded(ws, char('('))),
+                    context("loop condition", expr),
+                    context("',' after condition", preceded(ws, char(','))),
                     alt((
                         map(preceded(ws, digit1), |s: &str| s.parse::<u32>().unwrap()),
                         value(1000000, preceded(ws, tag("DEFAULT_MAX_ITER()")))
                     )),
-                    preceded(ws, char(')')),
-                    preceded(ws, char('{')), many0(map(preceded(ws, statement), Spanned::dummy)), preceded(ws, char('}'))
-                )), |(_, _, cond, _, max_iter, _, _, body, _)| {
-                    Statement::While { condition: Spanned::dummy(cond), body, max_iter }
-                }),
-        
-                map(tuple((preceded(ws, tag("break")), preceded(ws, char(';')))), |(_, _)| Statement::Break),
-                map(tuple((preceded(ws, tag("continue")), preceded(ws, char(';')))), |(_, _)| Statement::Continue),
+                    context("')' after max iterations", preceded(ws, char(')'))),
+                    context("'{' after loop header", preceded(ws, char('{'))),
+                    many0(map(preceded(ws, statement), Spanned::dummy)),
+                    context("'}' to close loop", preceded(ws, char('}')))
+                )))
+            )), |(_, (_, cond, _, max_iter, _, _, body, _))| {
+                Statement::While { condition: Spanned::dummy(cond), body, max_iter }
+            })
+        ),
 
-                map(tuple((preceded(ws, atom_expr), preceded(ws, char('=')), expr, preceded(ws, char(';')))),
-                    |(lhs, _, v, _)| Statement::Assign { lhs: Spanned::dummy(lhs), value: Spanned::dummy(v) }),
-                
-                map(preceded(ws, terminated(expr, preceded(ws, char(';')))), |e| Statement::Expr(Spanned::dummy(e))),    ))(input)
+        // break;
+        context("break statement",
+            map(tuple((
+                preceded(ws, tag("break")),
+                cut(context("';' after break", preceded(ws, char(';'))))
+            )), |(_, _)| Statement::Break)
+        ),
+
+        // continue;
+        context("continue statement",
+            map(tuple((
+                preceded(ws, tag("continue")),
+                cut(context("';' after continue", preceded(ws, char(';'))))
+            )), |(_, _)| Statement::Continue)
+        ),
+
+        // assignment: lhs = value;
+        context("assignment",
+            map(tuple((
+                preceded(ws, atom_expr),
+                preceded(ws, char('=')),
+                cut(tuple((
+                    context("expression", expr),
+                    context("';' after assignment", preceded(ws, char(';')))
+                )))
+            )), |(lhs, _, (v, _))| Statement::Assign { lhs: Spanned::dummy(lhs), value: Spanned::dummy(v) })
+        ),
+
+        // expression statement
+        context("expression statement",
+            map(preceded(ws, tuple((
+                expr,
+                cut(context("';' after expression", preceded(ws, char(';'))))
+            ))), |(e, _)| Statement::Expr(Spanned::dummy(e)))
+        ),
+    ))(input)
 }
 
 fn block(input: &str) -> ParseResult<'_, Block> {
     alt((
-        map(tuple((
-            preceded(ws, tag("fn")), preceded(ws, ident), preceded(ws, char('(')),
-            separated_list0(preceded(ws, char(',')), preceded(ws, ident)),
-            preceded(ws, char(')')),
-            opt(preceded(preceded(ws, tag("->")), preceded(ws, ident))),
-            preceded(ws, char('{')), many0(map(preceded(ws, statement), Spanned::dummy)), preceded(ws, char('}'))
-        )), |(_, name, _, params, _, return_type, _, body, _)| {
-            let items = body.into_iter().map(|s| Spanned::new(Item::Statement(s.node), s.span)).collect();
-            Block { name, params, return_type, items }
-        }),
-        map(tuple((
-            preceded(ws, tag("block")), preceded(ws, ident), preceded(ws, char('(')), preceded(ws, char(')')),
-            preceded(ws, char('{')), many0(map(preceded(ws, statement), Spanned::dummy)), preceded(ws, char('}'))
-        )), |(_, name, _, _, _, body, _)| {
-            let items = body.into_iter().map(|s| Spanned::new(Item::Statement(s.node), s.span)).collect();
-            Block { name, params: vec![], return_type: None, items }
-        }),
+        // fn name(params) -> return_type { body }
+        context("function definition",
+            map(tuple((
+                preceded(ws, tag("fn")),
+                cut(tuple((
+                    context("function name", preceded(ws, ident)),
+                    context("'(' for parameters", preceded(ws, char('('))),
+                    separated_list0(preceded(ws, char(',')), preceded(ws, ident)),
+                    context("')' after parameters", preceded(ws, char(')'))),
+                    opt(preceded(preceded(ws, tag("->")), preceded(ws, ident))),
+                    context("'{' to start function body", preceded(ws, char('{'))),
+                    many0(map(preceded(ws, statement), Spanned::dummy)),
+                    context("'}' to close function", preceded(ws, char('}')))
+                )))
+            )), |(_, (name, _, params, _, return_type, _, body, _))| {
+                let items = body.into_iter().map(|s| Spanned::new(Item::Statement(s.node), s.span)).collect();
+                Block { name, params, return_type, items }
+            })
+        ),
+        // block name() { body }
+        context("block definition",
+            map(tuple((
+                preceded(ws, tag("block")),
+                cut(tuple((
+                    context("block name", preceded(ws, ident)),
+                    preceded(ws, char('(')),
+                    preceded(ws, char(')')),
+                    context("'{' to start block body", preceded(ws, char('{'))),
+                    many0(map(preceded(ws, statement), Spanned::dummy)),
+                    context("'}' to close block", preceded(ws, char('}')))
+                )))
+            )), |(_, (name, _, _, _, body, _))| {
+                let items = body.into_iter().map(|s| Spanned::new(Item::Statement(s.node), s.span)).collect();
+                Block { name, params: vec![], return_type: None, items }
+            })
+        ),
     ))(input)
 }
 
 fn parse_program(input: &str) -> ParseResult<'_, Program> {
-    let (input, _) = preceded(ws, tag("program"))(input)?;
-    let (input, name) = preceded(ws, ident)(input)?;
-    let (input, _) = preceded(ws, char('{'))(input)?;
+    let (input, _) = context("'program' keyword", preceded(ws, tag("program")))(input)?;
+    let (input, name) = cut(context("program name", preceded(ws, ident)))(input)?;
+    let (input, _) = cut(context("'{' to start program", preceded(ws, char('{'))))(input)?;
     let (input, blocks) = many0(preceded(ws, block))(input)?;
-    let (input, _) = preceded(ws, char('}'))(input)?;
+    let (input, _) = cut(context("'}' to close program", preceded(ws, char('}'))))(input)?;
     Ok((input, Program { name, blocks }))
 }
 
@@ -301,7 +389,18 @@ impl Parser for HlxaParser {
     fn parse(&self, source: &str) -> Result<Program> {
         match parse_program(source) {
             Ok((_, p)) => Ok(p),
-            Err(e) => Err(HlxError::parse(format!("{:?}", e))),
+            Err(e) => {
+                // Use nom's convert_error for human-readable error messages
+                let error_msg = match e {
+                    nom::Err::Error(ve) | nom::Err::Failure(ve) => {
+                        nom::error::convert_error(source, ve)
+                    }
+                    nom::Err::Incomplete(_) => {
+                        "Incomplete input (streaming parser error)".to_string()
+                    }
+                };
+                Err(HlxError::parse(error_msg))
+            }
         }
     }
     fn name(&self) -> &'static str { "HLX-A" }

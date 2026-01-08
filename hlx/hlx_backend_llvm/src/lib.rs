@@ -6,13 +6,21 @@ use hlx_core::{HlxCrate, Instruction, Value, Register};
 use inkwell::context::Context;
 use inkwell::builder::Builder;
 use inkwell::module::{Module, Linkage};
-use inkwell::values::{FunctionValue, IntValue, PointerValue};
+use inkwell::values::{FunctionValue, IntValue, FloatValue, BasicValueEnum, PointerValue};
 use inkwell::basic_block::BasicBlock;
-use inkwell::IntPredicate;
+use inkwell::{IntPredicate, FloatPredicate};
 use inkwell::OptimizationLevel;
 use inkwell::targets::{Target, InitializationConfig, TargetMachine};
 use std::collections::{HashMap, HashSet};
 use anyhow::{Result, anyhow};
+
+/// Runtime type of a value
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ValueType {
+    Int,
+    Float,
+    Pointer,
+}
 
 pub struct CodeGen<'ctx> {
     context: &'ctx Context,
@@ -20,6 +28,7 @@ pub struct CodeGen<'ctx> {
     builder: Builder<'ctx>,
     functions: HashMap<String, FunctionValue<'ctx>>,
     reg_map: HashMap<Register, PointerValue<'ctx>>,
+    reg_types: HashMap<Register, ValueType>,  // Track register types
     block_map: HashMap<u32, BasicBlock<'ctx>>,
 }
 
@@ -105,6 +114,18 @@ impl<'ctx> CodeGen<'ctx> {
         functions.insert("fseek".to_string(), module.add_function("fseek", i32_type.fn_type(&[ptr_type.into(), i64_type.into(), i32_type.into()], false), Some(Linkage::External)));
         functions.insert("ftell".to_string(), module.add_function("ftell", i64_type.fn_type(&[ptr_type.into()], false), Some(Linkage::External)));
 
+        // Math (libm)
+        let f64_type = context.f64_type();
+        functions.insert("sin".to_string(), module.add_function("sin", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
+        functions.insert("cos".to_string(), module.add_function("cos", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
+        functions.insert("tan".to_string(), module.add_function("tan", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
+        functions.insert("sqrt".to_string(), module.add_function("sqrt", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
+        functions.insert("floor".to_string(), module.add_function("floor", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
+        functions.insert("ceil".to_string(), module.add_function("ceil", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
+        functions.insert("round".to_string(), module.add_function("round", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
+        functions.insert("log".to_string(), module.add_function("log", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
+        functions.insert("exp".to_string(), module.add_function("exp", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
+
         // SDL2
         let sdl_init = module.add_function("SDL_Init", i32_type.fn_type(&[i32_type.into()], false), Some(Linkage::External));
         let sdl_create_window = module.add_function("SDL_CreateWindow", ptr_type.fn_type(&[ptr_type.into(), i32_type.into(), i32_type.into(), i32_type.into(), i32_type.into(), i32_type.into()], false), Some(Linkage::External));
@@ -142,6 +163,7 @@ impl<'ctx> CodeGen<'ctx> {
             builder,
             functions,
             reg_map: HashMap::new(),
+            reg_types: HashMap::new(),
             block_map: HashMap::new(),
         };
         
@@ -338,6 +360,7 @@ impl<'ctx> CodeGen<'ctx> {
     fn compile_function(&mut self, name: &str, params: &[Register], start_pc: u32, instructions: &[Instruction], all_targets: &HashSet<u32>) -> Result<()> {
         let function = *self.functions.get(name).ok_or_else(|| anyhow!("Fn missing"))?;
         self.reg_map.clear();
+        self.reg_types.clear();
         self.block_map.clear();
         let entry_bb = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry_bb);
@@ -360,8 +383,10 @@ impl<'ctx> CodeGen<'ctx> {
             self.reg_map.insert(r, ptr);
         }
         for (i, &reg) in params.iter().enumerate() {
-            let val = function.get_nth_param(i as u32).unwrap().into_int_value();
-            self.store_reg(reg, val)?;
+            let val = function.get_nth_param(i as u32).unwrap();
+            // Params are assumed to be integers for now, matching the old behavior
+            // but we wrap them in the new typed store_reg
+            self.store_reg(reg, val, ValueType::Int)?;
         }
         self.builder.build_unconditional_branch(*self.block_map.get(&start_pc).unwrap())?;
         pc = start_pc as usize;
@@ -403,94 +428,208 @@ impl<'ctx> CodeGen<'ctx> {
         let ptr_t = self.context.ptr_type(inkwell::AddressSpace::default());
         match inst {
             Instruction::Constant { out, val } => {
-                let v = self.compile_constant(val)?;
-                self.store_reg(*out, v)?;
+                let (v, v_type) = self.compile_constant(val)?;
+                self.store_reg(*out, v, v_type)?;
             }
             Instruction::Add { out, lhs, rhs } => {
-                let l = self.load_reg(*lhs)?;
-                let r = self.load_reg(*rhs)?;
-                let res = self.builder.build_int_add(l, r, "add")?;
-                self.store_reg(*out, res)?;
+                let (l, l_type) = self.load_reg(*lhs)?;
+                let (r, r_type) = self.load_reg(*rhs)?;
+
+                // Dispatch based on operand types
+                let (res, res_type) = match (l_type, r_type) {
+                    (ValueType::Int, ValueType::Int) => {
+                        let res = self.builder.build_int_add(l.into_int_value(), r.into_int_value(), "add")?;
+                        (res.into(), ValueType::Int)
+                    }
+                    (ValueType::Float, ValueType::Float) => {
+                        let res = self.builder.build_float_add(l.into_float_value(), r.into_float_value(), "fadd")?;
+                        (res.into(), ValueType::Float)
+                    }
+                    _ => return Err(anyhow!("Type mismatch in Add: {:?} + {:?}", l_type, r_type)),
+                };
+
+                self.store_reg(*out, res, res_type)?;
             }
             Instruction::Sub { out, lhs, rhs } => {
-                let l = self.load_reg(*lhs)?;
-                let r = self.load_reg(*rhs)?;
-                let res = self.builder.build_int_sub(l, r, "sub")?;
-                self.store_reg(*out, res)?;
+                let (l, l_type) = self.load_reg(*lhs)?;
+                let (r, r_type) = self.load_reg(*rhs)?;
+
+                let (res, res_type) = match (l_type, r_type) {
+                    (ValueType::Int, ValueType::Int) => {
+                        let res = self.builder.build_int_sub(l.into_int_value(), r.into_int_value(), "sub")?;
+                        (res.into(), ValueType::Int)
+                    }
+                    (ValueType::Float, ValueType::Float) => {
+                        let res = self.builder.build_float_sub(l.into_float_value(), r.into_float_value(), "fsub")?;
+                        (res.into(), ValueType::Float)
+                    }
+                    _ => return Err(anyhow!("Type mismatch in Sub: {:?} - {:?}", l_type, r_type)),
+                };
+
+                self.store_reg(*out, res, res_type)?;
             }
             Instruction::Mul { out, lhs, rhs } => {
-                let l = self.load_reg(*lhs)?;
-                let r = self.load_reg(*rhs)?;
-                let res = self.builder.build_int_mul(l, r, "mul")?;
-                self.store_reg(*out, res)?;
+                let (l, l_type) = self.load_reg(*lhs)?;
+                let (r, r_type) = self.load_reg(*rhs)?;
+
+                let (res, res_type) = match (l_type, r_type) {
+                    (ValueType::Int, ValueType::Int) => {
+                        let res = self.builder.build_int_mul(l.into_int_value(), r.into_int_value(), "mul")?;
+                        (res.into(), ValueType::Int)
+                    }
+                    (ValueType::Float, ValueType::Float) => {
+                        let res = self.builder.build_float_mul(l.into_float_value(), r.into_float_value(), "fmul")?;
+                        (res.into(), ValueType::Float)
+                    }
+                    _ => return Err(anyhow!("Type mismatch in Mul: {:?} * {:?}", l_type, r_type)),
+                };
+
+                self.store_reg(*out, res, res_type)?;
+            }
+            Instruction::Div { out, lhs, rhs } => {
+                let (l, l_type) = self.load_reg(*lhs)?;
+                let (r, r_type) = self.load_reg(*rhs)?;
+
+                let (res, res_type) = match (l_type, r_type) {
+                    (ValueType::Int, ValueType::Int) => {
+                        let res = self.builder.build_int_signed_div(l.into_int_value(), r.into_int_value(), "div")?;
+                        (res.into(), ValueType::Int)
+                    }
+                    (ValueType::Float, ValueType::Float) => {
+                        let res = self.builder.build_float_div(l.into_float_value(), r.into_float_value(), "fdiv")?;
+                        (res.into(), ValueType::Float)
+                    }
+                    _ => return Err(anyhow!("Type mismatch in Div: {:?} / {:?}", l_type, r_type)),
+                };
+
+                self.store_reg(*out, res, res_type)?;
             }
             Instruction::Neg { out, src } => {
-                let val = self.load_reg(*src)?;
-                let res = self.builder.build_int_neg(val, "neg")?;
-                self.store_reg(*out, res)?;
+                let (val, val_type) = self.load_reg(*src)?;
+
+                let (res, res_type) = match val_type {
+                    ValueType::Int => {
+                        let res = self.builder.build_int_neg(val.into_int_value(), "neg")?;
+                        (res.into(), ValueType::Int)
+                    }
+                    ValueType::Float => {
+                        let res = self.builder.build_float_neg(val.into_float_value(), "fneg")?;
+                        (res.into(), ValueType::Float)
+                    }
+                    ValueType::Pointer => return Err(anyhow!("Cannot negate pointer")),
+                };
+
+                self.store_reg(*out, res, res_type)?;
             }
             Instruction::Lt { out, lhs, rhs } => {
-                let l = self.load_reg(*lhs)?;
-                let r = self.load_reg(*rhs)?;
-                let res = self.builder.build_int_compare(IntPredicate::SLT, l, r, "lt")?;
+                let (l, l_type) = self.load_reg(*lhs)?;
+                let (r, r_type) = self.load_reg(*rhs)?;
+
+                let res = match (l_type, r_type) {
+                    (ValueType::Int, ValueType::Int) => {
+                        self.builder.build_int_compare(IntPredicate::SLT, l.into_int_value(), r.into_int_value(), "lt")?
+                    }
+                    (ValueType::Float, ValueType::Float) => {
+                        self.builder.build_float_compare(FloatPredicate::OLT, l.into_float_value(), r.into_float_value(), "flt")?
+                    }
+                    _ => return Err(anyhow!("Type mismatch in Lt: {:?} < {:?}", l_type, r_type)),
+                };
+
                 let ext = self.builder.build_int_z_extend(res, self.context.i64_type(), "bool_ext")?;
-                self.store_reg(*out, ext)?;
+                self.store_reg(*out, ext.into(), ValueType::Int)?;
             }
             Instruction::Gt { out, lhs, rhs } => {
-                let l = self.load_reg(*lhs)?;
-                let r = self.load_reg(*rhs)?;
-                let res = self.builder.build_int_compare(IntPredicate::SGT, l, r, "gt")?;
+                let (l, l_type) = self.load_reg(*lhs)?;
+                let (r, r_type) = self.load_reg(*rhs)?;
+
+                let res = match (l_type, r_type) {
+                    (ValueType::Int, ValueType::Int) => {
+                        self.builder.build_int_compare(IntPredicate::SGT, l.into_int_value(), r.into_int_value(), "gt")?
+                    }
+                    (ValueType::Float, ValueType::Float) => {
+                        self.builder.build_float_compare(FloatPredicate::OGT, l.into_float_value(), r.into_float_value(), "fgt")?
+                    }
+                    _ => return Err(anyhow!("Type mismatch in Gt: {:?} > {:?}", l_type, r_type)),
+                };
+
                 let ext = self.builder.build_int_z_extend(res, self.context.i64_type(), "bool_ext")?;
-                self.store_reg(*out, ext)?;
+                self.store_reg(*out, ext.into(), ValueType::Int)?;
             }
             Instruction::Eq { out, lhs, rhs } => {
-                let l = self.load_reg(*lhs)?;
-                let r = self.load_reg(*rhs)?;
-                let res = self.builder.build_int_compare(IntPredicate::EQ, l, r, "eq")?;
+                let (l, l_type) = self.load_reg(*lhs)?;
+                let (r, r_type) = self.load_reg(*rhs)?;
+
+                let res = match (l_type, r_type) {
+                    (ValueType::Int, ValueType::Int) => {
+                        self.builder.build_int_compare(IntPredicate::EQ, l.into_int_value(), r.into_int_value(), "eq")?
+                    }
+                    (ValueType::Float, ValueType::Float) => {
+                        self.builder.build_float_compare(FloatPredicate::OEQ, l.into_float_value(), r.into_float_value(), "feq")?
+                    }
+                    _ => return Err(anyhow!("Type mismatch in Eq: {:?} == {:?}", l_type, r_type)),
+                };
+
                 let ext = self.builder.build_int_z_extend(res, self.context.i64_type(), "bool_ext")?;
-                self.store_reg(*out, ext)?;
+                self.store_reg(*out, ext.into(), ValueType::Int)?;
             }
             Instruction::Call { out, func, args } => {
-                let f = *self.functions.get(func).ok_or_else(|| anyhow!("Fn missing"))?;
+                let f = *self.functions.get(func).ok_or_else(|| anyhow!("Fn missing: {}", func))?;
                 let mut llvm_args = Vec::new();
                 let param_types = f.get_type().get_param_types();
                 for (i, &a) in args.iter().enumerate() {
-                    let val = self.load_reg(a)?;
+                    let (val, val_type) = self.load_reg(a)?;
                     let param_type = param_types.get(i).ok_or_else(|| anyhow!("Too many args"))?;
-                    
+
                     if param_type.is_pointer_type() {
-                        let ptr = self.builder.build_int_to_ptr(val, param_type.into_pointer_type(), "ptr_cast")?;
+                        let ptr = if val.is_pointer_value() {
+                            val.into_pointer_value()
+                        } else {
+                            self.builder.build_int_to_ptr(val.into_int_value(), param_type.into_pointer_type(), "ptr_cast")?
+                        };
                         llvm_args.push(ptr.into());
                     } else if param_type.is_int_type() {
+                        let int_val = if val.is_int_value() {
+                            val.into_int_value()
+                        } else {
+                            self.builder.build_ptr_to_int(val.into_pointer_value(), self.context.i64_type(), "int_cast")?
+                        };
                         let target_width = param_type.into_int_type().get_bit_width();
                         if target_width < 64 {
-                            let trunc = self.builder.build_int_truncate(val, param_type.into_int_type(), "int_trunc")?;
+                            let trunc = self.builder.build_int_truncate(int_val, param_type.into_int_type(), "int_trunc")?;
                             llvm_args.push(trunc.into());
                         } else {
-                            llvm_args.push(val.into());
+                            llvm_args.push(int_val.into());
                         }
+                    } else if param_type.is_float_type() {
+                        // Handle float parameters (for math functions like sin, cos, etc.)
+                        let float_val = if val.is_float_value() {
+                            val.into_float_value()
+                        } else if val_type == ValueType::Int {
+                            // Convert int to float if needed
+                            self.builder.build_signed_int_to_float(val.into_int_value(), self.context.f64_type(), "int_to_float")?
+                        } else {
+                            return Err(anyhow!("Cannot convert {:?} to float for call", val_type));
+                        };
+                        llvm_args.push(float_val.into());
                     } else {
                         llvm_args.push(val.into());
                     }
                 }
                 let call = self.builder.build_call(f, &llvm_args, "call_tmp")?;
                 if let Some(res) = call.try_as_basic_value().left() {
-                    if res.is_pointer_value() {
-                        let int_val = self.builder.build_ptr_to_int(res.into_pointer_value(), self.context.i64_type(), "ptr_ret")?;
-                        self.store_reg(*out, int_val)?;
-                    } else if res.is_int_value() {
-                        let int_val = res.into_int_value();
-                        if int_val.get_type().get_bit_width() == 32 {
-                             let ext = self.builder.build_int_z_extend(int_val, self.context.i64_type(), "i32_ext")?;
-                             self.store_reg(*out, ext)?;
-                        } else {
-                             self.store_reg(*out, int_val)?;
-                        }
-                    }
+                    // Detect return type
+                    let res_type = if res.is_pointer_value() {
+                        ValueType::Pointer
+                    } else if res.is_float_value() {
+                        ValueType::Float
+                    } else {
+                        ValueType::Int
+                    };
+                    self.store_reg(*out, res, res_type)?;
                 }
             }
             Instruction::Return { val } => {
-                let v = self.load_reg(*val)?;
+                let (v, _v_type) = self.load_reg(*val)?;
                 self.builder.build_return(Some(&v))?;
             }
             Instruction::Jump { target } => {
@@ -498,73 +637,75 @@ impl<'ctx> CodeGen<'ctx> {
                 self.builder.build_unconditional_branch(bb)?;
             }
             Instruction::If { cond, then_block, else_block } => {
-                let c = self.load_reg(*cond)?;
+                let (c, _c_type) = self.load_reg(*cond)?;
+                let c_int = c.into_int_value();
                 let zero = self.context.i64_type().const_int(0, false);
-                let is_nonzero = self.builder.build_int_compare(IntPredicate::NE, c, zero, "is_nonzero")?;
+                let is_nonzero = self.builder.build_int_compare(IntPredicate::NE, c_int, zero, "is_nonzero")?;
                 let t = self.get_block(*then_block)?;
                 let e = self.get_block(*else_block)?;
                 self.builder.build_conditional_branch(is_nonzero, t, e)?;
             }
             Instruction::Move { out, src } => {
-                let v = self.load_reg(*src)?;
-                self.store_reg(*out, v)?;
+                let (v, v_type) = self.load_reg(*src)?;
+                self.store_reg(*out, v, v_type)?;
             }
             Instruction::ArrayCreate { out, elements } => {
                 let malloc = *self.functions.get("malloc").unwrap();
-                let ptr = self.builder.build_call(malloc, &[i64_t.const_int(elements.len() as u64 * 8, false).into()], "malloc_call")?
-                    .try_as_basic_value().left().unwrap().into_pointer_value();
+                let ptr_val = self.builder.build_call(malloc, &[i64_t.const_int(elements.len() as u64 * 8, false).into()], "malloc_call")?
+                    .try_as_basic_value().left().unwrap();
+                let ptr = ptr_val.into_pointer_value();
                 for (i, &reg) in elements.iter().enumerate() {
-                    let val = self.load_reg(reg)?;
+                    let (val, _v_type) = self.load_reg(reg)?;
                     let idx = self.context.i64_type().const_int(i as u64, false);
                     unsafe {
                         let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
                         self.builder.build_store(elem_ptr, val)?;
                     }
                 }
-                let int_ptr = self.builder.build_ptr_to_int(ptr, self.context.i64_type(), "ptr_to_int")?;
-                self.store_reg(*out, int_ptr)?;
+                self.store_reg(*out, ptr_val, ValueType::Pointer)?;
             }
             Instruction::ArrayAlloc { out, size } => {
-                let size_val = self.load_reg(*size)?;
-                let bytes = self.builder.build_int_mul(size_val, i64_t.const_int(8, false), "bytes")?;
+                let (size_val, _) = self.load_reg(*size)?;
+                let bytes = self.builder.build_int_mul(size_val.into_int_value(), i64_t.const_int(8, false), "bytes")?;
                 let malloc = *self.functions.get("malloc").unwrap();
-                let ptr = self.builder.build_call(malloc, &[bytes.into()], "malloc_call")?
-                    .try_as_basic_value().left().unwrap().into_pointer_value();
-                let int_ptr = self.builder.build_ptr_to_int(ptr, self.context.i64_type(), "ptr_to_int")?;
-                self.store_reg(*out, int_ptr)?;
+                let ptr_val = self.builder.build_call(malloc, &[bytes.into()], "malloc_call")?
+                    .try_as_basic_value().left().unwrap();
+                self.store_reg(*out, ptr_val, ValueType::Pointer)?;
             }
             Instruction::Index { out, container, index } => {
-                let ptr_int = self.load_reg(*container)?;
-                let idx = self.load_reg(*index)?;
-                let ptr = self.builder.build_int_to_ptr(ptr_int, self.context.ptr_type(inkwell::AddressSpace::default()), "int_to_ptr")?;
+                let (ptr_val, _) = self.load_reg(*container)?;
+                let (idx_val, _) = self.load_reg(*index)?;
+                let ptr = ptr_val.into_pointer_value();
+                let idx = idx_val.into_int_value();
                 unsafe {
                     let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
                     let val = self.builder.build_load(self.context.i64_type(), elem_ptr, "elem_load")?;
-                    self.store_reg(*out, val.into_int_value())?;
+                    self.store_reg(*out, val, ValueType::Int)?;
                 }
             }
             Instruction::Store { container, index, value } => {
-                let ptr_int = self.load_reg(*container)?;
-                let idx = self.load_reg(*index)?;
-                let val = self.load_reg(*value)?;
-                let ptr = self.builder.build_int_to_ptr(ptr_int, self.context.ptr_type(inkwell::AddressSpace::default()), "int_to_ptr")?;
+                let (ptr_val, _) = self.load_reg(*container)?;
+                let (idx_val, _) = self.load_reg(*index)?;
+                let (val, _) = self.load_reg(*value)?;
+                let ptr = ptr_val.into_pointer_value();
+                let idx = idx_val.into_int_value();
                 unsafe {
                     let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
                     self.builder.build_store(elem_ptr, val)?;
                 }
             }
             Instruction::TensorCreate { out, shape, .. } => {
-                let ptr = self.builder.build_call(self.module.get_function("__hlx_tensor_create").unwrap(), &[i64_t.const_int(shape[0] as u64, false).into(), i64_t.const_int(shape[1] as u64, false).into()], "ta")?.try_as_basic_value().left().unwrap().into_pointer_value();
-                self.store_reg(*out, self.builder.build_ptr_to_int(ptr, i64_t, "pi")?)?;
+                let ptr_val = self.builder.build_call(self.module.get_function("__hlx_tensor_create").unwrap(), &[i64_t.const_int(shape[0] as u64, false).into(), i64_t.const_int(shape[1] as u64, false).into()], "ta")?.try_as_basic_value().left().unwrap();
+                self.store_reg(*out, ptr_val, ValueType::Pointer)?;
             }
             Instruction::MatMul { out, lhs, rhs } => {
-                let a = self.builder.build_int_to_ptr(self.load_reg(*lhs)?, ptr_t, "ap")?;
-                let b = self.builder.build_int_to_ptr(self.load_reg(*rhs)?, ptr_t, "bp")?;
-                let res = self.builder.build_call(self.module.get_function("__hlx_matmul").unwrap(), &[a.into(), b.into()], "mm")?.try_as_basic_value().left().unwrap().into_pointer_value();
-                self.store_reg(*out, self.builder.build_ptr_to_int(res, i64_t, "ci")?)?;
+                let (a, _) = self.load_reg(*lhs)?;
+                let (b, _) = self.load_reg(*rhs)?;
+                let res_val = self.builder.build_call(self.module.get_function("__hlx_matmul").unwrap(), &[a.into(), b.into()], "mm")?.try_as_basic_value().left().unwrap();
+                self.store_reg(*out, res_val, ValueType::Pointer)?;
             }
             Instruction::Print { val } => {
-                let v = self.load_reg(*val)?;
+                let (v, _) = self.load_reg(*val)?;
                 let f = *self.functions.get("printf").unwrap();
                 let fmt = self.context.const_string(b"%lld\n\0", false);
                 let g = self.module.add_global(fmt.get_type(), Some(inkwell::AddressSpace::default()), "fi");
@@ -573,7 +714,7 @@ impl<'ctx> CodeGen<'ctx> {
                 self.builder.build_call(f, &[gep.into(), v.into()], "pc")?;
             }
             Instruction::PrintStr { val } => {
-                let v = self.builder.build_int_to_ptr(self.load_reg(*val)?, ptr_t, "vp")?;
+                let (v, _) = self.load_reg(*val)?;
                 let f = *self.functions.get("printf").unwrap();
                 let fmt = self.context.const_string(b"%s\n\0", false);
                 let g = self.module.add_global(fmt.get_type(), Some(inkwell::AddressSpace::default()), "fs");
@@ -607,9 +748,7 @@ impl<'ctx> CodeGen<'ctx> {
                 // If there's an output register, store the result
                 if let Some(out_reg) = out {
                     if let Some(val) = result.try_as_basic_value().left() {
-                        if val.is_int_value() {
-                            self.store_reg(*out_reg, val.into_int_value())?;
-                        }
+                        self.store_reg(*out_reg, val, ValueType::Int)?;
                     }
                 }
             }
@@ -618,32 +757,82 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
     
-    fn compile_constant(&self, val: &Value) -> Result<IntValue<'ctx>> {
+    fn compile_constant(&self, val: &Value) -> Result<(BasicValueEnum<'ctx>, ValueType)> {
         let i64_t = self.context.i64_type();
+        let f64_t = self.context.f64_type();
         match val {
-            Value::Integer(i) => Ok(i64_t.const_int(*i as u64, true)),
-            Value::Boolean(b) => Ok(i64_t.const_int(if *b { 1 } else { 0 }, false)),
-            Value::Null => Ok(i64_t.const_int(0, false)),
+            Value::Integer(i) => {
+                Ok((i64_t.const_int(*i as u64, true).into(), ValueType::Int))
+            }
+            Value::Float(f) => {
+                Ok((f64_t.const_float(*f).into(), ValueType::Float))
+            }
+            Value::Boolean(b) => {
+                Ok((i64_t.const_int(if *b { 1 } else { 0 }, false).into(), ValueType::Int))
+            }
+            Value::Null => {
+                Ok((i64_t.const_int(0, false).into(), ValueType::Int))
+            }
             Value::String(s) => {
                 let fmt = self.context.const_string(format!("{}\0", s).as_bytes(), false);
                 let g = self.module.add_global(fmt.get_type(), Some(inkwell::AddressSpace::default()), "sl");
                 g.set_initializer(&fmt); g.set_constant(true); g.set_linkage(Linkage::Internal);
                 let gep = unsafe { self.builder.build_gep(fmt.get_type(), g.as_pointer_value(), &[self.context.i32_type().const_int(0, false), self.context.i32_type().const_int(0, false)], "sg")? };
-                Ok(self.builder.build_ptr_to_int(gep, i64_t, "pi")?)
+                let ptr_as_int = self.builder.build_ptr_to_int(gep, i64_t, "pi")?;
+                Ok((ptr_as_int.into(), ValueType::Pointer))
             }
             _ => Err(anyhow!("Unsupported constant: {:?}", val)),
         }
     }
     
-    fn load_reg(&self, reg: Register) -> Result<IntValue<'ctx>> {
+    fn load_reg(&self, reg: Register) -> Result<(BasicValueEnum<'ctx>, ValueType)> {
         let ptr = self.reg_map.get(&reg).ok_or_else(|| anyhow!("Reg missing"))?;
-        let val = self.builder.build_load(self.context.i64_type(), *ptr, "reg_load")?;
-        Ok(val.into_int_value())
+        let val_type = *self.reg_types.get(&reg).ok_or_else(|| {
+            // Detailed error for debugging
+            let known_regs: Vec<_> = self.reg_types.keys().copied().collect();
+            anyhow!(
+                "Reg type missing for r{}.\n\
+                \n\
+                This means the compiler tried to load from a register that was never stored to.\n\
+                Known typed registers: {:?}\n\
+                \n\
+                Possible causes:\n\
+                1. User code has uninitialized variable (LSP should catch this)\n\
+                2. Compiler bug: IR generator emitted Load before Store\n\
+                3. Backend bug: Instruction didn't call store_reg() for output\n\
+                \n\
+                See DEBUGGING_REG_TYPE_MISSING.md for investigation steps.",
+                reg, known_regs
+            )
+        })?;
+
+        // Registers are allocated as i64, bitcast to f64 if needed
+        let val = match val_type {
+            ValueType::Int | ValueType::Pointer => {
+                self.builder.build_load(self.context.i64_type(), *ptr, "reg_load")?
+            }
+            ValueType::Float => {
+                let as_int = self.builder.build_load(self.context.i64_type(), *ptr, "reg_load_int")?;
+                self.builder.build_bit_cast(as_int, self.context.f64_type(), "int_to_float")?
+            }
+        };
+
+        Ok((val, val_type))
     }
-    
-    fn store_reg(&self, reg: Register, val: IntValue<'ctx>) -> Result<()> {
+
+    fn store_reg(&mut self, reg: Register, val: BasicValueEnum<'ctx>, val_type: ValueType) -> Result<()> {
         let ptr = self.reg_map.get(&reg).ok_or_else(|| anyhow!("Reg missing"))?;
-        self.builder.build_store(*ptr, val)?;
+
+        // If storing float, bitcast to i64 first (all registers are i64 allocas)
+        let to_store = match val_type {
+            ValueType::Int | ValueType::Pointer => val,
+            ValueType::Float => {
+                self.builder.build_bit_cast(val, self.context.i64_type(), "float_to_int")?
+            }
+        };
+
+        self.builder.build_store(*ptr, to_store)?;
+        self.reg_types.insert(reg, val_type);
         Ok(())
     }
     
@@ -738,5 +927,111 @@ impl<'ctx> CodeGen<'ctx> {
             .map_err(|e| anyhow!("Failed to write assembly file: {}", e))?;
 
         Ok(())
+    }
+}
+
+// Backend Capability Implementation for LLVM Native Compiler
+impl<'ctx> hlx_runtime::backend::BackendCapability for CodeGen<'ctx> {
+    fn supported_contracts(&self) -> Vec<String> {
+        // LLVM backend supports core T0 contracts
+        // Expand this list as more contracts are implemented
+        vec![
+            // T0 Core Language contracts
+            "100".to_string(), // Example T0 contract
+            "101".to_string(),
+            "102".to_string(),
+            // Add more as they're implemented in LLVM backend
+        ]
+    }
+
+    fn supported_builtins(&self) -> Vec<String> {
+        // LLVM backend supports basic builtins that don't require libc math
+        vec![
+            // I/O (basic, no advanced features yet)
+            "print".to_string(),
+            "read_file".to_string(),
+            "write_file".to_string(),
+
+            // Type operations
+            "type".to_string(),
+            "len".to_string(),
+
+            // Type conversions
+            "to_string".to_string(),
+            "to_int".to_string(),
+
+            // String operations (basic)
+            "concat".to_string(),
+
+            // Array operations (basic)
+            "append".to_string(),
+            "slice".to_string(),
+
+            // NOTABLY MISSING: Math functions (sin, cos, tan, log, exp)
+            // These require libc linking which isn't set up yet
+            // "sin" - ❌ NOT IN LLVM BACKEND YET
+            // "cos" - ❌ NOT IN LLVM BACKEND YET
+            // "tan" - ❌ NOT IN LLVM BACKEND YET
+            // "log" - ❌ NOT IN LLVM BACKEND YET
+            // "exp" - ❌ NOT IN LLVM BACKEND YET
+
+            // JSON operations - may need external lib
+            // "json_parse" - ❌ NOT IN LLVM BACKEND YET
+            // "json_stringify" - ❌ NOT IN LLVM BACKEND YET
+
+            // HTTP operations - definitely needs external lib
+            // "http_request" - ❌ NOT IN LLVM BACKEND YET
+        ]
+    }
+
+    fn backend_name(&self) -> &'static str {
+        "LLVM Native (AOT)"
+    }
+
+    fn unsupported_contracts(&self) -> Vec<String> {
+        // Note: unsupported_builtins removed - not part of trait
+        // Missing builtins are implicitly: everything not in supported_builtins()
+        // Notably missing: sin, cos, tan, log, exp, sqrt (no libc linking yet)
+        Vec::new()
+    }
+}
+
+impl<'ctx> CodeGen<'ctx> {
+    /// Helper: Check if a builtin is supported
+    pub fn is_builtin_supported(&self, name: &str) -> bool {
+        use hlx_runtime::backend::BackendCapability;
+        self.supported_builtins().contains(&name.to_string())
+    }
+
+    /// Static capability query - can be called without CodeGen instance
+    ///
+    /// Used by LSP to detect backend compatibility issues
+    pub fn static_supported_builtins() -> Vec<String> {
+        vec![
+            // I/O
+            "print".to_string(),
+            "read_file".to_string(),
+            "write_file".to_string(),
+            // Type operations
+            "type".to_string(),
+            "len".to_string(),
+            // Type conversions
+            "to_string".to_string(),
+            "to_int".to_string(),
+            // String/Array operations
+            "concat".to_string(),
+            "append".to_string(),
+            "slice".to_string(),
+            // Math functions (NOW SUPPORTED!)
+            "sin".to_string(),
+            "cos".to_string(),
+            "tan".to_string(),
+            "sqrt".to_string(),
+            "log".to_string(),
+            "exp".to_string(),
+            "floor".to_string(),
+            "ceil".to_string(),
+            "round".to_string(),
+        ]
     }
 }

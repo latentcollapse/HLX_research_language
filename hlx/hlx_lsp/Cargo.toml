@@ -14,5 +14,7 @@ tracing = { workspace = true }
 # Local dependencies
 hlx_core = { path = "../hlx_core" }
 hlx_compiler = { path = "../hlx_compiler" }
+hlx_runtime = { path = "../hlx_runtime" }
+hlx_backend_llvm = { path = "../hlx_backend_llvm" }
 dashmap = "6.1.0"
 regex = "1.10"

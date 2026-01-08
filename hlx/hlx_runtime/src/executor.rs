@@ -144,6 +144,14 @@ struct ExecutionContext {
     /// Subprocess pipes (handle_id -> Child)
     pipes: HashMap<u32, Child>,
     next_pipe_id: u32,
+
+    // SDL2
+    sdl_context: Option<sdl2::Sdl>,
+    video_subsystem: Option<sdl2::VideoSubsystem>,
+    event_pump: Option<sdl2::EventPump>,
+    windows: HashMap<u32, sdl2::video::Window>,
+    renderers: HashMap<u32, sdl2::render::Canvas<sdl2::video::Window>>,
+    next_window_id: u32,
 }
 
 impl ExecutionContext {
@@ -164,6 +172,12 @@ impl ExecutionContext {
             trace_buffer: VecDeque::with_capacity(50),
             pipes: HashMap::new(),
             next_pipe_id: 1,
+            sdl_context: None,
+            video_subsystem: None,
+            event_pump: None,
+            windows: HashMap::new(),
+            renderers: HashMap::new(),
+            next_window_id: 1,
         }
     }
     
@@ -1362,6 +1376,114 @@ impl ExecutionContext {
                 
                 Ok(Value::Boolean(true))
             }
+            "SDL_Init" => {
+                if self.sdl_context.is_none() {
+                    let sdl_context = sdl2::init().map_err(|e| HlxError::BackendError { message: e })?;
+                    let video_subsystem = sdl_context.video().map_err(|e| HlxError::BackendError { message: e })?;
+                    let event_pump = sdl_context.event_pump().map_err(|e| HlxError::BackendError { message: e })?;
+                    self.sdl_context = Some(sdl_context);
+                    self.video_subsystem = Some(video_subsystem);
+                    self.event_pump = Some(event_pump);
+                }
+                Ok(Value::Integer(0))
+            }
+            "SDL_CreateWindow" => {
+                // (title, x, y, w, h, flags)
+                // We'll ignore x, y, flags detail for simplicity or map them
+                let title = self.get_reg(args[0])?.to_string();
+                let width = match self.get_reg(args[3])? { Value::Integer(i) => *i as u32, _ => 800 };
+                let height = match self.get_reg(args[4])? { Value::Integer(i) => *i as u32, _ => 600 };
+                
+                let video_subsystem = self.video_subsystem.as_ref().ok_or(HlxError::BackendError { message: "SDL not initialized".to_string() })?;
+                let window = video_subsystem.window(&title, width, height)
+                    .position_centered()
+                    .build()
+                    .map_err(|e| HlxError::BackendError { message: e.to_string() })?;
+                
+                let id = self.next_window_id;
+                self.next_window_id += 1;
+                self.windows.insert(id, window);
+                Ok(Value::Integer(id as i64))
+            }
+            "SDL_CreateRenderer" => {
+                let window_id = match self.get_reg(args[0])? { Value::Integer(i) => *i as u32, _ => 0 };
+                let window = self.windows.remove(&window_id).ok_or(HlxError::ValidationFail { message: "Invalid window ID".to_string() })?;
+                let canvas = window.into_canvas().build().map_err(|e| HlxError::BackendError { message: e.to_string() })?;
+                self.renderers.insert(window_id, canvas); // Re-use ID for renderer-canvas map
+                Ok(Value::Integer(window_id as i64))
+            }
+            "SDL_SetRenderDrawColor" => {
+                let id = match self.get_reg(args[0])? { Value::Integer(i) => *i as u32, _ => 0 };
+                let r = match self.get_reg(args[1])? { Value::Integer(i) => *i as u8, _ => 0 };
+                let g = match self.get_reg(args[2])? { Value::Integer(i) => *i as u8, _ => 0 };
+                let b = match self.get_reg(args[3])? { Value::Integer(i) => *i as u8, _ => 0 };
+                let a = match self.get_reg(args[4])? { Value::Integer(i) => *i as u8, _ => 255 };
+                
+                if let Some(canvas) = self.renderers.get_mut(&id) {
+                    canvas.set_draw_color(sdl2::pixels::Color::RGBA(r, g, b, a));
+                }
+                Ok(Value::Integer(0))
+            }
+            "SDL_RenderClear" => {
+                let id = match self.get_reg(args[0])? { Value::Integer(i) => *i as u32, _ => 0 };
+                if let Some(canvas) = self.renderers.get_mut(&id) {
+                    canvas.clear();
+                }
+                Ok(Value::Integer(0))
+            }
+            "SDL_RenderPresent" => {
+                let id = match self.get_reg(args[0])? { Value::Integer(i) => *i as u32, _ => 0 };
+                if let Some(canvas) = self.renderers.get_mut(&id) {
+                    canvas.present();
+                }
+                Ok(Value::Integer(0))
+            }
+            "SDL_PollEvent" => {
+                let event_pump = self.event_pump.as_mut().ok_or(HlxError::BackendError { message: "SDL not initialized".to_string() })?;
+                if let Some(event) = event_pump.poll_event() {
+                     // For now, return 1 if event exists, 0 otherwise
+                     // To make it usable, we should return event type or struct
+                     match event {
+                        sdl2::event::Event::Quit {..} => Ok(Value::Integer(256)), // Quit
+                        _ => Ok(Value::Integer(1)),
+                     }
+                } else {
+                    Ok(Value::Integer(0))
+                }
+            }
+            "SDL_Delay" => {
+                let ms = match self.get_reg(args[0])? { Value::Integer(i) => *i as u32, _ => 10 };
+                std::thread::sleep(std::time::Duration::from_millis(ms as u64));
+                Ok(Value::Integer(0))
+            }
+            "SDL_Quit" => {
+                self.renderers.clear();
+                self.windows.clear();
+                self.video_subsystem = None;
+                self.sdl_context = None;
+                Ok(Value::Integer(0))
+            }
+            "SDL_DestroyWindow" => {
+                 let id = match self.get_reg(args[0])? { Value::Integer(i) => *i as u32, _ => 0 };
+                 self.renderers.remove(&id);
+                 self.windows.remove(&id);
+                 Ok(Value::Integer(0))
+            }
+            "malloc" => {
+                // Emulate malloc by allocating a byte array
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "malloc() takes 1 arg".to_string() }); }
+                let size = match self.get_reg(args[0])? { Value::Integer(i) => *i as usize, _ => 0 };
+                let bytes = vec![0u8; size];
+                // In interpreter, we can't return a raw pointer easily that SDL understands if SDL expects *real* pointers.
+                // However, our SDL builtins don't use the pointer! They ignore it or handle it internally.
+                // Wait, SDL_PollEvent(event_ptr).
+                // If I implemented SDL_PollEvent to use internal event pump, it ignores the argument!
+                // So I can just return a dummy integer.
+                Ok(Value::Integer(0xDEADBEEF))
+            }
+            "free" => {
+                Ok(Value::Integer(0))
+            }
             "pipe_open" => {
                 if args.len() != 1 {
                     return Err(HlxError::ValidationFail {
@@ -1716,6 +1838,177 @@ fn native_tokenize(source: &str) -> Result<Value> {
     // }
 
     Ok(Value::Array(tokens))
+}
+
+// Backend Capability Implementation for Interpreter
+impl crate::backend::BackendCapability for Executor {
+    fn supported_contracts(&self) -> Vec<String> {
+        // Interpreter is the reference implementation - supports ALL contracts
+        vec!["*".to_string()]
+    }
+
+    fn supported_builtins(&self) -> Vec<String> {
+        // Return all builtin functions implemented in execute_builtin()
+        vec![
+            // I/O
+            "print".to_string(),
+            "read_file".to_string(),
+            "write_file".to_string(),
+            "file_exists".to_string(),
+            "delete_file".to_string(),
+            "list_files".to_string(),
+            "create_dir".to_string(),
+
+            // Type introspection
+            "type".to_string(),
+            "len".to_string(),
+
+            // Array operations
+            "slice".to_string(),
+            "append".to_string(),
+            "arr_pop".to_string(),
+            "arr_slice".to_string(),
+            "arr_concat".to_string(),
+
+            // String operations
+            "concat".to_string(),
+            "strlen".to_string(),
+            "substring".to_string(),
+            "index_of".to_string(),
+            "to_upper".to_string(),
+            "to_lower".to_string(),
+            "trim".to_string(),
+            "starts_with".to_string(),
+            "ends_with".to_string(),
+
+            // Type conversions
+            "to_string".to_string(),
+            "to_int".to_string(),
+            "parse_int".to_string(),
+            "ord".to_string(),
+
+            // Math functions (ALL SUPPORTED IN INTERPRETER)
+            "floor".to_string(),
+            "ceil".to_string(),
+            "round".to_string(),
+            "sqrt".to_string(),
+            "sin".to_string(),      // ← Interpreter has this
+            "cos".to_string(),      // ← Interpreter has this
+            "tan".to_string(),      // ← Interpreter has this
+            "log".to_string(),      // ← Interpreter has this
+            "exp".to_string(),      // ← Interpreter has this
+            "random".to_string(),
+
+            // Object operations
+            "has_key".to_string(),
+
+            // JSON operations
+            "json_parse".to_string(),
+            "json_stringify".to_string(),
+            "read_json".to_string(),
+            "write_json".to_string(),
+
+            // HTTP
+            "http_request".to_string(),
+
+            // Runtime introspection
+            "snapshot".to_string(),
+            "export_trace".to_string(),
+            "write_snapshot".to_string(),
+
+            // Process management
+            "pipe_open".to_string(),
+            "pipe_write".to_string(),
+            "pipe_close".to_string(),
+
+            // System operations
+            "sleep".to_string(),
+            "capture_screen".to_string(),
+
+            // Metaprogramming
+            "native_tokenize".to_string(),
+        ]
+    }
+
+    fn backend_name(&self) -> &'static str {
+        "Interpreter (JIT)"
+    }
+}
+
+impl Executor {
+    /// Static capability query - can be called without Executor instance
+    ///
+    /// Used by LSP to detect backend compatibility issues
+    /// Interpreter is reference implementation with full stdlib
+    pub fn static_supported_builtins() -> Vec<String> {
+        vec![
+            // I/O
+            "print".to_string(),
+            "read_file".to_string(),
+            "write_file".to_string(),
+            "file_exists".to_string(),
+            "delete_file".to_string(),
+            "list_files".to_string(),
+            "create_dir".to_string(),
+            // Type introspection
+            "type".to_string(),
+            "len".to_string(),
+            // Array operations
+            "slice".to_string(),
+            "append".to_string(),
+            "arr_pop".to_string(),
+            "arr_slice".to_string(),
+            "arr_concat".to_string(),
+            // String operations
+            "concat".to_string(),
+            "strlen".to_string(),
+            "substring".to_string(),
+            "index_of".to_string(),
+            "to_upper".to_string(),
+            "to_lower".to_string(),
+            "trim".to_string(),
+            "starts_with".to_string(),
+            "ends_with".to_string(),
+            // Type conversions
+            "to_string".to_string(),
+            "to_int".to_string(),
+            "parse_int".to_string(),
+            "ord".to_string(),
+            // Math functions (ALL SUPPORTED)
+            "floor".to_string(),
+            "ceil".to_string(),
+            "round".to_string(),
+            "sqrt".to_string(),
+            "sin".to_string(),
+            "cos".to_string(),
+            "tan".to_string(),
+            "log".to_string(),
+            "exp".to_string(),
+            "random".to_string(),
+            // Object operations
+            "has_key".to_string(),
+            // JSON operations
+            "json_parse".to_string(),
+            "json_stringify".to_string(),
+            "read_json".to_string(),
+            "write_json".to_string(),
+            // HTTP
+            "http_request".to_string(),
+            // Runtime introspection
+            "snapshot".to_string(),
+            "export_trace".to_string(),
+            "write_snapshot".to_string(),
+            // Process management
+            "pipe_open".to_string(),
+            "pipe_write".to_string(),
+            "pipe_close".to_string(),
+            // System operations
+            "sleep".to_string(),
+            "capture_screen".to_string(),
+            // Metaprogramming
+            "native_tokenize".to_string(),
+        ]
+    }
 }
 
 #[cfg(test)]

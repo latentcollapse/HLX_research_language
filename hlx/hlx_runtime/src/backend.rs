@@ -198,9 +198,35 @@ pub trait Backend: Send + Sync {
     ) -> Result<()>;
     
     // === Synchronization ===
-    
+
     /// Synchronize all pending operations
     fn sync(&mut self) -> Result<()>;
+}
+
+/// Backend capability introspection
+///
+/// Allows LSP and tooling to detect which contracts and builtins
+/// are supported by each backend (Interpreter, LLVM, Vulkan, etc.)
+pub trait BackendCapability {
+    /// Returns contract IDs this backend can execute
+    ///
+    /// Use "*" wildcard to indicate all contracts supported
+    fn supported_contracts(&self) -> Vec<String>;
+
+    /// Returns builtin function names this backend supports
+    ///
+    /// Examples: "print", "sin", "to_string", "read_file"
+    fn supported_builtins(&self) -> Vec<String>;
+
+    /// Human-readable backend name for diagnostics
+    fn backend_name(&self) -> &'static str;
+
+    /// Optional: Returns contracts NOT yet implemented
+    ///
+    /// Useful for tracking what's missing in a backend
+    fn unsupported_contracts(&self) -> Vec<String> {
+        Vec::new() // Default: none specified
+    }
 }
 
 /// Create a backend based on configuration

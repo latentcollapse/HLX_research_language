@@ -1,0 +1,13 @@
+fn main() {
+    // This should trigger backend parity warning
+    let x = sin(1.57);
+    print(x);
+
+    // This should also warn
+    let y = cos(3.14);
+    print(y);
+
+    // This should be fine (supported in both)
+    let z = to_string(42);
+    print(z);
+}

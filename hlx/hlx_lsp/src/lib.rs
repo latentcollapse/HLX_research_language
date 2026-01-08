@@ -23,10 +23,22 @@ mod performance_lens;
 mod code_lens;
 mod type_lens;
 mod rust_diagnostics;
+mod builtins;
+mod backend_compat;
+mod control_flow;
+mod dataflow;
+mod cfg_builder;
+mod type_system;
+mod type_inference;
+mod quick_fixes;
 
 use contracts::{ContractCache, ContractCatalogue};
 use ai_diagnostics::AIDiagnosticBuilder;
 use patterns::PatternLibrary;
+use cfg_builder::CfgBuilder;
+use dataflow::{DataflowAnalyzer, UseCertainty};
+use type_inference::TypeInference;
+use quick_fixes::{QuickFixGenerator, QuickFixContext};
 use confidence::ConfidenceAnalyzer;
 use contract_suggestions::ContractSuggestionEngine;
 use auto_correct::AutoCorrector;
@@ -41,6 +53,8 @@ use performance_lens::PerformanceLens;
 use code_lens::CodeLensProvider;
 use type_lens::TypeLens;
 use rust_diagnostics::RustDiagnostics;
+use builtins::BuiltinRegistry;
+use backend_compat::BackendCompatChecker;
 
 pub struct Backend {
     client: Client,
@@ -60,6 +74,9 @@ pub struct Backend {
     code_lens_provider: Arc<CodeLensProvider>,
     type_lens: Arc<TypeLens>,
     rust_diagnostics: Arc<RustDiagnostics>,
+    builtin_registry: Arc<BuiltinRegistry>,
+    backend_compat: Arc<BackendCompatChecker>,
+    quick_fix_generator: Arc<QuickFixGenerator>,
 }
 
 #[tower_lsp::async_trait]
@@ -267,6 +284,42 @@ impl LanguageServer for Backend {
             false
         };
 
+        // Check for natural language query in comment
+        let comment_query = if let Some(doc_ref) = self.document_map.get(uri.as_str()) {
+            self.extract_comment_query(&doc_ref, position)
+        } else {
+            None
+        };
+
+        // Natural language search: "// split string" → suggests @305
+        if let (Some(query), Some(catalogue), Some(engine)) =
+            (comment_query.as_ref(), self.contracts.as_ref(), self.suggestion_engine.as_ref()) {
+            let suggestions = engine.suggest(query, catalogue, 5);
+            for suggestion in suggestions {
+                let contract_id = suggestion.contract_id.trim_start_matches('@');
+                if let Some(spec) = catalogue.get_contract(contract_id) {
+                    let snippet = catalogue.generate_snippet(contract_id)
+                        .unwrap_or_else(|| format!("@{} {{ }}", contract_id));
+
+                    items.push(CompletionItem {
+                        label: format!("@{} - {}", contract_id, spec.name),
+                        kind: Some(CompletionItemKind::FUNCTION),
+                        detail: Some(format!("Score: {:.0}% - {}", suggestion.score * 100.0, spec.tier)),
+                        documentation: Some(Documentation::MarkupContent(MarkupContent {
+                            kind: MarkupKind::Markdown,
+                            value: format!("{}\n\n**Usage:**\n```hlx\n{}\n```",
+                                spec.description, spec.usage),
+                        })),
+                        insert_text: Some(snippet.clone()),
+                        insert_text_format: Some(InsertTextFormat::SNIPPET),
+                        sort_text: Some(format!("{:03}", (100.0 - suggestion.score * 100.0) as u32)),
+                        filter_text: Some(query.clone()),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+
         if is_contract_context {
             // Show contract completions with smart snippets and context filtering
             if let Some(catalogue) = &self.contracts {
@@ -312,6 +365,20 @@ impl LanguageServer for Backend {
                 }
             }
         }
+
+        // Code Snippets
+        items.push(CompletionItem {
+            label: "game_loop".to_string(),
+            kind: Some(CompletionItemKind::SNIPPET),
+            detail: Some("Game loop pattern with safe exit".to_string()),
+            documentation: Some(Documentation::MarkupContent(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: "Standard game loop pattern with running flag and safe iteration limit".to_string(),
+            })),
+            insert_text: Some("let running = true;\nloop(running, DEFAULT_MAX_ITER) {\n    // Update game state\n    $1\n\n    // Render\n    $2\n\n    // Check exit condition\n    if ($3) {\n        running = false;\n    }\n}".to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            ..Default::default()
+        });
 
         // Basic Static Completion (keywords, builtins)
         let keywords = vec![
@@ -417,6 +484,31 @@ impl LanguageServer for Backend {
         // Get the text in the range (usually a line with a comment)
         let doc_ref = self.document_map.get(uri.as_str());
         if let Some(doc) = doc_ref {
+            // 0. Quick fixes for diagnostics
+            let context = &params.context;
+            for diagnostic in &context.diagnostics {
+                // Check if diagnostic overlaps with requested range
+                if self.ranges_overlap(&diagnostic.range, &range) {
+                    let ctx = QuickFixContext {
+                        uri: uri.clone(),
+                        diagnostic: diagnostic.clone(),
+                        source_text: doc.to_string(),
+                    };
+
+                    let fixes = self.quick_fix_generator.generate_fixes(&ctx);
+                    for fix in fixes {
+                        all_actions.push(CodeActionOrCommand::CodeAction(fix));
+                    }
+                }
+            }
+
+            // Generate "Fix All" action if there are multiple errors
+            if context.diagnostics.len() > 1 {
+                if let Some(fix_all) = self.quick_fix_generator.generate_fix_all(&uri, &context.diagnostics, &doc) {
+                    all_actions.push(CodeActionOrCommand::CodeAction(fix_all));
+                }
+            }
+
             // 1. Check for auto-corrections
             let corrections = self.auto_corrector.analyze_document(&doc);
             for correction in corrections {
@@ -673,6 +765,18 @@ impl Backend {
         let rust_diagnostics = Arc::new(RustDiagnostics::new());
         eprintln!("✓ Rust diagnostics (Stage 4) ready");
 
+        // Create builtin registry
+        let builtin_registry = Arc::new(BuiltinRegistry::new());
+        eprintln!("✓ Builtin registry ready ({} functions)", builtin_registry.all().count());
+
+        // Create backend compatibility checker
+        let backend_compat = Arc::new(BackendCompatChecker::new());
+        eprintln!("✓ Backend compatibility checker ready");
+
+        // Create quick fix generator
+        let quick_fix_generator = Arc::new(QuickFixGenerator::new());
+        eprintln!("✓ Quick fix generator ready");
+
         Self {
             client,
             document_map: DashMap::new(),
@@ -691,6 +795,9 @@ impl Backend {
             code_lens_provider,
             type_lens,
             rust_diagnostics,
+            builtin_registry,
+            backend_compat,
+            quick_fix_generator,
         }
     }
 
@@ -769,6 +876,28 @@ impl Backend {
         // Catch compilation errors before rustc sees them
         let rust_diags = self.rust_diagnostics.analyze(&text);
         diagnostics.extend(rust_diags);
+
+        // Add builtin function validation
+        // Catch unknown builtins and argument count mismatches
+        let builtin_diags = self.validate_builtins(&text);
+        diagnostics.extend(builtin_diags);
+
+        // Add backend compatibility warnings
+        // Catch features that work in interpreter but fail in native compilation
+        // TODO: Detect target backend from file metadata or config
+        // For now, default to checking LLVM compatibility
+        let backend_diags = self.backend_compat.check_document(&text, "llvm");
+        diagnostics.extend(backend_diags);
+
+        // Add dataflow analysis - detect uninitialized variable uses
+        // This catches "Reg type missing" errors before native compilation
+        let dataflow_diags = self.check_uninitialized_vars(&text);
+        diagnostics.extend(dataflow_diags);
+
+        // Add type checking - detect type mismatches
+        // This catches Int vs Float errors, wrong argument types, etc.
+        let type_diags = self.check_types(&text);
+        diagnostics.extend(type_diags);
 
         self.client.publish_diagnostics(uri, diagnostics, None).await;
     }
@@ -1093,6 +1222,316 @@ impl Backend {
             // Multi-line overlap check
             !(a.end.line < b.start.line || b.end.line < a.start.line)
         }
+    }
+
+    /// Validate builtin function calls
+    /// Catches unknown builtins and argument count mismatches before runtime
+    fn validate_builtins(&self, text: &str) -> Vec<Diagnostic> {
+        let mut diagnostics = Vec::new();
+
+        // Regex to match function calls: identifier(args)
+        // This is a simple heuristic - doesn't handle all edge cases
+        use regex::Regex;
+        let func_call_pattern = Regex::new(r"(\w+)\s*\(").unwrap();
+
+        for (line_idx, line) in text.lines().enumerate() {
+            for cap in func_call_pattern.captures_iter(line) {
+                let func_name = cap.get(1).unwrap().as_str();
+                let match_start = cap.get(1).unwrap().start();
+
+                // Skip if this looks like a contract invocation (@123) or keyword
+                if line[..cap.get(0).unwrap().start()].trim_end().ends_with('@') {
+                    continue;
+                }
+
+                // Skip common keywords that look like functions
+                if ["fn", "loop", "if", "while", "for"].contains(&func_name) {
+                    continue;
+                }
+
+                // Check if it's a known builtin
+                if !self.builtin_registry.exists(func_name) {
+                    // Not a builtin - could be user-defined function
+                    // Only warn if it looks like a builtin name (lowercase, common patterns)
+                    if func_name.chars().all(|c| c.is_lowercase() || c == '_') {
+                        // Common builtin-like patterns
+                        if ["print", "write", "read", "to_", "parse", "export", "get_"]
+                            .iter()
+                            .any(|prefix| func_name.starts_with(prefix))
+                        {
+                            diagnostics.push(Diagnostic {
+                                range: Range {
+                                    start: Position {
+                                        line: line_idx as u32,
+                                        character: match_start as u32,
+                                    },
+                                    end: Position {
+                                        line: line_idx as u32,
+                                        character: (match_start + func_name.len()) as u32,
+                                    },
+                                },
+                                severity: Some(DiagnosticSeverity::ERROR),
+                                code: Some(NumberOrString::String("unknown-builtin".to_string())),
+                                source: Some("hlx-builtin".to_string()),
+                                message: format!(
+                                    "Unknown builtin function: {}\nDid you mean one of: {}?",
+                                    func_name,
+                                    self.suggest_similar_builtin(func_name)
+                                ),
+                                related_information: None,
+                                tags: None,
+                                code_description: None,
+                                data: None,
+                            });
+                        }
+                    }
+                } else {
+                    // Known builtin - validate argument count
+                    // Count arguments (simple heuristic: commas + 1, or 0 if empty)
+                    if let Some(close_paren) = line[cap.get(0).unwrap().end()..].find(')') {
+                        let args_str = &line[cap.get(0).unwrap().end()..cap.get(0).unwrap().end() + close_paren];
+                        let arg_count = if args_str.trim().is_empty() {
+                            0
+                        } else {
+                            args_str.matches(',').count() + 1
+                        };
+
+                        if let Err(msg) = self.builtin_registry.validate_args(func_name, arg_count) {
+                            diagnostics.push(Diagnostic {
+                                range: Range {
+                                    start: Position {
+                                        line: line_idx as u32,
+                                        character: match_start as u32,
+                                    },
+                                    end: Position {
+                                        line: line_idx as u32,
+                                        character: (match_start + func_name.len()) as u32,
+                                    },
+                                },
+                                severity: Some(DiagnosticSeverity::ERROR),
+                                code: Some(NumberOrString::String("arg-count-mismatch".to_string())),
+                                source: Some("hlx-builtin".to_string()),
+                                message: msg,
+                                related_information: None,
+                                tags: None,
+                                code_description: None,
+                                data: None,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        diagnostics
+    }
+
+    /// Check for uninitialized variable uses via dataflow analysis
+    /// This catches "Reg type missing" errors before native compilation
+    fn check_uninitialized_vars(&self, text: &str) -> Vec<Diagnostic> {
+        let mut diagnostics = Vec::new();
+
+        // Build CFGs for all functions
+        let cfg_builder = CfgBuilder::new();
+        let cfgs = cfg_builder.build_all(text);
+
+        // Analyze each function
+        for (func_name, cfg) in cfgs {
+            let mut analyzer = DataflowAnalyzer::new();
+            analyzer.analyze(&cfg);
+
+            // Check for uninitialized uses
+            let problems = analyzer.check_all(&cfg);
+
+            for problem in problems {
+                let (severity, message) = match problem.certainty {
+                    UseCertainty::Definitely => (
+                        DiagnosticSeverity::ERROR,
+                        format!(
+                            "Variable '{}' is used before being initialized.\n\n\
+                            In function '{}': This variable is read before any value is assigned.\n\
+                            This will cause \"Reg type missing\" errors in native (LLVM) compilation.\n\n\
+                            Fix: Initialize '{}' before use, or check your control flow.",
+                            problem.var_name, func_name, problem.var_name
+                        ),
+                    ),
+                    UseCertainty::Maybe => (
+                        DiagnosticSeverity::WARNING,
+                        format!(
+                            "Variable '{}' may be uninitialized on some code paths.\n\n\
+                            In function '{}': This variable is read, but there exists at least one \
+                            execution path where it hasn't been assigned a value.\n\
+                            This could cause \"Reg type missing\" errors in native (LLVM) compilation.\n\n\
+                            Fix: Ensure '{}' is initialized on all paths before use.",
+                            problem.var_name, func_name, problem.var_name
+                        ),
+                    ),
+                };
+
+                diagnostics.push(Diagnostic {
+                    range: Range {
+                        start: Position {
+                            line: problem.line as u32,
+                            character: 0,
+                        },
+                        end: Position {
+                            line: problem.line as u32,
+                            character: 100, // Highlight whole line
+                        },
+                    },
+                    severity: Some(severity),
+                    code: Some(NumberOrString::String("uninitialized-variable".to_string())),
+                    source: Some("hlx-dataflow".to_string()),
+                    message,
+                    related_information: None,
+                    tags: None,
+                    code_description: None,
+                    data: None,
+                });
+            }
+        }
+
+        diagnostics
+    }
+
+    /// Check for type errors via type inference
+    /// This catches Int vs Float mismatches, wrong argument types, etc.
+    fn check_types(&self, text: &str) -> Vec<Diagnostic> {
+        let mut diagnostics = Vec::new();
+
+        // Run type inference on the source
+        let type_checker = TypeInference::new();
+        let errors = type_checker.check_function(text);
+
+        for error in errors {
+            let message = match &error.error {
+                type_system::TypeError::IncompatibleTypes { op, left, right } => {
+                    format!(
+                        "Type mismatch in {} operation.\n\n\
+                        Cannot apply operator '{}' to types {} and {}.\n\n\
+                        Hint: Convert one operand to match the other type.\n\
+                        Example: Use 'to_float(x)' to convert Int to Float.",
+                        op, op, left, right
+                    )
+                }
+                type_system::TypeError::WrongArgCount { expected, got } => {
+                    format!(
+                        "Wrong number of arguments.\n\n\
+                        Expected {} arguments, but got {}.",
+                        expected, got
+                    )
+                }
+                type_system::TypeError::WrongArgType { param_index, expected, got } => {
+                    format!(
+                        "Type mismatch in argument {}.\n\n\
+                        Expected type {}, but got {}.\n\n\
+                        Common fixes:\n\
+                        - Use 'to_float(x)' to convert Int to Float\n\
+                        - Use 'to_int(x)' to convert Float to Int\n\
+                        - Use 'to_string(x)' to convert to String",
+                        param_index + 1, expected, got
+                    )
+                }
+                type_system::TypeError::UndefinedVariable { name } => {
+                    format!(
+                        "Undefined variable '{}'.\n\n\
+                        This variable is not declared in the current scope.",
+                        name
+                    )
+                }
+                type_system::TypeError::UndefinedFunction { name } => {
+                    format!(
+                        "Undefined function '{}'.\n\n\
+                        This function is not a builtin or user-defined function.\n\
+                        Check for typos or missing function definitions.",
+                        name
+                    )
+                }
+                type_system::TypeError::InvalidUnaryOp { op, operand } => {
+                    format!(
+                        "Invalid unary operation.\n\n\
+                        Cannot apply operator '{}' to type {}.",
+                        op, operand
+                    )
+                }
+            };
+
+            diagnostics.push(Diagnostic {
+                range: Range {
+                    start: Position {
+                        line: error.line as u32,
+                        character: 0,
+                    },
+                    end: Position {
+                        line: error.line as u32,
+                        character: 100,
+                    },
+                },
+                severity: Some(DiagnosticSeverity::ERROR),
+                code: Some(NumberOrString::String("type-error".to_string())),
+                source: Some("hlx-typecheck".to_string()),
+                message,
+                related_information: None,
+                tags: None,
+                code_description: None,
+                data: None,
+            });
+        }
+
+        diagnostics
+    }
+
+    /// Suggest similar builtin functions using Levenshtein-like heuristic
+    fn suggest_similar_builtin(&self, name: &str) -> String {
+        let mut candidates: Vec<_> = self.builtin_registry
+            .all()
+            .filter(|sig| {
+                // Simple similarity: starts with same letter or contains substring
+                sig.name.starts_with(&name[0..1]) || sig.name.contains(name) || name.contains(sig.name)
+            })
+            .map(|sig| sig.name)
+            .take(3)
+            .collect();
+
+        if candidates.is_empty() {
+            candidates = vec!["print", "to_string", "read_file"];
+        }
+
+        candidates.join(", ")
+    }
+
+    /// Extract natural language query from comment
+    /// Detects patterns like: "// split string" or "// need: matrix multiply"
+    fn extract_comment_query(&self, text: &str, position: Position) -> Option<String> {
+        let lines: Vec<&str> = text.lines().collect();
+        if position.line as usize >= lines.len() {
+            return None;
+        }
+
+        let line = lines[position.line as usize];
+
+        // Check if we're in a comment
+        if let Some(comment_start) = line.find("//") {
+            let comment_text = &line[comment_start + 2..].trim();
+
+            // Look for natural language patterns
+            // Examples: "// split string", "// need: gpu add", "// matrix multiply"
+            if comment_text.len() >= 3 {
+                // Remove common prefixes
+                let query = comment_text
+                    .trim_start_matches("need:")
+                    .trim_start_matches("todo:")
+                    .trim_start_matches("fixme:")
+                    .trim();
+
+                // Only return if it looks like a query (has spaces or specific keywords)
+                if query.contains(' ') || query.len() > 5 {
+                    return Some(query.to_string());
+                }
+            }
+        }
+
+        None
     }
 }
 
