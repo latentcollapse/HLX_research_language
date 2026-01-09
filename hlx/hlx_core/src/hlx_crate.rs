@@ -12,7 +12,8 @@
 //! - Same instructions always produce same hash (determinism)
 
 use serde::{Deserialize, Serialize};
-use crate::instruction::Instruction;
+use std::collections::HashMap;
+use crate::instruction::{Instruction, DType};
 use crate::error::{HlxError, Result};
 use crate::CRATE_VERSION;
 
@@ -46,6 +47,10 @@ pub struct CrateMetadata {
     
     /// Register count (for VM allocation)
     pub register_count: Option<u32>,
+
+    /// Function signatures: name -> [param_types]
+    #[serde(default)]
+    pub function_signatures: HashMap<String, Vec<DType>>,
     
     /// Debug symbols (instruction index -> source location)
     #[serde(default)]

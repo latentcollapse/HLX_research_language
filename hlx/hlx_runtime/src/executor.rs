@@ -506,10 +506,23 @@ impl ExecutionContext {
                 }
             }
             
-            Instruction::ArrayCreate { out, elements } => {
+            Instruction::ArrayCreate { out, elements, element_type: _ } => {
+                // Runtime is dynamically typed, so we ignore element_type hint
                 let mut vals = Vector::new();
                 for &reg in elements {
                     vals.push_back(self.get_reg(reg)?.clone());
+                }
+                self.set_reg(*out, Value::Array(vals));
+            }
+            
+            Instruction::ArrayAlloc { out, size, element_type: _ } => {
+                let size_val = match self.get_reg(*size)? {
+                    Value::Integer(i) => *i as usize,
+                    v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }),
+                };
+                let mut vals = Vector::new();
+                for _ in 0..size_val {
+                    vals.push_back(Value::Null);
                 }
                 self.set_reg(*out, Value::Array(vals));
             }
@@ -967,6 +980,21 @@ impl ExecutionContext {
                     Value::Boolean(b) => Ok(Value::String(b.to_string())),
                     Value::Null => Ok(Value::String("null".to_string())),
                     _ => Ok(Value::String(format!("[{}]", v.type_name()))),
+                }
+            }
+            "to_float" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail { message: "to_float() takes exactly 1 argument".to_string() });
+                }
+                let v = self.get_reg(args[0])?;
+                match v {
+                    Value::Integer(i) => Ok(Value::Float(*i as f64)),
+                    Value::Float(f) => Ok(Value::Float(*f)),
+                    Value::String(s) => match s.parse::<f64>() {
+                        Ok(f) => Ok(Value::Float(f)),
+                        Err(_) => Err(HlxError::ValidationFail { message: format!("to_float() cannot parse '{}' as float", s) }),
+                    },
+                    _ => Err(HlxError::TypeError { expected: "numeric or string".to_string(), got: v.type_name().to_string() }),
                 }
             }
             "floor" => {

@@ -12,8 +12,22 @@ use std::collections::HashMap;
 /// Lower an AST Program to a Crate
 pub fn lower_to_crate(program: &Program) -> Result<HlxCrate> {
     let mut ctx = LoweringContext::new();
+    let mut signatures = HashMap::new();
     
-    // Lower each block (function)
+    // First pass: collect signatures
+    for block in &program.blocks {
+        let mut param_dtypes = Vec::new();
+        for (_, typ) in &block.params {
+            if let Some(t) = typ {
+                param_dtypes.push(LoweringContext::type_to_dtype(t).unwrap_or(hlx_core::instruction::DType::I64));
+            } else {
+                param_dtypes.push(hlx_core::instruction::DType::I64);
+            }
+        }
+        signatures.insert(block.name.clone(), param_dtypes);
+    }
+
+    // Second pass: lower functions
     for block in &program.blocks {
         let func_start = ctx.instructions.len() as u32;
         let params = ctx.lower_block(block)?;
@@ -25,14 +39,27 @@ pub fn lower_to_crate(program: &Program) -> Result<HlxCrate> {
         });
     }
     
+    // Convert source map to debug symbols
+    let debug_symbols = ctx.source_map.iter().enumerate()
+        .filter_map(|(idx, span_opt)| {
+            span_opt.map(|span| hlx_core::hlx_crate::DebugSymbol {
+                inst_idx: idx,
+                line: span.line,
+                col: span.col,
+            })
+        })
+        .collect();
+
     // Build crate with metadata
     let metadata = CrateMetadata {
         source_file: Some(format!("{}.hlxl", program.name)),
         compiler_version: Some("0.1.0".to_string()),
         register_count: Some(ctx.next_reg),
+        function_signatures: signatures,
+        debug_symbols,
         ..Default::default()
     };
-    
+
     Ok(HlxCrate::with_metadata(ctx.instructions, metadata))
 }
 
@@ -40,6 +67,12 @@ struct LoweringContext {
     instructions: Vec<Instruction>,
     next_reg: Register,
     scopes: Vec<HashMap<String, Register>>,
+    /// Track type annotations for variables
+    type_annotations: HashMap<String, Type>,
+    /// Expected type for the current expression being lowered (for type propagation)
+    expected_type: Option<Type>,
+    /// Source location map: parallel vector to instructions
+    source_map: Vec<Option<Span>>,
 }
 
 impl LoweringContext {
@@ -48,6 +81,9 @@ impl LoweringContext {
             instructions: Vec::new(),
             next_reg: 0,
             scopes: vec![HashMap::new()],
+            type_annotations: HashMap::new(),
+            expected_type: None,
+            source_map: Vec::new(),
         }
     }
     
@@ -73,12 +109,35 @@ impl LoweringContext {
         None
     }
     
-    fn emit(&mut self, inst: Instruction) { self.instructions.push(inst); }
-    
+    fn emit(&mut self, inst: Instruction) {
+        self.instructions.push(inst);
+        self.source_map.push(None);
+    }
+
+    fn emit_with_span(&mut self, inst: Instruction, span: Span) {
+        self.instructions.push(inst);
+        self.source_map.push(Some(span));
+    }
+
+    /// Convert AST Type to IR DType for array elements
+    fn type_to_dtype(typ: &Type) -> Option<hlx_core::instruction::DType> {
+        use hlx_core::instruction::DType;
+        match typ {
+            Type::Int => Some(DType::I64),
+            Type::Float => Some(DType::F64),
+            Type::Bool => Some(DType::Bool),
+            Type::Array(inner) => {
+                // Recursively encode nested arrays!
+                Some(DType::Array(Box::new(Self::type_to_dtype(inner)?)))
+            }
+            _ => None, // String and other types not supported as array elements yet
+        }
+    }
+
     fn lower_block(&mut self, block: &Block) -> Result<Vec<Register>> {
         self.push_scope();
         let mut params = Vec::new();
-        for param in &block.params {
+        for (param, _typ) in &block.params {
             let reg = self.alloc_reg();
             self.bind(param, reg);
             params.push(reg);
@@ -86,7 +145,7 @@ impl LoweringContext {
         
         for item in &block.items {
             match &item.node {
-                Item::Statement(stmt) => self.lower_stmt(stmt)?,
+                Item::Statement(stmt) => self.lower_stmt(stmt, item.span)?,
                 Item::Node(_) => return Err(HlxError::ValidationFail { message: "Nodes not supported in V2 blocks".to_string() }),
             }
         }
@@ -100,18 +159,31 @@ impl LoweringContext {
         Ok(params)
     }
     
-    fn lower_stmt(&mut self, stmt: &Statement) -> Result<()> {
+    fn lower_stmt(&mut self, stmt: &Statement, span: Span) -> Result<()> {
         match stmt {
-            Statement::Let { name, value } => {
+            Statement::Let { name, type_annotation, value } => {
+                // Set expected type before lowering the value expression
+                if let Some(typ) = type_annotation {
+                    self.expected_type = Some(typ.clone());
+                }
+
                 let val_reg = self.lower_expr(&value.node)?;
+
+                // Clear expected type after lowering
+                self.expected_type = None;
+
                 self.bind(name, val_reg);
+                // Store type annotation if present
+                if let Some(typ) = type_annotation {
+                    self.type_annotations.insert(name.clone(), typ.clone());
+                }
             }
             Statement::Assign { lhs, value } => {
                 let val_reg = self.lower_expr(&value.node)?;
                 match &lhs.node {
                     Expr::Ident(name) => {
                         if let Some(reg) = self.lookup(name) {
-                            self.emit(Instruction::Move { out: reg, src: val_reg });
+                            self.emit_with_span(Instruction::Move { out: reg, src: val_reg }, span);
                         } else {
                             return Err(HlxError::ValidationFail { message: format!("Undefined: {}", name) });
                         }
@@ -119,39 +191,39 @@ impl LoweringContext {
                     Expr::Index { object, index } => {
                         let obj_reg = self.lower_expr(&object.node)?;
                         let idx_reg = self.lower_expr(&index.node)?;
-                        self.emit(Instruction::Store { container: obj_reg, index: idx_reg, value: val_reg });
+                        self.emit_with_span(Instruction::Store { container: obj_reg, index: idx_reg, value: val_reg }, span);
                     }
                     Expr::Field { object, field } => {
                         let obj_reg = self.lower_expr(&object.node)?;
                         let key_reg = self.alloc_reg();
                         self.emit(Instruction::Constant { out: key_reg, val: Value::String(field.clone()) });
-                        self.emit(Instruction::Store { container: obj_reg, index: key_reg, value: val_reg });
+                        self.emit_with_span(Instruction::Store { container: obj_reg, index: key_reg, value: val_reg }, span);
                     }
                     _ => return Err(HlxError::ValidationFail { message: "Invalid assignment target".to_string() }),
                 }
             }
             Statement::Return { value } => {
                 let reg = self.lower_expr(&value.node)?;
-                self.emit(Instruction::Return { val: reg });
+                self.emit_with_span(Instruction::Return { val: reg }, span);
             }
             Statement::If { condition, then_branch, else_branch } => {
                 let cond_reg = self.lower_expr(&condition.node)?;
                 let if_idx = self.instructions.len();
-                self.emit(Instruction::If { cond: cond_reg, then_block: 0, else_block: 0 });
-                
+                self.emit_with_span(Instruction::If { cond: cond_reg, then_block: 0, else_block: 0 }, span);
+
                 let then_start = self.instructions.len() as u32;
-                for s in then_branch { self.lower_stmt(&s.node)?; }
-                
+                for s in then_branch { self.lower_stmt(&s.node, s.span)?; }
+
                 let jump_idx = self.instructions.len();
                 self.emit(Instruction::Jump { target: 0 });
-                
+
                 let else_start = self.instructions.len() as u32;
                 if let Some(eb) = else_branch {
-                    for s in eb { self.lower_stmt(&s.node)?; }
+                    for s in eb { self.lower_stmt(&s.node, s.span)?; }
                 }
-                
+
                 let end_idx = self.instructions.len() as u32;
-                
+
                 if let Instruction::If { ref mut then_block, ref mut else_block, .. } = self.instructions[if_idx] {
                     *then_block = then_start;
                     *else_block = else_start;
@@ -163,25 +235,24 @@ impl LoweringContext {
             Statement::While { condition, body, max_iter } => {
                 let loop_pc = self.instructions.len() as u32;
                 let cond_reg = self.lower_expr(&condition.node)?;
-                
+
                 // Emit Loop instruction with placeholders
                 let loop_idx = self.instructions.len();
-                println!("DEBUG: Emitting Loop at {}", loop_idx);
-                self.emit(Instruction::Loop { 
-                    cond: cond_reg, 
-                    body: 0, 
-                    exit: 0, 
-                    max_iter: *max_iter 
-                });
-                
+                self.emit_with_span(Instruction::Loop {
+                    cond: cond_reg,
+                    body: 0,
+                    exit: 0,
+                    max_iter: *max_iter
+                }, span);
+
                 let body_start = self.instructions.len() as u32;
-                for s in body { self.lower_stmt(&s.node)?; }
-                
+                for s in body { self.lower_stmt(&s.node, s.span)?; }
+
                 // Jump back to Loop instruction
                 self.emit(Instruction::Jump { target: loop_pc });
-                
+
                 let loop_exit = self.instructions.len() as u32;
-                
+
                 // Fill in placeholders
                 if let Instruction::Loop { ref mut body, ref mut exit, .. } = self.instructions[loop_idx] {
                     *body = body_start;
@@ -189,8 +260,8 @@ impl LoweringContext {
                 }
             }
             Statement::Expr(e) => { self.lower_expr(&e.node)?; }
-            Statement::Break => { self.emit(Instruction::Break); }
-            Statement::Continue => { self.emit(Instruction::Continue); }
+            Statement::Break => { self.emit_with_span(Instruction::Break, span); }
+            Statement::Continue => { self.emit_with_span(Instruction::Continue, span); }
             _ => {}
         }
         Ok(())
@@ -326,7 +397,15 @@ impl LoweringContext {
                     regs.push(self.lower_expr(&e.node)?);
                 }
                 let out = self.alloc_reg();
-                self.emit(Instruction::ArrayCreate { out, elements: regs });
+
+                // Check if we have type information from the expected type
+                let element_type = if let Some(Type::Array(inner)) = &self.expected_type {
+                    Self::type_to_dtype(inner)
+                } else {
+                    None
+                };
+
+                self.emit(Instruction::ArrayCreate { out, elements: regs, element_type });
                 Ok(out)
             }
             Expr::Object(entries) => {
@@ -517,7 +596,15 @@ impl LoweringContext {
                         return Err(HlxError::ValidationFail { message: "alloc_array takes exactly 1 argument".to_string() });
                     }
                     let out = self.alloc_reg();
-                    self.emit(Instruction::ArrayAlloc { out, size: arg_regs[0] });
+
+                    // Check if we have type information from the expected type
+                    let element_type = if let Some(Type::Array(inner)) = &self.expected_type {
+                        Self::type_to_dtype(inner)
+                    } else {
+                        None
+                    };
+
+                    self.emit(Instruction::ArrayAlloc { out, size: arg_regs[0], element_type });
                     Ok(out)
                                 } else {
                                     let out = self.alloc_reg();

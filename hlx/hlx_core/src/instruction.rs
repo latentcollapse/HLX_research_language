@@ -17,8 +17,8 @@ pub type Register = u32;
 /// Shape of a tensor (dimensions)
 pub type TensorShape = Vec<usize>;
 
-/// Data type for tensor elements
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// Data type for tensor elements and array elements
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DType {
     /// 32-bit float (GPU default)
     F32,
@@ -30,6 +30,8 @@ pub enum DType {
     I64,
     /// Boolean
     Bool,
+    /// Array of elements with inner type (for nested arrays)
+    Array(Box<DType>),
 }
 
 impl Default for DType {
@@ -382,12 +384,16 @@ pub enum Instruction {
     ArrayCreate {
         out: Register,
         elements: Vec<Register>,
+        /// Element type (None means untyped/dynamic for backwards compat)
+        element_type: Option<DType>,
     },
 
     /// Allocate an empty array of dynamic size
     ArrayAlloc {
         out: Register,
         size: Register,
+        /// Element type (None means untyped/dynamic for backwards compat)
+        element_type: Option<DType>,
     },
 
     /// Create an object from keys and value registers

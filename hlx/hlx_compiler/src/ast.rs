@@ -52,8 +52,8 @@ pub struct Program {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Block {
     pub name: String,
-    pub params: Vec<String>,
-    pub return_type: Option<String>,
+    pub params: Vec<(String, Option<Type>)>,
+    pub return_type: Option<Type>,
     pub items: Vec<Spanned<Item>>,
 }
 
@@ -80,12 +80,60 @@ pub struct Node {
     pub outputs: Vec<String>,
 }
 
+/// Type annotations
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Type {
+    /// int
+    Int,
+    /// float
+    Float,
+    /// string
+    String,
+    /// bool
+    Bool,
+    /// Array of specific type
+    Array(Box<Type>),
+    /// Named type (for future use)
+    Named(String),
+}
+
+impl Type {
+    /// Parse a type string like "Array<Float>" into a Type
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "Int" | "int" => Some(Type::Int),
+            "Float" | "float" => Some(Type::Float),
+            "String" | "string" => Some(Type::String),
+            "Bool" | "bool" => Some(Type::Bool),
+            _ if s.starts_with("Array<") && s.ends_with('>') => {
+                let inner = &s[6..s.len()-1];
+                let inner_type = Self::parse(inner)?;
+                Some(Type::Array(Box::new(inner_type)))
+            }
+            _ => Some(Type::Named(s.to_string())),
+        }
+    }
+
+    /// Convert Type back to string representation
+    pub fn to_string(&self) -> String {
+        match self {
+            Type::Int => "Int".to_string(),
+            Type::Float => "Float".to_string(),
+            Type::String => "String".to_string(),
+            Type::Bool => "Bool".to_string(),
+            Type::Array(inner) => format!("Array<{}>", inner.to_string()),
+            Type::Named(name) => name.clone(),
+        }
+    }
+}
+
 /// Statements
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Statement {
-    /// let x = expr
+    /// let x = expr or let x: Type = expr
     Let {
         name: String,
+        type_annotation: Option<Type>,
         value: Spanned<Expr>,
     },
     

@@ -19,6 +19,48 @@ use hlx_core::{Result, HlxError};
 
 type ParseResult<'a, T> = IResult<&'a str, T, VerboseError<&'a str>>;
 
+/// Helper to compute span from input positions
+fn compute_span(original: &str, start_input: &str, end_input: &str) -> Span {
+    let start_offset = original.len() - start_input.len();
+    let end_offset = original.len() - end_input.len();
+
+    // Compute line and column for start position
+    let prefix = &original[..start_offset];
+    let mut line = 1u32;
+    let mut col = 1u32;
+
+    for ch in prefix.chars() {
+        if ch == '\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+    }
+
+    Span::new(start_offset, end_offset, line, col)
+}
+
+/// Combinator that wraps a parser and produces a Spanned result
+/// Requires the original input to compute absolute positions
+/// Skips leading whitespace before capturing the span to get accurate line numbers
+fn spanned<'a, O, F>(
+    original: &'a str,
+    mut parser: F,
+) -> impl FnMut(&'a str) -> ParseResult<'a, Spanned<O>>
+where
+    F: FnMut(&'a str) -> ParseResult<'a, O>,
+{
+    move |input: &'a str| {
+        // Skip leading whitespace to capture the actual token position
+        let (after_ws, _) = ws(input)?;
+        let start_input = after_ws;
+        let (remaining, output) = parser(input)?;
+        let span = compute_span(original, start_input, remaining);
+        Ok((remaining, Spanned::new(output, span)))
+    }
+}
+
 fn ws(input: &str) -> ParseResult<'_, ()> {
     let (input, _) = many0(alt((
         value((), multispace1),
@@ -36,11 +78,43 @@ fn ident(input: &str) -> ParseResult<'_, String> {
     let id = format!("{}{}", first, rest);
     let keywords = ["let", "return", "if", "else", "loop", "program", "block", "fn", "null", "true", "false", "and", "or", "not", "break", "continue"];
     if keywords.contains(&id.as_str()) {
-        return Err(nom::Err::Error(VerboseError { 
+        return Err(nom::Err::Error(VerboseError {
             errors: vec![(input, nom::error::VerboseErrorKind::Context("keyword"))]
         }));
     }
     Ok((input, id))
+}
+
+fn parse_type(input: &str) -> ParseResult<'_, Type> {
+    // Try to parse Array<T> first
+    if let Ok((input, _)) = tag::<_, _, VerboseError<&str>>("Array")(input) {
+        let (input, _) = preceded(ws, char('<'))(input)?;
+        let (input, inner) = preceded(ws, parse_type)(input)?;
+        let (input, _) = preceded(ws, char('>'))(input)?;
+        return Ok((input, Type::Array(Box::new(inner))));
+    }
+
+    // Otherwise parse simple type names
+    let (input, type_name) = alt((
+        tag("Int"),
+        tag("Float"),
+        tag("String"),
+        tag("Bool"),
+        tag("int"),
+        tag("float"),
+        tag("string"),
+        tag("bool"),
+    ))(input)?;
+
+    let typ = match type_name {
+        "Int" | "int" => Type::Int,
+        "Float" | "float" => Type::Float,
+        "String" | "string" => Type::String,
+        "Bool" | "bool" => Type::Bool,
+        _ => unreachable!(),
+    };
+
+    Ok((input, typ))
 }
 
 fn parse_string_literal(input: &str) -> ParseResult<'_, String> {
@@ -81,42 +155,51 @@ fn literal(input: &str) -> ParseResult<'_, Literal> {
     ))(input)
 }
 
-fn array_literal(input: &str) -> ParseResult<'_, Expr> {
-    map(delimited(
+fn array_literal<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
+    let (input, elems) = delimited(
         preceded(ws, char('[')),
-        separated_list0(preceded(ws, char(',')), expr),
+        separated_list0(preceded(ws, char(',')), |i| spanned(original, |i2| expr(original, i2))(i)),
         preceded(ws, char(']'))
-    ), |elems| Expr::Array(elems.into_iter().map(Spanned::dummy).collect()))(input)
+    )(input)?;
+
+    Ok((input, Expr::Array(elems)))
 }
 
-fn object_literal(input: &str) -> ParseResult<'_, Expr> {
-    map(delimited(
+fn object_literal<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
+    let (input, items) = delimited(
         preceded(ws, char('{')),
-        separated_list0(preceded(ws, char(',')), 
-            tuple((
-                preceded(ws, alt((
+        separated_list0(preceded(ws, char(',')),
+            |i| {
+                let (i, key) = preceded(ws, alt((
                     map(delimited(char('"'), take_while(|c| c != '"'), char('"')), |s: &str| s.to_string()),
                     map(delimited(char('\''), take_while(|c| c != '\''), char('\'')), |s: &str| s.to_string()),
                     ident
-                ))),
-                preceded(ws, char(':')),
-                expr
-            ))
+                )))(i)?;
+                let (i, _) = preceded(ws, char(':'))(i)?;
+                let (i, value) = spanned(original, |i2| expr(original, i2))(i)?;
+                Ok((i, (key, value)))
+            }
         ),
         preceded(ws, char('}'))
-    ), |items| Expr::Object(items.into_iter().map(|(k, _, v)| (k, Spanned::dummy(v))).collect()))(input)
+    )(input)?;
+
+    Ok((input, Expr::Object(items)))
 }
 
-fn call_expr(input: &str) -> ParseResult<'_, Expr> {
+fn call_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
+    let start_input = input;
     let (input, name) = preceded(ws, ident)(input)?;
+    let name_span = compute_span(original, start_input, input);
+
     let (input, args) = delimited(
         preceded(ws, char('(')),
-        separated_list0(preceded(ws, char(',')), expr),
+        separated_list0(preceded(ws, char(',')), |i| spanned(original, |i2| expr(original, i2))(i)),
         preceded(ws, char(')'))
     )(input)?;
+
     Ok((input, Expr::Call {
-        func: Box::new(Spanned::dummy(Expr::Ident(name))), 
-        args: args.into_iter().map(Spanned::dummy).collect() 
+        func: Box::new(Spanned::new(Expr::Ident(name), name_span)),
+        args
     }))
 }
 
@@ -125,20 +208,20 @@ enum Postfix {
     Field(String),
 }
 
-fn atom_expr(input: &str) -> ParseResult<'_, Expr> {
+fn atom_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
     let (input, atom) = alt((
         map(preceded(ws, literal), Expr::Literal),
-        array_literal,
-        object_literal,
-        call_expr,
+        |i| array_literal(original, i),
+        |i| object_literal(original, i),
+        |i| call_expr(original, i),
         map(preceded(ws, ident), Expr::Ident),
-        delimited(preceded(ws, char('(')), expr, preceded(ws, char(')'))),
+        delimited(preceded(ws, char('(')), |i| expr(original, i), preceded(ws, char(')'))),
     ))(input)?;
-    
+
     let (input, postfixes) = many0(alt((
         map(delimited(
             preceded(ws, char('[')),
-            expr,
+            |i| expr(original, i),
             preceded(ws, char(']'))
         ), Postfix::Index),
         map(preceded(
@@ -146,24 +229,45 @@ fn atom_expr(input: &str) -> ParseResult<'_, Expr> {
             ident
         ), Postfix::Field)
     )))(input)?;
-    
-    Ok((input, postfixes.into_iter().fold(atom, |acc, op| match op {
-        Postfix::Index(idx) => Expr::Index {
-            object: Box::new(Spanned::dummy(acc)),
-            index: Box::new(Spanned::dummy(idx))
-        },
-        Postfix::Field(field) => Expr::Field {
-            object: Box::new(Spanned::dummy(acc)),
-            field
+
+    // Build spans for accumulated expressions
+    // Note: Postfix operations are challenging to track precisely since they're folded
+    // after parsing. For now we use placeholder spans for the accumulated objects.
+    let (input, final_expr) = postfixes.into_iter().fold((input, atom), |(remaining, acc), op| {
+        let acc_span = Span::new(0, 0, 0, 0); // Placeholder span for accumulated expression
+        match op {
+            Postfix::Index(idx) => {
+                let idx_span = Span::new(0, 0, 0, 0); // Placeholder span for index expression
+                (remaining, Expr::Index {
+                    object: Box::new(Spanned::new(acc, acc_span)),
+                    index: Box::new(Spanned::new(idx, idx_span))
+                })
+            },
+            Postfix::Field(field) => {
+                (remaining, Expr::Field {
+                    object: Box::new(Spanned::new(acc, acc_span)),
+                    field
+                })
+            }
         }
-    })))
+    });
+
+    Ok((input, final_expr))
 }
 
-fn unary_expr(input: &str) -> ParseResult<'_, Expr> {
+fn unary_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
     alt((
-        map(preceded(preceded(ws, char('-')), atom_expr), |e| Expr::UnaryOp { op: UnaryOp::Neg, operand: Box::new(Spanned::dummy(e)) }),
-        map(preceded(preceded(ws, alt((tag("not"), tag("!")))), atom_expr), |e| Expr::UnaryOp { op: UnaryOp::Not, operand: Box::new(Spanned::dummy(e)) }),
-        atom_expr
+        |i| {
+            let (i, _) = preceded(ws, char('-'))(i)?;
+            let (i, operand) = spanned(original, |i2| atom_expr(original, i2))(i)?;
+            Ok((i, Expr::UnaryOp { op: UnaryOp::Neg, operand: Box::new(operand) }))
+        },
+        |i| {
+            let (i, _) = preceded(ws, alt((tag("not"), tag("!"))))(i)?;
+            let (i, operand) = spanned(original, |i2| atom_expr(original, i2))(i)?;
+            Ok((i, Expr::UnaryOp { op: UnaryOp::Not, operand: Box::new(operand) }))
+        },
+        |i| atom_expr(original, i)
     ))(input)
 }
 
@@ -185,181 +289,185 @@ fn bin_op(input: &str) -> ParseResult<'_, BinOp> {
     )))(input)
 }
 
-fn expr(input: &str) -> ParseResult<'_, Expr> {
-    let (input, lhs) = unary_expr(input)?;
+fn expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
+    let start_input = input;
+    let (input, lhs) = unary_expr(original, input)?;
+    let lhs_span = compute_span(original, start_input, input);
     let (input, op_opt) = opt(bin_op)(input)?;
-    
+
     if let Some(op) = op_opt {
-        let (input, rhs) = expr(input)?;
+        let start_rhs = input;
+        let (input, rhs) = expr(original, input)?;
+        let rhs_span = compute_span(original, start_rhs, input);
         // Enforce no operator precedence: if RHS is a BinOp, it MUST be parenthesized
-        // (Our recursive call to expr will handle nested BinOps, but we want to 
+        // (Our recursive call to expr will handle nested BinOps, but we want to
         // discourage this in the future or enforce it via the parser's structure)
-        Ok((input, Expr::BinOp { 
-            op, 
-            lhs: Box::new(Spanned::dummy(lhs)), 
-            rhs: Box::new(Spanned::dummy(rhs)) 
+        Ok((input, Expr::BinOp {
+            op,
+            lhs: Box::new(Spanned::new(lhs, lhs_span)),
+            rhs: Box::new(Spanned::new(rhs, rhs_span))
         }))
     } else {
         Ok((input, lhs))
     }
 }
 
-fn statement(input: &str) -> ParseResult<'_, Statement> {
+fn statement<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Statement> {
     alt((
-        // let name = value;
+        // let name = value; or let name: Type = value;
         context("let statement",
-            map(tuple((
-                preceded(ws, tag("let")),
-                cut(tuple((
-                    context("variable name", preceded(ws, ident)),
-                    context("'=' after variable name", preceded(ws, char('='))),
-                    context("expression", expr),
-                    context("';' after let statement", preceded(ws, char(';')))
-                )))
-            )), |(_, (n, _, v, _))| Statement::Let { name: n, value: Spanned::dummy(v) })
+            |i| {
+                let (i, _) = preceded(ws, tag("let"))(i)?;
+                let (i, n) = cut(context("variable name", preceded(ws, ident)))(i)?;
+                let (i, t) = opt(preceded(preceded(ws, char(':')), preceded(ws, parse_type)))(i)?;
+                let (i, _) = cut(context("'=' after variable name", preceded(ws, char('='))))(i)?;
+                let (i, v) = cut(context("expression", |i2| spanned(original, |i3| expr(original, i3))(i2)))(i)?;
+                let (i, _) = cut(context("';' after let statement", preceded(ws, char(';'))))(i)?;
+                Ok((i, Statement::Let { name: n, type_annotation: t, value: v }))
+            }
         ),
 
         // return value;
         context("return statement",
-            map(tuple((
-                preceded(ws, tag("return")),
-                cut(tuple((
-                    context("expression", expr),
-                    context("';' after return", preceded(ws, char(';')))
-                )))
-            )), |(_, (v, _))| Statement::Return { value: Spanned::dummy(v) })
+            |i| {
+                let (i, _) = preceded(ws, tag("return"))(i)?;
+                let (i, v) = cut(context("expression", |i2| spanned(original, |i3| expr(original, i3))(i2)))(i)?;
+                let (i, _) = cut(context("';' after return", preceded(ws, char(';'))))(i)?;
+                Ok((i, Statement::Return { value: v }))
+            }
         ),
 
         // if condition { ... } else { ... }
         context("if statement",
-            map(tuple((
-                preceded(ws, tag("if")),
-                cut(tuple((
-                    context("condition", alt((
-                        delimited(preceded(ws, char('(')), expr, preceded(ws, char(')'))),
-                        expr
-                    ))),
-                    context("'{' after if condition", preceded(ws, char('{'))),
-                    many0(map(preceded(ws, statement), Spanned::dummy)),
-                    context("'}' to close if block", preceded(ws, char('}'))),
-                    opt(tuple((
-                        preceded(ws, tag("else")),
-                        preceded(ws, char('{')),
-                        many0(map(preceded(ws, statement), Spanned::dummy)),
-                        preceded(ws, char('}'))
-                    )))
-                )))
-            )), |(_, (cond, _, then_body, _, els))| {
-                Statement::If { condition: Spanned::dummy(cond), then_branch: then_body, else_branch: els.map(|(_, _, v, _)| v) }
-            })
+            |i| {
+                let (i, _) = preceded(ws, tag("if"))(i)?;
+                let (i, cond) = cut(context("condition", |i2| {
+                    spanned(original, |i3| {
+                        alt((
+                            delimited(preceded(ws, char('(')), |i4| expr(original, i4), preceded(ws, char(')'))),
+                            |i4| expr(original, i4)
+                        ))(i3)
+                    })(i2)
+                }))(i)?;
+                let (i, _) = cut(context("'{' after if condition", preceded(ws, char('{'))))(i)?;
+                let (i, then_body) = many0(|i2| spanned(original, |i3| statement(original, i3))(i2))(i)?;
+                let (i, _) = cut(context("'}' to close if block", preceded(ws, char('}'))))(i)?;
+                let (i, els) = opt(|i2| {
+                    let (i2, _) = preceded(ws, tag("else"))(i2)?;
+                    let (i2, _) = preceded(ws, char('{'))(i2)?;
+                    let (i2, body) = many0(|i3| spanned(original, |i4| statement(original, i4))(i3))(i2)?;
+                    let (i2, _) = preceded(ws, char('}'))(i2)?;
+                    Ok((i2, body))
+                })(i)?;
+                Ok((i, Statement::If { condition: cond, then_branch: then_body, else_branch: els }))
+            }
         ),
 
         // loop(condition, max_iter) { ... }
         context("loop statement",
-            map(tuple((
-                preceded(ws, tag("loop")),
-                cut(tuple((
-                    context("'(' after loop", preceded(ws, char('('))),
-                    context("loop condition", expr),
-                    context("',' after condition", preceded(ws, char(','))),
-                    alt((
-                        map(preceded(ws, digit1), |s: &str| s.parse::<u32>().unwrap()),
-                        value(1000000, preceded(ws, tag("DEFAULT_MAX_ITER()")))
-                    )),
-                    context("')' after max iterations", preceded(ws, char(')'))),
-                    context("'{' after loop header", preceded(ws, char('{'))),
-                    many0(map(preceded(ws, statement), Spanned::dummy)),
-                    context("'}' to close loop", preceded(ws, char('}')))
-                )))
-            )), |(_, (_, cond, _, max_iter, _, _, body, _))| {
-                Statement::While { condition: Spanned::dummy(cond), body, max_iter }
-            })
+            |i| {
+                let (i, _) = preceded(ws, tag("loop"))(i)?;
+                let (i, _) = cut(context("'(' after loop", preceded(ws, char('('))))(i)?;
+                let (i, cond) = cut(context("loop condition", |i2| spanned(original, |i3| expr(original, i3))(i2)))(i)?;
+                let (i, _) = cut(context("',' after condition", preceded(ws, char(','))))(i)?;
+                let (i, max_iter) = alt((
+                    map(preceded(ws, digit1), |s: &str| s.parse::<u32>().unwrap()),
+                    value(1000000, preceded(ws, tag("DEFAULT_MAX_ITER()")))
+                ))(i)?;
+                let (i, _) = cut(context("')' after max iterations", preceded(ws, char(')'))))(i)?;
+                let (i, _) = cut(context("'{' after loop header", preceded(ws, char('{'))))(i)?;
+                let (i, body) = many0(|i2| spanned(original, |i3| statement(original, i3))(i2))(i)?;
+                let (i, _) = cut(context("'}' to close loop", preceded(ws, char('}'))))(i)?;
+                Ok((i, Statement::While { condition: cond, body, max_iter }))
+            }
         ),
 
         // break;
         context("break statement",
-            map(tuple((
-                preceded(ws, tag("break")),
-                cut(context("';' after break", preceded(ws, char(';'))))
-            )), |(_, _)| Statement::Break)
+            |i| {
+                let (i, _) = preceded(ws, tag("break"))(i)?;
+                let (i, _) = cut(context("';' after break", preceded(ws, char(';'))))(i)?;
+                Ok((i, Statement::Break))
+            }
         ),
 
         // continue;
         context("continue statement",
-            map(tuple((
-                preceded(ws, tag("continue")),
-                cut(context("';' after continue", preceded(ws, char(';'))))
-            )), |(_, _)| Statement::Continue)
+            |i| {
+                let (i, _) = preceded(ws, tag("continue"))(i)?;
+                let (i, _) = cut(context("';' after continue", preceded(ws, char(';'))))(i)?;
+                Ok((i, Statement::Continue))
+            }
         ),
 
         // assignment: lhs = value;
         context("assignment",
-            map(tuple((
-                preceded(ws, atom_expr),
-                preceded(ws, char('=')),
-                cut(tuple((
-                    context("expression", expr),
-                    context("';' after assignment", preceded(ws, char(';')))
-                )))
-            )), |(lhs, _, (v, _))| Statement::Assign { lhs: Spanned::dummy(lhs), value: Spanned::dummy(v) })
+            |i| {
+                let (i, lhs) = preceded(ws, |i2| spanned(original, |i3| atom_expr(original, i3))(i2))(i)?;
+                let (i, _) = preceded(ws, char('='))(i)?;
+                let (i, v) = cut(context("expression", |i2| spanned(original, |i3| expr(original, i3))(i2)))(i)?;
+                let (i, _) = cut(context("';' after assignment", preceded(ws, char(';'))))(i)?;
+                Ok((i, Statement::Assign { lhs, value: v }))
+            }
         ),
 
         // expression statement
         context("expression statement",
-            map(preceded(ws, tuple((
-                expr,
-                cut(context("';' after expression", preceded(ws, char(';'))))
-            ))), |(e, _)| Statement::Expr(Spanned::dummy(e)))
+            |i| {
+                let (i, e) = preceded(ws, |i2| spanned(original, |i3| expr(original, i3))(i2))(i)?;
+                let (i, _) = cut(context("';' after expression", preceded(ws, char(';'))))(i)?;
+                Ok((i, Statement::Expr(e)))
+            }
         ),
     ))(input)
 }
 
-fn block(input: &str) -> ParseResult<'_, Block> {
+fn block<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Block> {
     alt((
         // fn name(params) -> return_type { body }
         context("function definition",
-            map(tuple((
-                preceded(ws, tag("fn")),
-                cut(tuple((
-                    context("function name", preceded(ws, ident)),
-                    context("'(' for parameters", preceded(ws, char('('))),
-                    separated_list0(preceded(ws, char(',')), preceded(ws, ident)),
-                    context("')' after parameters", preceded(ws, char(')'))),
-                    opt(preceded(preceded(ws, tag("->")), preceded(ws, ident))),
-                    context("'{' to start function body", preceded(ws, char('{'))),
-                    many0(map(preceded(ws, statement), Spanned::dummy)),
-                    context("'}' to close function", preceded(ws, char('}')))
-                )))
-            )), |(_, (name, _, params, _, return_type, _, body, _))| {
+            |i| {
+                let (i, _) = preceded(ws, tag("fn"))(i)?;
+                let (i, name) = cut(context("function name", preceded(ws, ident)))(i)?;
+                let (i, _) = cut(context("'(' for parameters", preceded(ws, char('('))))(i)?;
+                let (i, params) = separated_list0(preceded(ws, char(',')),
+                    tuple((
+                        preceded(ws, ident),
+                        opt(preceded(preceded(ws, char(':')), preceded(ws, parse_type)))
+                    ))
+                )(i)?;
+                let (i, _) = cut(context("')' after parameters", preceded(ws, char(')'))))(i)?;
+                let (i, return_type) = opt(preceded(preceded(ws, tag("->")), preceded(ws, parse_type)))(i)?;
+                let (i, _) = cut(context("'{' to start function body", preceded(ws, char('{'))))(i)?;
+                let (i, body) = many0(|i2| spanned(original, |i3| statement(original, i3))(i2))(i)?;
+                let (i, _) = cut(context("'}' to close function", preceded(ws, char('}'))))(i)?;
                 let items = body.into_iter().map(|s| Spanned::new(Item::Statement(s.node), s.span)).collect();
-                Block { name, params, return_type, items }
-            })
+                Ok((i, Block { name, params, return_type, items }))
+            }
         ),
         // block name() { body }
         context("block definition",
-            map(tuple((
-                preceded(ws, tag("block")),
-                cut(tuple((
-                    context("block name", preceded(ws, ident)),
-                    preceded(ws, char('(')),
-                    preceded(ws, char(')')),
-                    context("'{' to start block body", preceded(ws, char('{'))),
-                    many0(map(preceded(ws, statement), Spanned::dummy)),
-                    context("'}' to close block", preceded(ws, char('}')))
-                )))
-            )), |(_, (name, _, _, _, body, _))| {
+            |i| {
+                let (i, _) = preceded(ws, tag("block"))(i)?;
+                let (i, name) = cut(context("block name", preceded(ws, ident)))(i)?;
+                let (i, _) = preceded(ws, char('('))(i)?;
+                let (i, _) = preceded(ws, char(')'))(i)?;
+                let (i, _) = cut(context("'{' to start block body", preceded(ws, char('{'))))(i)?;
+                let (i, body) = many0(|i2| spanned(original, |i3| statement(original, i3))(i2))(i)?;
+                let (i, _) = cut(context("'}' to close block", preceded(ws, char('}'))))(i)?;
                 let items = body.into_iter().map(|s| Spanned::new(Item::Statement(s.node), s.span)).collect();
-                Block { name, params: vec![], return_type: None, items }
-            })
+                Ok((i, Block { name, params: vec![], return_type: None, items }))
+            }
         ),
     ))(input)
 }
 
 fn parse_program(input: &str) -> ParseResult<'_, Program> {
+    let original = input; // Save original for position tracking
     let (input, _) = context("'program' keyword", preceded(ws, tag("program")))(input)?;
     let (input, name) = cut(context("program name", preceded(ws, ident)))(input)?;
     let (input, _) = cut(context("'{' to start program", preceded(ws, char('{'))))(input)?;
-    let (input, blocks) = many0(preceded(ws, block))(input)?;
+    let (input, blocks) = many0(preceded(ws, |i| block(original, i)))(input)?;
     let (input, _) = cut(context("'}' to close program", preceded(ws, char('}'))))(input)?;
     Ok((input, Program { name, blocks }))
 }
@@ -471,8 +579,12 @@ impl HlxaEmitter {
     fn emit_statement(&self, stmt: &Statement, indent: usize) -> String {
         let ind = "    ".repeat(indent);
         match stmt {
-            Statement::Let { name, value } => {
-                format!("{}let {} = {};", ind, name, self.emit_expr(&value.node))
+            Statement::Let { name, type_annotation, value } => {
+                if let Some(typ) = type_annotation {
+                    format!("{}let {}: {} = {};", ind, name, typ.to_string(), self.emit_expr(&value.node))
+                } else {
+                    format!("{}let {} = {};", ind, name, self.emit_expr(&value.node))
+                }
             },
             Statement::Assign { lhs, value } => {
                 format!("{}{} = {};", ind, self.emit_expr(&lhs.node), self.emit_expr(&value.node))
@@ -522,9 +634,19 @@ impl Emitter for HlxaEmitter {
         output.push_str(&format!("program {} {{\n", program.name));
 
         for block in &program.blocks {
-            let params = block.params.join(", ");
-            let return_type = block.return_type.as_ref().map(|t| format!(" -> {}", t)).unwrap_or_default();
-            output.push_str(&format!("    fn {}({}){} {{\n", block.name, params, return_type));
+            let params_str = block.params.iter()
+                .map(|(name, typ)| {
+                    if let Some(t) = typ {
+                        format!("{}: {}", name, t.to_string())
+                    } else {
+                        name.clone()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+                
+            let return_type = block.return_type.as_ref().map(|t| format!(" -> {}", t.to_string())).unwrap_or_default();
+            output.push_str(&format!("    fn {}({}){} {{\n", block.name, params_str, return_type));
 
             for item in &block.items {
                 match &item.node {

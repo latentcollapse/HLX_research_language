@@ -85,7 +85,19 @@ impl RunicEmitter {
     fn emit_block(&mut self, block: &Block, out: &mut String) -> Result<()> {
         out.push_str(&self.indent_str());
         out.push_str(&format!("{} {}(", glyphs::BLOCK, block.name));
-        out.push_str(&block.params.join(", "));
+        
+        let params_str = block.params.iter()
+            .map(|(name, typ)| {
+                if let Some(t) = typ {
+                    format!("{}: {}", name, t.to_string())
+                } else {
+                    name.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+            
+        out.push_str(&params_str);
         out.push_str(") {\n");
         
         self.indent += 1;
@@ -110,10 +122,14 @@ impl RunicEmitter {
         out.push_str(&self.indent_str());
         
         match stmt {
-            Statement::Let { name, value } => {
+            Statement::Let { name, type_annotation, value } => {
                 out.push_str(glyphs::LET);
                 out.push(' ');
                 out.push_str(name);
+                // TODO: Emit type annotation in runic form if present
+                if let Some(_typ) = type_annotation {
+                    // For now, skip type annotations in runic output
+                }
                 out.push_str(" = ");
                 self.emit_expr(&value.node, out)?;
                 out.push(';');
@@ -431,7 +447,19 @@ impl HlxlEmitter {
     fn emit_block(&mut self, block: &Block, out: &mut String) -> Result<()> {
         out.push_str(&self.indent_str());
         out.push_str(&format!("block {}(", block.name));
-        out.push_str(&block.params.join(", "));
+        
+        let params_str = block.params.iter()
+            .map(|(name, typ)| {
+                if let Some(t) = typ {
+                    format!("{}: {}", name, t.to_string())
+                } else {
+                    name.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+            
+        out.push_str(&params_str);
         out.push_str(") {\n");
         
         self.indent += 1;
@@ -452,9 +480,10 @@ impl HlxlEmitter {
         out.push_str(&self.indent_str());
         
         match stmt {
-            Statement::Let { name, value } => {
+            Statement::Let { name, type_annotation: _, value } => {
                 out.push_str("let ");
                 out.push_str(name);
+                // Type annotations not emitted in this debug output
                 out.push_str(" = ");
                 self.emit_expr(&value.node, out)?;
             }
