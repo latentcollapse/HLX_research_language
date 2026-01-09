@@ -94,27 +94,15 @@ fn parse_type(input: &str) -> ParseResult<'_, Type> {
         return Ok((input, Type::Array(Box::new(inner))));
     }
 
-    // Otherwise parse simple type names
-    let (input, type_name) = alt((
-        tag("Int"),
-        tag("Float"),
-        tag("String"),
-        tag("Bool"),
-        tag("int"),
-        tag("float"),
-        tag("string"),
-        tag("bool"),
-    ))(input)?;
-
-    let typ = match type_name {
-        "Int" | "int" => Type::Int,
-        "Float" | "float" => Type::Float,
-        "String" | "string" => Type::String,
-        "Bool" | "bool" => Type::Bool,
-        _ => unreachable!(),
-    };
-
-    Ok((input, typ))
+    // Try primitive types first, then fall back to named types
+    alt((
+        map(alt((tag("Int"), tag("int"))), |_| Type::Int),
+        map(alt((tag("Float"), tag("float"))), |_| Type::Float),
+        map(alt((tag("String"), tag("string"))), |_| Type::String),
+        map(alt((tag("Bool"), tag("bool"))), |_| Type::Bool),
+        // Fall back to any identifier as a named type (e.g., "object", "tensor_t")
+        map(ident, |name| Type::Named(name)),
+    ))(input)
 }
 
 fn parse_string_literal(input: &str) -> ParseResult<'_, String> {
