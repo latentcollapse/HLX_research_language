@@ -31,6 +31,7 @@ mod cfg_builder;
 mod type_system;
 mod type_inference;
 mod quick_fixes;
+mod semantic_tokens;
 
 use contracts::{ContractCache, ContractCatalogue};
 use ai_diagnostics::AIDiagnosticBuilder;
@@ -55,6 +56,7 @@ use type_lens::TypeLens;
 use rust_diagnostics::RustDiagnostics;
 use builtins::BuiltinRegistry;
 use backend_compat::BackendCompatChecker;
+use semantic_tokens::SemanticTokensProvider;
 
 pub struct Backend {
     client: Client,
@@ -77,6 +79,7 @@ pub struct Backend {
     builtin_registry: Arc<BuiltinRegistry>,
     backend_compat: Arc<BackendCompatChecker>,
     quick_fix_generator: Arc<QuickFixGenerator>,
+    semantic_tokens_provider: Arc<SemanticTokensProvider>,
 }
 
 #[tower_lsp::async_trait]
@@ -113,6 +116,16 @@ impl LanguageServer for Backend {
                 code_lens_provider: Some(CodeLensOptions {
                     resolve_provider: Some(false),
                 }),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            legend: self.semantic_tokens_provider.get_legend(),
+                            range: Some(true),
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                            ..Default::default()
+                        }
+                    )
+                ),
                 ..Default::default()
             },
             ..Default::default()
@@ -684,6 +697,62 @@ impl LanguageServer for Backend {
             Ok(None)
         }
     }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> Result<Option<SemanticTokensResult>> {
+        let uri = params.text_document.uri;
+
+        let doc_ref = self.document_map.get(uri.as_str());
+        if let Some(doc) = doc_ref {
+            let tokens = self.semantic_tokens_provider.provide_semantic_tokens(
+                &doc,
+                &self.symbol_index,
+                &self.builtin_registry,
+                &uri,
+            );
+
+            match tokens {
+                Some(data) => Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+                    result_id: None,
+                    data,
+                }))),
+                None => Ok(None),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn semantic_tokens_range(
+        &self,
+        params: SemanticTokensRangeParams,
+    ) -> Result<Option<SemanticTokensRangeResult>> {
+        let uri = params.text_document.uri;
+        let range = params.range;
+
+        let doc_ref = self.document_map.get(uri.as_str());
+        if let Some(doc) = doc_ref {
+            let tokens = self.semantic_tokens_provider.provide_semantic_tokens_range(
+                &doc,
+                range,
+                &self.symbol_index,
+                &self.builtin_registry,
+                &uri,
+            );
+
+            match tokens {
+                Some(data) => Ok(Some(SemanticTokensRangeResult::Tokens(SemanticTokens {
+                    result_id: None,
+                    data,
+                }))),
+                None => Ok(None),
+            }
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 impl Backend {
@@ -777,6 +846,10 @@ impl Backend {
         let quick_fix_generator = Arc::new(QuickFixGenerator::new());
         eprintln!("✓ Quick fix generator ready");
 
+        // Create semantic tokens provider
+        let semantic_tokens_provider = Arc::new(SemanticTokensProvider::new());
+        eprintln!("✓ Semantic tokens provider ready");
+
         Self {
             client,
             document_map: DashMap::new(),
@@ -798,6 +871,7 @@ impl Backend {
             builtin_registry,
             backend_compat,
             quick_fix_generator,
+            semantic_tokens_provider,
         }
     }
 
