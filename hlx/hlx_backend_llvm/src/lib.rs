@@ -9,8 +9,10 @@ use inkwell::module::{Module, Linkage};
 use inkwell::values::{FunctionValue, IntValue, FloatValue, BasicValueEnum, PointerValue};
 use inkwell::basic_block::BasicBlock;
 use inkwell::{IntPredicate, FloatPredicate};
+use inkwell::types::BasicType;
 use inkwell::OptimizationLevel;
 use inkwell::targets::{Target, InitializationConfig, TargetMachine};
+use inkwell::debug_info::{AsDIScope, DebugInfoBuilder, DICompileUnit, DIFile, DISubprogram, DWARFSourceLanguage};
 use std::collections::{HashMap, HashSet};
 use anyhow::{Result, anyhow};
 
@@ -22,6 +24,213 @@ enum ValueType {
     Pointer,
 }
 
+/// A basic block in the control flow graph
+#[derive(Debug, Clone)]
+struct CfgBlock {
+    /// Program counter where this block starts
+    start_pc: u32,
+    /// Program counter where this block ends (inclusive)
+    end_pc: u32,
+    /// PCs of successor blocks (blocks that can follow this one)
+    successors: Vec<u32>,
+    /// PCs of predecessor blocks (blocks that can jump to this one)
+    predecessors: Vec<u32>,
+}
+
+/// Control Flow Graph for a function
+#[derive(Debug, Clone)]
+struct ControlFlowGraph {
+    /// Map from start_pc to CfgBlock
+    blocks: HashMap<u32, CfgBlock>,
+    /// Entry point PC
+    entry_pc: u32,
+}
+
+impl ControlFlowGraph {
+    /// Build a CFG from a list of instructions starting at start_pc
+    fn build(start_pc: u32, instructions: &[Instruction]) -> Result<Self> {
+        // STEP 1: Identify all block leaders
+        let mut leaders = HashSet::new();
+
+        // First instruction is always a leader
+        leaders.insert(start_pc);
+
+        let mut pc = start_pc as usize;
+        while pc < instructions.len() {
+            let inst = &instructions[pc];
+
+            // Stop at next function definition
+            if pc > start_pc as usize && matches!(inst, Instruction::FuncDef { .. }) {
+                break;
+            }
+
+            // Targets of jumps are leaders
+            match inst {
+                Instruction::Jump { target } => {
+                    leaders.insert(*target);
+                    // Instruction after unconditional jump is also a leader (unreachable code boundary)
+                    if pc + 1 < instructions.len() {
+                        leaders.insert((pc + 1) as u32);
+                    }
+                }
+                Instruction::If { then_block, else_block, .. } => {
+                    leaders.insert(*then_block);
+                    leaders.insert(*else_block);
+                    // Instruction after If is also a leader (fallthrough from branches)
+                    if pc + 1 < instructions.len() {
+                        leaders.insert((pc + 1) as u32);
+                    }
+                }
+                Instruction::Loop { body, exit, .. } => {
+                    leaders.insert(*body);
+                    leaders.insert(*exit);
+                    // Instruction after Loop is also a leader
+                    if pc + 1 < instructions.len() {
+                        leaders.insert((pc + 1) as u32);
+                    }
+                }
+                Instruction::Return { .. } => {
+                    // Instruction after Return is a leader (unreachable code boundary)
+                    if pc + 1 < instructions.len() {
+                        leaders.insert((pc + 1) as u32);
+                    }
+                }
+                _ => {}
+            }
+
+            pc += 1;
+        }
+
+        // STEP 2: Build basic blocks
+        let mut sorted_leaders: Vec<u32> = leaders.into_iter().collect();
+        sorted_leaders.sort();
+
+        let mut blocks = HashMap::new();
+        for i in 0..sorted_leaders.len() {
+            let start = sorted_leaders[i];
+            let end = if i + 1 < sorted_leaders.len() {
+                sorted_leaders[i + 1] - 1
+            } else {
+                // Find end of this function
+                let mut end_pc = start;
+                while (end_pc as usize) < instructions.len() {
+                    if end_pc > start && matches!(instructions[end_pc as usize], Instruction::FuncDef { .. }) {
+                        break;
+                    }
+                    end_pc += 1;
+                }
+                end_pc - 1
+            };
+
+            blocks.insert(start, CfgBlock {
+                start_pc: start,
+                end_pc: end,
+                successors: Vec::new(),
+                predecessors: Vec::new(),
+            });
+        }
+
+        // STEP 3: Connect blocks (build successor/predecessor links)
+        // First, compute successors for each block
+        let mut successors_map: HashMap<u32, Vec<u32>> = HashMap::new();
+
+        for (&start_pc, block) in &blocks {
+            let end_inst = &instructions[block.end_pc as usize];
+            let mut succs = Vec::new();
+
+            match end_inst {
+                Instruction::Jump { target } => {
+                    // Unconditional jump - single successor
+                    succs.push(*target);
+                }
+                Instruction::If { then_block, else_block, .. } => {
+                    // Conditional branch - two successors
+                    succs.push(*then_block);
+                    succs.push(*else_block);
+                }
+                Instruction::Loop { body, exit, .. } => {
+                    // Loop - two successors (body and exit)
+                    succs.push(*body);
+                    succs.push(*exit);
+                }
+                Instruction::Return { .. } => {
+                    // No successors
+                }
+                _ => {
+                    // Fallthrough to next block
+                    let next_pc = block.end_pc + 1;
+                    if (next_pc as usize) < instructions.len() && blocks.contains_key(&next_pc) {
+                        succs.push(next_pc);
+                    }
+                }
+            }
+
+            successors_map.insert(start_pc, succs);
+        }
+
+        // Now update blocks with computed successors
+        for (start_pc, succs) in successors_map.iter() {
+            if let Some(block) = blocks.get_mut(start_pc) {
+                block.successors = succs.clone();
+            }
+        }
+
+        // Build predecessor links
+        let successor_map: HashMap<u32, Vec<u32>> = blocks.iter()
+            .map(|(start, block)| (*start, block.successors.clone()))
+            .collect();
+
+        for (&start, successors) in &successor_map {
+            for &succ in successors {
+                if let Some(succ_block) = blocks.get_mut(&succ) {
+                    succ_block.predecessors.push(start);
+                }
+            }
+        }
+
+        Ok(ControlFlowGraph {
+            blocks,
+            entry_pc: start_pc,
+        })
+    }
+
+    /// Get all block leader PCs (for LLVM BasicBlock creation)
+    fn block_leaders(&self) -> HashSet<u32> {
+        self.blocks.keys().copied().collect()
+    }
+
+    /// Validate that all instructions are reachable from entry
+    fn validate_reachability(&self) -> Result<()> {
+        let mut reachable = HashSet::new();
+        let mut worklist = vec![self.entry_pc];
+
+        while let Some(pc) = worklist.pop() {
+            if reachable.contains(&pc) {
+                continue;
+            }
+            reachable.insert(pc);
+
+            if let Some(block) = self.blocks.get(&pc) {
+                for &succ in &block.successors {
+                    worklist.push(succ);
+                }
+            }
+        }
+
+        // Check if any blocks are unreachable
+        let unreachable: Vec<u32> = self.blocks.keys()
+            .filter(|pc| !reachable.contains(pc))
+            .copied()
+            .collect();
+
+        if !unreachable.is_empty() {
+            eprintln!("WARNING: Unreachable blocks detected at PCs: {:?}", unreachable);
+        }
+
+        Ok(())
+    }
+}
+
 pub struct CodeGen<'ctx> {
     context: &'ctx Context,
     module: Module<'ctx>,
@@ -30,13 +239,57 @@ pub struct CodeGen<'ctx> {
     reg_map: HashMap<Register, PointerValue<'ctx>>,
     reg_types: HashMap<Register, ValueType>,  // Track register types
     block_map: HashMap<u32, BasicBlock<'ctx>>,
+    /// Track element types for array registers (supports recursion!)
+    array_element_types: HashMap<Register, hlx_core::instruction::DType>,
+    /// Global function signatures from crate metadata
+    function_signatures: HashMap<String, Vec<hlx_core::instruction::DType>>,
+    /// Debug info builder
+    debug_builder: Option<DebugInfoBuilder<'ctx>>,
+    /// Debug compile unit
+    debug_compile_unit: Option<DICompileUnit<'ctx>>,
+    /// Debug file
+    debug_file: Option<DIFile<'ctx>>,
+    /// Map from instruction index to (line, col) for debug locations
+    debug_symbols: HashMap<usize, (u32, u32)>,
 }
 
 use std::env;
 
 impl<'ctx> CodeGen<'ctx> {
+    /// Helper: Get a function from the module by name
+    pub fn get_function(&self, name: &str) -> Result<FunctionValue<'ctx>> {
+        self.module.get_function(name)
+            .ok_or_else(|| anyhow!("Function '{}' not found in module", name))
+    }
+
+    /// Helper: Get a function parameter by index
+    pub fn get_param(&self, func: FunctionValue<'ctx>, index: u32, param_name: &str) -> Result<BasicValueEnum<'ctx>> {
+        func.get_nth_param(index)
+            .ok_or_else(|| anyhow!("Parameter {} (index {}) not found in function '{}'",
+                param_name, index, func.get_name().to_string_lossy()))
+    }
+
+    /// Helper: Extract pointer value from call result
+    pub fn call_result_to_ptr(&self, result: BasicValueEnum<'ctx>, call_name: &str) -> Result<PointerValue<'ctx>> {
+        result.into_pointer_value();
+        Ok(result.into_pointer_value())
+    }
+
+    /// Helper: Get current insert block
+    pub fn current_block(&self) -> Result<BasicBlock<'ctx>> {
+        self.builder.get_insert_block()
+            .ok_or_else(|| anyhow!("No current basic block in builder"))
+    }
+
+    /// Helper: Get a basic block by PC (for testing)
+    pub fn get_block(&self, pc: u32) -> Result<BasicBlock<'ctx>> {
+        self.block_map.get(&pc)
+            .copied()
+            .ok_or_else(|| anyhow!("Basic block for PC {} not found", pc))
+    }
+
     /// Create a new code generator with default (host) target
-    pub fn new(context: &'ctx Context, module_name: &str) -> Self {
+    pub fn new(context: &'ctx Context, module_name: &str) -> Result<Self> {
         Self::with_target(context, module_name, None)
     }
 
@@ -47,12 +300,14 @@ impl<'ctx> CodeGen<'ctx> {
     /// - `Some("x86_64-unknown-none-elf")` - Bare metal x86_64
     /// - `Some("aarch64-unknown-none")` - Bare metal ARM64
     /// - `Some("riscv64gc-unknown-none-elf")` - Bare metal RISC-V
-    pub fn with_target(context: &'ctx Context, module_name: &str, target_triple: Option<&str>) -> Self {
-        Target::initialize_native(&InitializationConfig::default()).unwrap();
+    pub fn with_target(context: &'ctx Context, module_name: &str, target_triple: Option<&str>) -> Result<Self> {
+        Target::initialize_native(&InitializationConfig::default())
+            .map_err(|e| anyhow!("Failed to initialize LLVM target: {}", e))?;
 
         // Load symbols from current executable so JIT can find printf, malloc, etc.
         // (Only for hosted targets)
-        if target_triple.is_none() || !target_triple.unwrap().contains("none") {
+        let is_bare_metal = target_triple.map_or(false, |t| t.contains("none"));
+        if !is_bare_metal {
             if let Ok(exe) = env::current_exe() {
                 let _ = inkwell::support::load_library_permanently(&exe);
             }
@@ -71,10 +326,11 @@ impl<'ctx> CodeGen<'ctx> {
             TargetMachine::get_default_triple()
         };
 
-        let target = Target::from_triple(&triple).unwrap();
+        let target = Target::from_triple(&triple)
+            .map_err(|e| anyhow!("Failed to create LLVM target from triple '{}': {}", triple, e))?;
 
         // For bare metal targets, use generic CPU features
-        let (cpu, features) = if target_triple.map_or(false, |t| t.contains("none")) {
+        let (cpu, features) = if is_bare_metal {
             ("generic".to_string(), "".to_string())
         } else {
             (TargetMachine::get_host_cpu_name().to_string(),
@@ -88,7 +344,7 @@ impl<'ctx> CodeGen<'ctx> {
             OptimizationLevel::Default,
             inkwell::targets::RelocMode::Default,
             inkwell::targets::CodeModel::Default,
-        ).unwrap();
+        ).ok_or_else(|| anyhow!("Failed to create LLVM target machine for triple '{}'", triple))?;
 
         module.set_data_layout(&target_machine.get_target_data().get_data_layout());
         module.set_triple(&triple);
@@ -132,11 +388,14 @@ impl<'ctx> CodeGen<'ctx> {
         let sdl_create_window = module.add_function("SDL_CreateWindow", ptr_type.fn_type(&[ptr_type.into(), i32_type.into(), i32_type.into(), i32_type.into(), i32_type.into(), i32_type.into()], false), Some(Linkage::External));
         let sdl_create_renderer = module.add_function("SDL_CreateRenderer", ptr_type.fn_type(&[ptr_type.into(), i32_type.into(), i32_type.into()], false), Some(Linkage::External));
         let sdl_set_color = module.add_function("SDL_SetRenderDrawColor", i32_type.fn_type(&[ptr_type.into(), context.i8_type().into(), context.i8_type().into(), context.i8_type().into(), context.i8_type().into()], false), Some(Linkage::External));
+        let sdl_draw_line = module.add_function("SDL_RenderDrawLine", i32_type.fn_type(&[ptr_type.into(), i32_type.into(), i32_type.into(), i32_type.into(), i32_type.into()], false), Some(Linkage::External));
+        let sdl_draw_point = module.add_function("SDL_RenderDrawPoint", i32_type.fn_type(&[ptr_type.into(), i32_type.into(), i32_type.into()], false), Some(Linkage::External));
         let sdl_clear = module.add_function("SDL_RenderClear", i32_type.fn_type(&[ptr_type.into()], false), Some(Linkage::External));
         let sdl_present = module.add_function("SDL_RenderPresent", context.void_type().fn_type(&[ptr_type.into()], false), Some(Linkage::External));
         let sdl_poll = module.add_function("SDL_PollEvent", i32_type.fn_type(&[ptr_type.into()], false), Some(Linkage::External));
         let sdl_delay = module.add_function("SDL_Delay", context.void_type().fn_type(&[i32_type.into()], false), Some(Linkage::External));
         let sdl_quit = module.add_function("SDL_Quit", context.void_type().fn_type(&[], false), Some(Linkage::External));
+        let sdl_destroy_window = module.add_function("SDL_DestroyWindow", context.void_type().fn_type(&[ptr_type.into()], false), Some(Linkage::External));
 
         // Register both PascalCase and snake_case variants
         functions.insert("SDL_Init".to_string(), sdl_init);
@@ -147,6 +406,10 @@ impl<'ctx> CodeGen<'ctx> {
         functions.insert("sdl_create_renderer".to_string(), sdl_create_renderer);
         functions.insert("SDL_SetRenderDrawColor".to_string(), sdl_set_color);
         functions.insert("sdl_set_color".to_string(), sdl_set_color);
+        functions.insert("SDL_RenderDrawLine".to_string(), sdl_draw_line);
+        functions.insert("sdl_render_draw_line".to_string(), sdl_draw_line);
+        functions.insert("SDL_RenderDrawPoint".to_string(), sdl_draw_point);
+        functions.insert("sdl_render_draw_point".to_string(), sdl_draw_point);
         functions.insert("SDL_RenderClear".to_string(), sdl_clear);
         functions.insert("sdl_clear".to_string(), sdl_clear);
         functions.insert("SDL_RenderPresent".to_string(), sdl_present);
@@ -157,6 +420,29 @@ impl<'ctx> CodeGen<'ctx> {
         functions.insert("sdl_delay".to_string(), sdl_delay);
         functions.insert("SDL_Quit".to_string(), sdl_quit);
         functions.insert("sdl_quit".to_string(), sdl_quit);
+        functions.insert("SDL_DestroyWindow".to_string(), sdl_destroy_window);
+        functions.insert("sdl_destroy_window".to_string(), sdl_destroy_window);
+
+        // Create debug info builder
+        let (debug_builder, debug_compile_unit) = module.create_debug_info_builder(
+            true,  // allow_unresolved
+            DWARFSourceLanguage::C,  // Use C as the closest match for HLX
+            "unknown.hlxl",  // filename (will be updated when we compile a crate)
+            ".",  // directory
+            "hlx-compiler v0.1",  // producer
+            false,  // is_optimized
+            "",  // flags
+            0,  // runtime_version
+            "",  // split_name
+            inkwell::debug_info::DWARFEmissionKind::Full,  // kind
+            0,  // dwo_id
+            false,  // split_debug_inlining
+            false,  // debug_info_for_profiling
+            "",  // sysroot
+            "",  // sdk
+        );
+
+        let debug_file = debug_compile_unit.get_file();
 
         let mut codegen = Self {
             context,
@@ -166,30 +452,43 @@ impl<'ctx> CodeGen<'ctx> {
             reg_map: HashMap::new(),
             reg_types: HashMap::new(),
             block_map: HashMap::new(),
+            array_element_types: HashMap::new(),
+            function_signatures: HashMap::new(),
+            debug_builder: Some(debug_builder),
+            debug_compile_unit: Some(debug_compile_unit),
+            debug_file: Some(debug_file),
+            debug_symbols: HashMap::new(),
         };
-        
-        codegen.define_tensor_utils().unwrap();
-        
+
+        codegen.define_tensor_utils()?;
+
         let helpers = ["__hlx_tensor_create", "__hlx_matmul", "__hlx_tensor_add", "__hlx_tensor_transpose"];
         for h in helpers {
-            codegen.functions.insert(h.to_string(), codegen.module.get_function(h).unwrap());
+            let func = codegen.get_function(h)?;
+            codegen.functions.insert(h.to_string(), func);
         }
-        codegen
+        Ok(codegen)
     }
     
     fn define_tensor_utils(&mut self) -> Result<()> {
         let i64_type = self.context.i64_type();
         let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
-        let malloc = *self.functions.get("malloc").unwrap();
+        let malloc = self.get_function("malloc")?;
 
         let create_func = self.module.add_function("__hlx_tensor_create", ptr_type.fn_type(&[i64_type.into(), i64_type.into()], false), Some(Linkage::Internal));
         let bb = self.context.append_basic_block(create_func, "entry");
         self.builder.position_at_end(bb);
-        let rows = create_func.get_nth_param(0).unwrap().into_int_value();
-        let cols = create_func.get_nth_param(1).unwrap().into_int_value();
-        let s_ptr = self.builder.build_call(malloc, &[i64_type.const_int(24, false).into()], "s_ptr")?.try_as_basic_value().left().unwrap().into_pointer_value();
+        let rows = self.get_param(create_func, 0, "rows")?.into_int_value();
+        let cols = self.get_param(create_func, 1, "cols")?.into_int_value();
+        let s_ptr_result = self.builder.build_call(malloc, &[i64_type.const_int(24, false).into()], "s_ptr")?
+            .try_as_basic_value().left()
+            .ok_or_else(|| anyhow!("malloc call for tensor struct returned void"))?;
+        let s_ptr = self.call_result_to_ptr(s_ptr_result, "malloc(struct)")?;
         let count = self.builder.build_int_mul(rows, cols, "cnt")?;
-        let d_ptr = self.builder.build_call(malloc, &[self.builder.build_int_mul(count, i64_type.const_int(8, false), "db")?.into()], "d_ptr")?.try_as_basic_value().left().unwrap().into_pointer_value();
+        let d_ptr_result = self.builder.build_call(malloc, &[self.builder.build_int_mul(count, i64_type.const_int(8, false), "db")?.into()], "d_ptr")?
+            .try_as_basic_value().left()
+            .ok_or_else(|| anyhow!("malloc call for tensor data returned void"))?;
+        let d_ptr = self.call_result_to_ptr(d_ptr_result, "malloc(data)")?;
         unsafe {
             self.builder.build_store(self.builder.build_gep(i64_type, s_ptr, &[i64_type.const_int(0, false)], "r")?, rows)?;
             self.builder.build_store(self.builder.build_gep(i64_type, s_ptr, &[i64_type.const_int(1, false)], "c")?, cols)?;
@@ -200,8 +499,8 @@ impl<'ctx> CodeGen<'ctx> {
         let matmul_func = self.module.add_function("__hlx_matmul", ptr_type.fn_type(&[ptr_type.into(), ptr_type.into()], false), Some(Linkage::Internal));
         let bb = self.context.append_basic_block(matmul_func, "entry");
         self.builder.position_at_end(bb);
-        let a_ptr = matmul_func.get_nth_param(0).unwrap().into_pointer_value();
-        let b_ptr = matmul_func.get_nth_param(1).unwrap().into_pointer_value();
+        let a_ptr = self.get_param(matmul_func, 0, "a")?.into_pointer_value();
+        let b_ptr = self.get_param(matmul_func, 1, "b")?.into_pointer_value();
         unsafe {
             let m = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(0, false)], "ar")?, "m")?.into_int_value();
             let k = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(1, false)], "ac")?, "k")?.into_int_value();
@@ -210,11 +509,15 @@ impl<'ctx> CodeGen<'ctx> {
             let n = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, b_ptr, &[i64_type.const_int(1, false)], "bc")?, "n")?.into_int_value();
             let bd_i = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, b_ptr, &[i64_type.const_int(2, false)], "bd")?, "bdi")?.into_int_value();
             let bd = self.builder.build_int_to_ptr(bd_i, ptr_type, "bd")?;
-            let c_ptr = self.builder.build_call(create_func, &[m.into(), n.into()], "cp")?.try_as_basic_value().left().unwrap().into_pointer_value();
+            let c_ptr_result = self.builder.build_call(create_func, &[m.into(), n.into()], "cp")?
+                .try_as_basic_value().left()
+                .ok_or_else(|| anyhow!("__hlx_tensor_create call returned void"))?;
+            let c_ptr = self.call_result_to_ptr(c_ptr_result, "__hlx_tensor_create")?;
             let cd_i = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, c_ptr, &[i64_type.const_int(2, false)], "cd")?, "cdi")?.into_int_value();
             let cd = self.builder.build_int_to_ptr(cd_i, ptr_type, "cd")?;
 
-            let i_a = self.builder.build_alloca(i64_type, "i")?; self.builder.build_store(i_a, i64_type.const_int(0, false))?;
+            let i_a = self.builder.build_alloca(i64_type, "i")?;
+            self.builder.build_store(i_a, i64_type.const_int(0, false))?;
             let c_i = self.context.append_basic_block(matmul_func, "ci");
             let b_i = self.context.append_basic_block(matmul_func, "bi");
             let e_i = self.context.append_basic_block(matmul_func, "ei");
@@ -223,7 +526,8 @@ impl<'ctx> CodeGen<'ctx> {
             let i_v = self.builder.build_load(i64_type, i_a, "iv")?.into_int_value();
             self.builder.build_conditional_branch(self.builder.build_int_compare(IntPredicate::SLT, i_v, m, "cmpi")?, b_i, e_i)?;
             self.builder.position_at_end(b_i);
-            let j_a = self.builder.build_alloca(i64_type, "j")?; self.builder.build_store(j_a, i64_type.const_int(0, false))?;
+            let j_a = self.builder.build_alloca(i64_type, "j")?;
+            self.builder.build_store(j_a, i64_type.const_int(0, false))?;
             let c_j = self.context.append_basic_block(matmul_func, "cj");
             let b_j = self.context.append_basic_block(matmul_func, "bj");
             let e_j = self.context.append_basic_block(matmul_func, "ej");
@@ -232,8 +536,10 @@ impl<'ctx> CodeGen<'ctx> {
             let j_v = self.builder.build_load(i64_type, j_a, "jv")?.into_int_value();
             self.builder.build_conditional_branch(self.builder.build_int_compare(IntPredicate::SLT, j_v, n, "cmpj")?, b_j, e_j)?;
             self.builder.position_at_end(b_j);
-            let s_a = self.builder.build_alloca(i64_type, "s")?; self.builder.build_store(s_a, i64_type.const_int(0, false))?;
-            let k_a = self.builder.build_alloca(i64_type, "k")?; self.builder.build_store(k_a, i64_type.const_int(0, false))?;
+            let s_a = self.builder.build_alloca(i64_type, "s")?;
+            self.builder.build_store(s_a, i64_type.const_int(0, false))?;
+            let k_a = self.builder.build_alloca(i64_type, "k")?;
+            self.builder.build_store(k_a, i64_type.const_int(0, false))?;
             let c_k = self.context.append_basic_block(matmul_func, "ck");
             let b_k = self.context.append_basic_block(matmul_func, "bk");
             let e_k = self.context.append_basic_block(matmul_func, "ek");
@@ -261,17 +567,21 @@ impl<'ctx> CodeGen<'ctx> {
         let add_func = self.module.add_function("__hlx_tensor_add", ptr_type.fn_type(&[ptr_type.into(), ptr_type.into()], false), Some(Linkage::Internal));
         let bb = self.context.append_basic_block(add_func, "entry");
         self.builder.position_at_end(bb);
-        let a_ptr = add_func.get_nth_param(0).unwrap().into_pointer_value();
-        let b_ptr = add_func.get_nth_param(1).unwrap().into_pointer_value();
+        let a_ptr = self.get_param(add_func, 0, "a")?.into_pointer_value();
+        let b_ptr = self.get_param(add_func, 1, "b")?.into_pointer_value();
         unsafe {
             let r = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(0, false)], "r")?, "rows")?.into_int_value();
             let c = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(1, false)], "c")?, "cols")?.into_int_value();
             let ad = self.builder.build_int_to_ptr(self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(2, false)], "ad")?, "adi")?.into_int_value(), ptr_type, "ad")?;
             let bd = self.builder.build_int_to_ptr(self.builder.build_load(i64_type, self.builder.build_gep(i64_type, b_ptr, &[i64_type.const_int(2, false)], "bd")?, "bdi")?.into_int_value(), ptr_type, "bd")?;
-            let c_ptr = self.builder.build_call(create_func, &[r.into(), c.into()], "cp")?.try_as_basic_value().left().unwrap().into_pointer_value();
+            let c_ptr_result = self.builder.build_call(create_func, &[r.into(), c.into()], "cp")?
+                .try_as_basic_value().left()
+                .ok_or_else(|| anyhow!("__hlx_tensor_create call in tensor_add returned void"))?;
+            let c_ptr = self.call_result_to_ptr(c_ptr_result, "__hlx_tensor_create(add)")?;
             let cd = self.builder.build_int_to_ptr(self.builder.build_load(i64_type, self.builder.build_gep(i64_type, c_ptr, &[i64_type.const_int(2, false)], "cd")?, "cdi")?.into_int_value(), ptr_type, "cd")?;
             let tot = self.builder.build_int_mul(r, c, "tot")?;
-            let i_a = self.builder.build_alloca(i64_type, "i")?; self.builder.build_store(i_a, i64_type.const_int(0, false))?;
+            let i_a = self.builder.build_alloca(i64_type, "i")?;
+            self.builder.build_store(i_a, i64_type.const_int(0, false))?;
             let cond_bb = self.context.append_basic_block(add_func, "c");
             let body_bb = self.context.append_basic_block(add_func, "b");
             let end_bb = self.context.append_basic_block(add_func, "e");
@@ -290,14 +600,18 @@ impl<'ctx> CodeGen<'ctx> {
         let trans_func = self.module.add_function("__hlx_tensor_transpose", ptr_type.fn_type(&[ptr_type.into()], false), Some(Linkage::Internal));
         let bb = self.context.append_basic_block(trans_func, "entry");
         self.builder.position_at_end(bb);
-        let a_ptr = trans_func.get_nth_param(0).unwrap().into_pointer_value();
+        let a_ptr = self.get_param(trans_func, 0, "a")?.into_pointer_value();
         unsafe {
             let m = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(0, false)], "r")?, "m")?.into_int_value();
             let n = self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(1, false)], "c")?, "n")?.into_int_value();
             let ad = self.builder.build_int_to_ptr(self.builder.build_load(i64_type, self.builder.build_gep(i64_type, a_ptr, &[i64_type.const_int(2, false)], "ad")?, "adi")?.into_int_value(), ptr_type, "ad")?;
-            let c_ptr = self.builder.build_call(create_func, &[n.into(), m.into()], "cp")?.try_as_basic_value().left().unwrap().into_pointer_value();
+            let c_ptr_result = self.builder.build_call(create_func, &[n.into(), m.into()], "cp")?
+                .try_as_basic_value().left()
+                .ok_or_else(|| anyhow!("__hlx_tensor_create call in tensor_transpose returned void"))?;
+            let c_ptr = self.call_result_to_ptr(c_ptr_result, "__hlx_tensor_create(transpose)")?;
             let cd = self.builder.build_int_to_ptr(self.builder.build_load(i64_type, self.builder.build_gep(i64_type, c_ptr, &[i64_type.const_int(2, false)], "cd")?, "cdi")?.into_int_value(), ptr_type, "cd")?;
-            let i_a = self.builder.build_alloca(i64_type, "i")?; self.builder.build_store(i_a, i64_type.const_int(0, false))?;
+            let i_a = self.builder.build_alloca(i64_type, "i")?;
+            self.builder.build_store(i_a, i64_type.const_int(0, false))?;
             let c_i = self.context.append_basic_block(trans_func, "ci");
             let b_i = self.context.append_basic_block(trans_func, "bi");
             let end_i = self.context.append_basic_block(trans_func, "ei");
@@ -306,7 +620,8 @@ impl<'ctx> CodeGen<'ctx> {
             let i_v = self.builder.build_load(i64_type, i_a, "iv")?.into_int_value();
             self.builder.build_conditional_branch(self.builder.build_int_compare(IntPredicate::SLT, i_v, m, "cmpi")?, b_i, end_i)?;
             self.builder.position_at_end(b_i);
-            let j_a = self.builder.build_alloca(i64_type, "j")?; self.builder.build_store(j_a, i64_type.const_int(0, false))?;
+            let j_a = self.builder.build_alloca(i64_type, "j")?;
+            self.builder.build_store(j_a, i64_type.const_int(0, false))?;
             let c_j = self.context.append_basic_block(trans_func, "cj");
             let b_j = self.context.append_basic_block(trans_func, "bj");
             let end_j = self.context.append_basic_block(trans_func, "ej");
@@ -329,67 +644,321 @@ impl<'ctx> CodeGen<'ctx> {
     }
     
     pub fn compile_crate(&mut self, krate: &HlxCrate) -> Result<()> {
+        // 1. Build global signature map and debug symbols from metadata
+        if let Some(meta) = &krate.metadata {
+            for (name, sig) in &meta.function_signatures {
+                self.function_signatures.insert(name.clone(), sig.clone());
+            }
+
+            // Extract debug symbols (instruction_idx → (line, col))
+            for sym in &meta.debug_symbols {
+                self.debug_symbols.insert(sym.inst_idx, (sym.line, sym.col));
+            }
+
+            // Update debug file with real source filename
+            if let Some(source_file) = &meta.source_file {
+                if let (Some(debug_builder), Some(_)) = (&self.debug_builder, &self.debug_compile_unit) {
+                    self.debug_file = Some(debug_builder.create_file(source_file, "."));
+                }
+            }
+        }
+
+        // 2. PRE-SCAN: Declare all user functions in the LLVM module
+        // This resolves the "Fn missing" error for forward-references and recursion.
         let i64_type = self.context.i64_type();
+        let f64_type = self.context.f64_type();
+        let ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
+
         for inst in &krate.instructions {
             if let Instruction::FuncDef { name, params, .. } = inst {
-                if self.functions.contains_key(name) { continue; }
-                let param_types = vec![i64_type.into(); params.len()];
-                let function = self.module.add_function(name, i64_type.fn_type(&param_types, false), None);
-                self.functions.insert(name.clone(), function);
+                let mut param_types = Vec::new();
+                
+                if let Some(sig) = self.function_signatures.get(name) {
+                    for dtype in sig {
+                        match dtype {
+                            hlx_core::instruction::DType::F32 | hlx_core::instruction::DType::F64 => {
+                                param_types.push(f64_type.into());
+                            }
+                            hlx_core::instruction::DType::Array(_) => {
+                                param_types.push(ptr_type.into());
+                            }
+                            _ => {
+                                param_types.push(i64_type.into());
+                            }
+                        }
+                    }
+                } else {
+                    // Default to i64 if no signature (shouldn't happen with metadata)
+                    for _ in params {
+                        param_types.push(i64_type.into());
+                    }
+                }
+
+                let fn_type = i64_type.fn_type(&param_types, false);
+                let func = self.module.add_function(name, fn_type, None);
+                self.functions.insert(name.clone(), func);
             }
         }
-        let mut targets = HashSet::new();
-        for inst in &krate.instructions {
-            match inst {
-                Instruction::Jump { target } => { targets.insert(*target); },
-                Instruction::If { then_block, else_block, .. } => {
-                    targets.insert(*then_block);
-                    targets.insert(*else_block);
-                },
-                Instruction::Loop { body, .. } => { targets.insert(*body); },
-                _ => {} 
-            }
-        }
+
+        // 3. COMPILE: Build CFG and compile each function
         for inst in &krate.instructions {
             if let Instruction::FuncDef { name, params, body } = inst {
-                self.compile_function(name, params, *body, &krate.instructions, &targets)?;
+                self.compile_function(name, params, *body, &krate.instructions)?;
             }
         }
+
+        // 4. FINALIZE: Finalize debug info
+        if let Some(debug_builder) = &self.debug_builder {
+            debug_builder.finalize();
+        }
+
         Ok(())
     }
 
-    fn compile_function(&mut self, name: &str, params: &[Register], start_pc: u32, instructions: &[Instruction], all_targets: &HashSet<u32>) -> Result<()> {
-        let function = *self.functions.get(name).ok_or_else(|| anyhow!("Fn missing"))?;
+    /// Get the base element type from a potentially nested DType
+    fn get_base_dtype(dtype: &hlx_core::instruction::DType) -> hlx_core::instruction::DType {
+        match dtype {
+            hlx_core::instruction::DType::Array(inner) => Self::get_base_dtype(inner),
+            other => other.clone(),
+        }
+    }
+
+    /// Get the inner type of an array DType (one level of nesting)
+    fn get_inner_dtype(dtype: &hlx_core::instruction::DType) -> Option<hlx_core::instruction::DType> {
+        match dtype {
+            hlx_core::instruction::DType::Array(inner) => Some((**inner).clone()),
+            _ => None,
+        }
+    }
+
+    /// Infer the LLVM type for each register based on how it's defined
+    fn infer_register_types(&self, start_pc: u32, instructions: &[Instruction]) -> HashMap<Register, ValueType> {
+        let mut types = HashMap::new();
+        let mut pc = start_pc as usize;
+
+        // First pass: Identify registers that are used as array containers (indexed into)
+        let mut used_as_arrays = HashSet::new();
+        let mut temp_pc = start_pc as usize;
+        while temp_pc < instructions.len() {
+            let inst = &instructions[temp_pc];
+            if temp_pc > start_pc as usize && matches!(inst, Instruction::FuncDef { .. }) { break; }
+
+            // If a register is used as container in Index, it's an array
+            if let Instruction::Index { container, .. } = inst {
+                used_as_arrays.insert(*container);
+            }
+            temp_pc += 1;
+        }
+
+        while pc < instructions.len() {
+            let inst = &instructions[pc];
+            if pc > start_pc as usize && matches!(inst, Instruction::FuncDef { .. }) { break; }
+
+            // Determine output register type based on instruction
+            if let Some(out_reg) = inst.output_register() {
+                let reg_type = match inst {
+                    // Float operations produce floats
+                    Instruction::Constant { val, .. } => {
+                        match val {
+                            Value::Float(_) => ValueType::Float,
+                            Value::String(_) => ValueType::Pointer,
+                            _ => ValueType::Int,
+                        }
+                    }
+
+                    Instruction::Add { lhs, rhs, .. } | Instruction::Sub { lhs, rhs, .. } |
+                    Instruction::Mul { lhs, rhs, .. } | Instruction::Div { lhs, rhs, .. } |
+                    Instruction::Mod { lhs, rhs, .. } => {
+                        let l_type = types.get(lhs).cloned().unwrap_or(ValueType::Int);
+                        let r_type = types.get(rhs).cloned().unwrap_or(ValueType::Int);
+                        if l_type == ValueType::Float || r_type == ValueType::Float {
+                            ValueType::Float
+                        } else {
+                            ValueType::Int
+                        }
+                    }
+
+                    Instruction::Neg { src, .. } => {
+                        types.get(src).cloned().unwrap_or(ValueType::Int)
+                    }
+
+                    // Math intrinsics that return floats
+                    Instruction::Call { func, .. } if matches!(func.as_str(),
+                        "sin" | "cos" | "tan" | "sqrt" | "floor" | "ceil" | "abs" | "pow" | "log" | "exp") => {
+                        ValueType::Float
+                    }
+
+                    // Conversion intrinsics
+                    Instruction::Call { func, .. } if func == "to_float" || func == "as_float" => ValueType::Float,
+                    Instruction::Call { func, .. } if func == "to_int" || func == "as_int" => ValueType::Int,
+                    Instruction::Call { func, .. } if func == "to_string" => ValueType::Pointer,
+
+                    // Memory allocation returns pointers
+                    Instruction::ArrayAlloc { .. } | Instruction::ArrayCreate { .. } |
+                    Instruction::ObjectCreate { .. } | Instruction::TensorCreate { .. } => ValueType::Pointer,
+
+                    Instruction::Call { func, .. } if func.contains("malloc") ||
+                                                       func.contains("alloc") ||
+                                                       func.contains("SDL_") => ValueType::Pointer,
+
+                    // Move preserves type
+                    Instruction::Move { src, .. } => {
+                        types.get(src).cloned().unwrap_or(ValueType::Int)
+                    }
+
+                    // Index loads from typed arrays
+                    Instruction::Index { container, out, .. } => {
+                        // Check if we know this array's element type
+                        if let Some(dtype) = self.array_element_types.get(container) {
+                            match dtype {
+                                hlx_core::instruction::DType::F32 | hlx_core::instruction::DType::F64 => ValueType::Float,
+                                _ => {
+                                    // If the output is used as an array later, keep it as Pointer
+                                    if used_as_arrays.contains(out) {
+                                        ValueType::Pointer
+                                    } else {
+                                        ValueType::Int
+                                    }
+                                }
+                            }
+                        } else {
+                            // For untyped arrays, if the output is used as array, it's Pointer
+                            if used_as_arrays.contains(out) {
+                                ValueType::Pointer
+                            } else {
+                                ValueType::Int
+                            }
+                        }
+                    }
+
+                    // Comparison operators produce Int (boolean)
+                    Instruction::Eq { out, .. } | Instruction::Ne { out, .. } |
+                    Instruction::Lt { out, .. } | Instruction::Gt { out, .. } |
+                    Instruction::Le { out, .. } | Instruction::Ge { out, .. } => {
+                        ValueType::Int
+                    }
+
+                    // Default to int for everything else
+                    _ => ValueType::Int,
+                };
+
+                types.insert(out_reg, reg_type);
+            }
+
+            pc += 1;
+        }
+
+        types
+    }
+
+    fn compile_function(&mut self, name: &str, params: &[Register], start_pc: u32, instructions: &[Instruction]) -> Result<()> {
+        let function = *self.functions.get(name).ok_or_else(|| anyhow!("Fn missing: {}", name))?;
         self.reg_map.clear();
         self.reg_types.clear();
         self.block_map.clear();
         let entry_bb = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry_bb);
+
+        // Create debug subprogram for this function
+        if let (Some(debug_builder), Some(debug_file), Some(debug_compile_unit)) =
+            (&self.debug_builder, &self.debug_file, &self.debug_compile_unit) {
+            // Get line number for function start (if available from debug symbols)
+            let func_line = self.debug_symbols.get(&(start_pc as usize))
+                .map(|(line, _)| *line)
+                .unwrap_or(1);
+
+            let di_type = debug_builder.create_subroutine_type(
+                *debug_file,
+                None,  // return_type - simplified
+                &[],  // params - simplified for now
+                0,  // flags
+            );
+
+            // Create DISubprogram for this function
+            let di_subprogram = debug_builder.create_function(
+                (*debug_file).as_debug_info_scope(),  // dereference then convert to scope
+                name,
+                None,  // linkage_name
+                *debug_file,
+                func_line,
+                di_type,
+                true,  // is_local_to_unit
+                true,  // is_definition
+                func_line,  // scope_line
+                0,  // flags
+                false,  // is_optimized
+            );
+
+            function.set_subprogram(di_subprogram);
+        }
+
+        // STEP 1: Build Control Flow Graph
+        let cfg = ControlFlowGraph::build(start_pc, instructions)
+            .map_err(|e| anyhow!("CFG construction failed for '{}': {}", name, e))?;
+
+        // Validate CFG (warns about unreachable blocks)
+        cfg.validate_reachability()?;
+
+        // STEP 2: Infer types for all registers
+        let register_types = self.infer_register_types(start_pc, instructions);
+
+        // STEP 3: Collect used registers and create LLVM BasicBlocks for all block leaders
         let mut pc = start_pc as usize;
         let mut used_regs = HashSet::new();
         for &r in params { used_regs.insert(r); }
+
+        let block_leaders = cfg.block_leaders();
+
         while pc < instructions.len() {
             let inst = &instructions[pc];
             if pc > start_pc as usize && matches!(inst, Instruction::FuncDef { .. }) { break; }
             if let Some(r) = inst.output_register() { used_regs.insert(r); }
             for &r in &inst.input_registers() { used_regs.insert(r); }
-            if all_targets.contains(&(pc as u32)) || pc == start_pc as usize {
-                let bb = self.context.append_basic_block(function, &format!("pc_{}", pc));
+
+            // Create LLVM BasicBlock for each block leader
+            if block_leaders.contains(&(pc as u32)) {
+                let bb = self.context.append_basic_block(function, &format!("bb_{}", pc));
                 self.block_map.insert(pc as u32, bb);
             }
             pc += 1;
         }
+
+        // STEP 4: Allocate registers with their inferred types
         for &r in &used_regs {
             let ptr = self.builder.build_alloca(self.context.i64_type(), &format!("r{}", r))?;
             self.reg_map.insert(r, ptr);
         }
-        for (i, &reg) in params.iter().enumerate() {
-            let val = function.get_nth_param(i as u32).unwrap();
-            // Params are assumed to be integers for now, matching the old behavior
-            // but we wrap them in the new typed store_reg
-            self.store_reg(reg, val, ValueType::Int)?;
+
+        // Initialize parameter types from global signatures
+        if let Some(sig) = self.function_signatures.get(name).cloned() {
+            for (i, &reg) in params.iter().enumerate() {
+                if let Some(dtype) = sig.get(i) {
+                    // If it's an array, register its element type for propagation
+                    if let hlx_core::instruction::DType::Array(inner) = dtype {
+                        self.array_element_types.insert(reg, (**inner).clone());
+                    }
+                }
+            }
         }
-        self.builder.build_unconditional_branch(*self.block_map.get(&start_pc).unwrap())?;
+
+        for (i, &reg) in params.iter().enumerate() {
+            let val = self.get_param(function, i as u32, &format!("param_{}", i))?;
+
+            // Determine ValueType from signature
+            let v_type = if let Some(sig) = self.function_signatures.get(name) {
+                if let Some(dtype) = sig.get(i) {
+                    match dtype {
+                        hlx_core::instruction::DType::F32 | hlx_core::instruction::DType::F64 => ValueType::Float,
+                        hlx_core::instruction::DType::Array(_) => ValueType::Pointer,
+                        _ => ValueType::Int,
+                    }
+                } else { ValueType::Int }
+            } else { ValueType::Int };
+
+            self.store_reg(reg, val, v_type)?;
+        }
+        let start_block = self.get_block(start_pc)?;
+        self.builder.build_unconditional_branch(start_block)?;
         pc = start_pc as usize;
         while pc < instructions.len() {
             if let Some(bb) = self.builder.get_insert_block() {
@@ -408,23 +977,42 @@ impl<'ctx> CodeGen<'ctx> {
             let inst = &instructions[pc];
             if pc > start_pc as usize && matches!(inst, Instruction::FuncDef { .. }) { break; }
             if let Some(bb) = self.block_map.get(&(pc as u32)) {
-                if self.builder.get_insert_block().unwrap() != *bb {
-                    if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+                let current = self.current_block()?;
+                if current != *bb {
+                    if current.get_terminator().is_none() {
                         self.builder.build_unconditional_branch(*bb)?;
                     }
                     self.builder.position_at_end(*bb);
                 }
             }
+
+            // Set debug location for this instruction
+            if let Some((line, col)) = self.debug_symbols.get(&pc) {
+                if let (Some(debug_builder), Some(debug_file)) =
+                    (&self.debug_builder, &self.debug_file) {
+                    let loc = debug_builder.create_debug_location(
+                        self.context,
+                        *line,
+                        *col,
+                        (*debug_file).as_debug_info_scope(),  // dereference then convert
+                        None,
+                    );
+                    self.builder.set_current_debug_location(loc);
+                }
+            }
+
             self.compile_inst(inst)?;
             pc += 1;
         }
-        if self.builder.get_insert_block().unwrap().get_terminator().is_none() {
+        let current_block = self.current_block()?;
+        if current_block.get_terminator().is_none() {
             self.builder.build_return(Some(&self.context.i64_type().const_int(0, false)))?;
         }
         Ok(())
     }
     
     fn compile_inst(&mut self, inst: &Instruction) -> Result<()> {
+        // println!("DEBUG: Compiling inst {:?}", inst);
         let i64_t = self.context.i64_type();
         let ptr_t = self.context.ptr_type(inkwell::AddressSpace::default());
         match inst {
@@ -445,6 +1033,35 @@ impl<'ctx> CodeGen<'ctx> {
                     (ValueType::Float, ValueType::Float) => {
                         let res = self.builder.build_float_add(l.into_float_value(), r.into_float_value(), "fadd")?;
                         (res.into(), ValueType::Float)
+                    }
+                    (ValueType::Pointer, ValueType::Pointer) => {
+                        // String concatenation
+                        let malloc = self.get_function("malloc")?;
+                        let strlen = self.get_function("strlen")?;
+                        let strcpy = self.get_function("strcpy")?;
+                        let strcat = self.get_function("strcat")?;
+
+                        let l_len_result = self.builder.build_call(strlen, &[l.into()], "l_len")?
+                            .try_as_basic_value().left()
+                            .ok_or_else(|| anyhow!("strlen call returned void"))?;
+                        let l_len = l_len_result.into_int_value();
+
+                        let r_len_result = self.builder.build_call(strlen, &[r.into()], "r_len")?
+                            .try_as_basic_value().left()
+                            .ok_or_else(|| anyhow!("strlen call returned void"))?;
+                        let r_len = r_len_result.into_int_value();
+
+                        let total_len = self.builder.build_int_add(l_len, r_len, "sum_len")?;
+                        let total_len_plus_1 = self.builder.build_int_add(total_len, self.context.i64_type().const_int(1, false), "len_plus_1")?;
+
+                        let new_str = self.builder.build_call(malloc, &[total_len_plus_1.into()], "new_str")?
+                            .try_as_basic_value().left()
+                            .ok_or_else(|| anyhow!("malloc call for string concatenation returned void"))?;
+
+                        self.builder.build_call(strcpy, &[new_str.into(), l.into()], "copy_l")?;
+                        self.builder.build_call(strcat, &[new_str.into(), r.into()], "cat_r")?;
+
+                        (new_str, ValueType::Pointer)
                     }
                     _ => return Err(anyhow!("Type mismatch in Add: {:?} + {:?}", l_type, r_type)),
                 };
@@ -551,6 +1168,14 @@ impl<'ctx> CodeGen<'ctx> {
                     (ValueType::Float, ValueType::Float) => {
                         self.builder.build_float_compare(FloatPredicate::OLT, l.into_float_value(), r.into_float_value(), "flt")?
                     }
+                    (ValueType::Int, ValueType::Float) => {
+                        let l_float = self.builder.build_signed_int_to_float(l.into_int_value(), self.context.f64_type(), "i2f")?;
+                        self.builder.build_float_compare(FloatPredicate::OLT, l_float, r.into_float_value(), "flt_mix")?
+                    }
+                    (ValueType::Float, ValueType::Int) => {
+                        let r_float = self.builder.build_signed_int_to_float(r.into_int_value(), self.context.f64_type(), "i2f")?;
+                        self.builder.build_float_compare(FloatPredicate::OLT, l.into_float_value(), r_float, "flt_mix")?
+                    }
                     _ => return Err(anyhow!("Type mismatch in Lt: {:?} < {:?}", l_type, r_type)),
                 };
 
@@ -567,6 +1192,14 @@ impl<'ctx> CodeGen<'ctx> {
                     }
                     (ValueType::Float, ValueType::Float) => {
                         self.builder.build_float_compare(FloatPredicate::OGT, l.into_float_value(), r.into_float_value(), "fgt")?
+                    }
+                    (ValueType::Int, ValueType::Float) => {
+                        let l_float = self.builder.build_signed_int_to_float(l.into_int_value(), self.context.f64_type(), "i2f")?;
+                        self.builder.build_float_compare(FloatPredicate::OGT, l_float, r.into_float_value(), "fgt_mix")?
+                    }
+                    (ValueType::Float, ValueType::Int) => {
+                        let r_float = self.builder.build_signed_int_to_float(r.into_int_value(), self.context.f64_type(), "i2f")?;
+                        self.builder.build_float_compare(FloatPredicate::OGT, l.into_float_value(), r_float, "fgt_mix")?
                     }
                     _ => return Err(anyhow!("Type mismatch in Gt: {:?} > {:?}", l_type, r_type)),
                 };
@@ -585,13 +1218,101 @@ impl<'ctx> CodeGen<'ctx> {
                     (ValueType::Float, ValueType::Float) => {
                         self.builder.build_float_compare(FloatPredicate::OEQ, l.into_float_value(), r.into_float_value(), "feq")?
                     }
+                    (ValueType::Int, ValueType::Float) => {
+                        let l_float = self.builder.build_signed_int_to_float(l.into_int_value(), self.context.f64_type(), "i2f")?;
+                        self.builder.build_float_compare(FloatPredicate::OEQ, l_float, r.into_float_value(), "feq_mix")?
+                    }
+                    (ValueType::Float, ValueType::Int) => {
+                        let r_float = self.builder.build_signed_int_to_float(r.into_int_value(), self.context.f64_type(), "i2f")?;
+                        self.builder.build_float_compare(FloatPredicate::OEQ, l.into_float_value(), r_float, "feq_mix")?
+                    }
                     _ => return Err(anyhow!("Type mismatch in Eq: {:?} == {:?}", l_type, r_type)),
                 };
 
                 let ext = self.builder.build_int_z_extend(res, self.context.i64_type(), "bool_ext")?;
                 self.store_reg(*out, ext.into(), ValueType::Int)?;
             }
+            Instruction::Ne { out, lhs, rhs } => {
+                let (l, l_type) = self.load_reg(*lhs)?;
+                let (r, r_type) = self.load_reg(*rhs)?;
+
+                let res = match (l_type, r_type) {
+                    (ValueType::Int, ValueType::Int) => {
+                        self.builder.build_int_compare(IntPredicate::NE, l.into_int_value(), r.into_int_value(), "ne")?
+                    }
+                    (ValueType::Float, ValueType::Float) => {
+                        self.builder.build_float_compare(FloatPredicate::ONE, l.into_float_value(), r.into_float_value(), "fne")?
+                    }
+                    (ValueType::Int, ValueType::Float) => {
+                        let l_float = self.builder.build_signed_int_to_float(l.into_int_value(), self.context.f64_type(), "i2f")?;
+                        self.builder.build_float_compare(FloatPredicate::ONE, l_float, r.into_float_value(), "fne_mix")?
+                    }
+                    (ValueType::Float, ValueType::Int) => {
+                        let r_float = self.builder.build_signed_int_to_float(r.into_int_value(), self.context.f64_type(), "i2f")?;
+                        self.builder.build_float_compare(FloatPredicate::ONE, l.into_float_value(), r_float, "fne_mix")?
+                    }
+                    _ => return Err(anyhow!("Type mismatch in Ne: {:?} != {:?}", l_type, r_type)),
+                };
+
+                let ext = self.builder.build_int_z_extend(res, self.context.i64_type(), "bool_ext")?;
+                self.store_reg(*out, ext.into(), ValueType::Int)?;
+            }
+            Instruction::Le { out, lhs, rhs } => {
+                let (l, l_type) = self.load_reg(*lhs)?;
+                let (r, r_type) = self.load_reg(*rhs)?;
+
+                let res = match (l_type, r_type) {
+                    (ValueType::Int, ValueType::Int) => {
+                        self.builder.build_int_compare(IntPredicate::SLE, l.into_int_value(), r.into_int_value(), "le")?
+                    }
+                    (ValueType::Float, ValueType::Float) => {
+                        self.builder.build_float_compare(FloatPredicate::OLE, l.into_float_value(), r.into_float_value(), "fle")?
+                    }
+                    (ValueType::Int, ValueType::Float) => {
+                        let l_float = self.builder.build_signed_int_to_float(l.into_int_value(), self.context.f64_type(), "i2f")?;
+                        self.builder.build_float_compare(FloatPredicate::OLE, l_float, r.into_float_value(), "fle_mix")?
+                    }
+                    (ValueType::Float, ValueType::Int) => {
+                        let r_float = self.builder.build_signed_int_to_float(r.into_int_value(), self.context.f64_type(), "i2f")?;
+                        self.builder.build_float_compare(FloatPredicate::OLE, l.into_float_value(), r_float, "fle_mix")?
+                    }
+                    _ => return Err(anyhow!("Type mismatch in Le: {:?} (reg {}) <= {:?} (reg {})", l_type, lhs, r_type, rhs)),
+                };
+
+                let ext = self.builder.build_int_z_extend(res, self.context.i64_type(), "bool_ext")?;
+                self.store_reg(*out, ext.into(), ValueType::Int)?;
+            }
+            Instruction::Ge { out, lhs, rhs } => {
+                let (l, l_type) = self.load_reg(*lhs)?;
+                let (r, r_type) = self.load_reg(*rhs)?;
+
+                let res = match (l_type, r_type) {
+                    (ValueType::Int, ValueType::Int) => {
+                        self.builder.build_int_compare(IntPredicate::SGE, l.into_int_value(), r.into_int_value(), "ge")?
+                    }
+                    (ValueType::Float, ValueType::Float) => {
+                        self.builder.build_float_compare(FloatPredicate::OGE, l.into_float_value(), r.into_float_value(), "fge")?
+                    }
+                    (ValueType::Int, ValueType::Float) => {
+                        let l_float = self.builder.build_signed_int_to_float(l.into_int_value(), self.context.f64_type(), "i2f")?;
+                        self.builder.build_float_compare(FloatPredicate::OGE, l_float, r.into_float_value(), "fge_mix")?
+                    }
+                    (ValueType::Float, ValueType::Int) => {
+                        let r_float = self.builder.build_signed_int_to_float(r.into_int_value(), self.context.f64_type(), "i2f")?;
+                        self.builder.build_float_compare(FloatPredicate::OGE, l.into_float_value(), r_float, "fge_mix")?
+                    }
+                    _ => return Err(anyhow!("Type mismatch in Ge: {:?} >= {:?}", l_type, r_type)),
+                };
+
+                let ext = self.builder.build_int_z_extend(res, self.context.i64_type(), "bool_ext")?;
+                self.store_reg(*out, ext.into(), ValueType::Int)?;
+            }
             Instruction::Call { out, func, args } => {
+                // DEBUG: Check function name
+                if func.contains("to_int") {
+                     println!("DEBUG: Call func='{}' len={} out={:?}", func, func.len(), out);
+                }
+                
                 // Builtin intrinsics
                 if func == "to_int" {
                     let (val, _) = self.load_reg(args[0])?;
@@ -615,14 +1336,36 @@ impl<'ctx> CodeGen<'ctx> {
                     self.store_reg(*out, res, ValueType::Float)?;
                     return Ok(());
                 }
+                if func == "as_float" {
+                    let (val, _) = self.load_reg(args[0])?;
+                    let res = if val.is_int_value() {
+                        self.builder.build_bit_cast(val.into_int_value(), self.context.f64_type(), "i_to_f_bits")?.into()
+                    } else {
+                        val
+                    };
+                    self.store_reg(*out, res, ValueType::Float)?;
+                    return Ok(());
+                }
+                if func == "as_int" {
+                    let (val, _) = self.load_reg(args[0])?;
+                    let res = if val.is_float_value() {
+                        self.builder.build_bit_cast(val.into_float_value(), self.context.i64_type(), "f_to_i_bits")?.into()
+                    } else {
+                        val
+                    };
+                    self.store_reg(*out, res, ValueType::Int)?;
+                    return Ok(());
+                }
                 if func == "to_string" {
                     let (val, val_type) = self.load_reg(args[0])?;
-                    let malloc = *self.functions.get("malloc").unwrap();
-                    let sprintf = *self.functions.get("sprintf").ok_or(anyhow!("sprintf missing"))?;
-                    
+                    let malloc = self.get_function("malloc")?;
+                    let sprintf = self.get_function("sprintf")?;
+
                     // Allocate 32 bytes for the string
-                    let buf = self.builder.build_call(malloc, &[self.context.i64_type().const_int(32, false).into()], "buf")?
-                        .try_as_basic_value().left().unwrap().into_pointer_value();
+                    let buf_result = self.builder.build_call(malloc, &[self.context.i64_type().const_int(32, false).into()], "buf")?
+                        .try_as_basic_value().left()
+                        .ok_or_else(|| anyhow!("malloc call for to_string buffer returned void"))?;
+                    let buf = self.call_result_to_ptr(buf_result, "malloc(to_string)")?;
                     
                     let fmt_str = match val_type {
                         ValueType::Float => "%f\0",
@@ -697,7 +1440,14 @@ impl<'ctx> CodeGen<'ctx> {
             }
             Instruction::Return { val } => {
                 let (v, _v_type) = self.load_reg(*val)?;
-                self.builder.build_return(Some(&v))?;
+                let ret_val = if v.is_pointer_value() {
+                    self.builder.build_ptr_to_int(v.into_pointer_value(), self.context.i64_type(), "ret_cast")?.into()
+                } else if v.is_float_value() {
+                    self.builder.build_bit_cast(v.into_float_value(), self.context.i64_type(), "ret_cast")?.into()
+                } else {
+                    v
+                };
+                self.builder.build_return(Some(&ret_val))?;
             }
             Instruction::Jump { target } => {
                 let bb = self.get_block(*target)?;
@@ -705,7 +1455,11 @@ impl<'ctx> CodeGen<'ctx> {
             }
             Instruction::If { cond, then_block, else_block } => {
                 let (c, _c_type) = self.load_reg(*cond)?;
-                let c_int = c.into_int_value();
+                let c_int = if c.is_pointer_value() {
+                    self.builder.build_ptr_to_int(c.into_pointer_value(), self.context.i64_type(), "ptr_check")?
+                } else {
+                    c.into_int_value()
+                };
                 let zero = self.context.i64_type().const_int(0, false);
                 let is_nonzero = self.builder.build_int_compare(IntPredicate::NE, c_int, zero, "is_nonzero")?;
                 let t = self.get_block(*then_block)?;
@@ -716,65 +1470,204 @@ impl<'ctx> CodeGen<'ctx> {
                 let (v, v_type) = self.load_reg(*src)?;
                 self.store_reg(*out, v, v_type)?;
             }
-            Instruction::ArrayCreate { out, elements } => {
-                let malloc = *self.functions.get("malloc").unwrap();
+            Instruction::ArrayCreate { out, elements, element_type } => {
+                // Track element type for later Index/Store operations (supports nesting!)
+                if let Some(dtype) = element_type {
+                    self.array_element_types.insert(*out, dtype.clone());
+                }
+
+                // TODO: Use element_type to create properly typed arrays
+                // For now, fall back to i64 storage for backwards compatibility
+
+                let malloc = self.get_function("malloc")?;
                 let ptr_val = self.builder.build_call(malloc, &[i64_t.const_int(elements.len() as u64 * 8, false).into()], "malloc_call")?
-                    .try_as_basic_value().left().unwrap();
+                    .try_as_basic_value().left()
+                    .ok_or_else(|| anyhow!("malloc call for ArrayCreate returned void"))?;
                 let ptr = ptr_val.into_pointer_value();
                 for (i, &reg) in elements.iter().enumerate() {
                     let (val, _v_type) = self.load_reg(reg)?;
                     let idx = self.context.i64_type().const_int(i as u64, false);
+                    let val_to_store = if val.is_float_value() {
+                        self.builder.build_bit_cast(val.into_float_value(), self.context.i64_type(), "f_to_i")?.into()
+                    } else if val.is_pointer_value() {
+                        self.builder.build_ptr_to_int(val.into_pointer_value(), self.context.i64_type(), "p_to_i")?.into()
+                    } else {
+                        val
+                    };
                     unsafe {
                         let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
-                        self.builder.build_store(elem_ptr, val)?;
+                        self.builder.build_store(elem_ptr, val_to_store)?;
                     }
                 }
                 self.store_reg(*out, ptr_val, ValueType::Pointer)?;
             }
-            Instruction::ArrayAlloc { out, size } => {
+            Instruction::ArrayAlloc { out, size, element_type } => {
                 let (size_val, _) = self.load_reg(*size)?;
-                let bytes = self.builder.build_int_mul(size_val.into_int_value(), i64_t.const_int(8, false), "bytes")?;
-                let malloc = *self.functions.get("malloc").unwrap();
+
+                // Track element type for later Index/Store operations (supports nesting!)
+                if let Some(dtype) = element_type {
+                    self.array_element_types.insert(*out, dtype.clone());
+                }
+
+                // Determine element size based on base type
+                let elem_size = if let Some(dtype) = element_type {
+                    // For nested arrays, we store pointers (8 bytes)
+                    // For primitives, we store the actual size
+                    match Self::get_base_dtype(dtype) {
+                        hlx_core::instruction::DType::F32 => 4,
+                        hlx_core::instruction::DType::F64 => 8,
+                        hlx_core::instruction::DType::I32 => 4,
+                        hlx_core::instruction::DType::I64 => 8,
+                        hlx_core::instruction::DType::Bool => 1,
+                        hlx_core::instruction::DType::Array(_) => 8, // Nested arrays are pointers
+                    }
+                } else {
+                    // Untyped arrays default to 8-byte elements (i64/pointer)
+                    8
+                };
+
+                let bytes = self.builder.build_int_mul(
+                    size_val.into_int_value(),
+                    i64_t.const_int(elem_size, false),
+                    "bytes"
+                )?;
+                let malloc = self.get_function("malloc")?;
                 let ptr_val = self.builder.build_call(malloc, &[bytes.into()], "malloc_call")?
-                    .try_as_basic_value().left().unwrap();
+                    .try_as_basic_value().left()
+                    .ok_or_else(|| anyhow!("malloc call for ArrayAlloc returned void"))?;
                 self.store_reg(*out, ptr_val, ValueType::Pointer)?;
             }
             Instruction::Index { out, container, index } => {
                 let (ptr_val, _) = self.load_reg(*container)?;
                 let (idx_val, _) = self.load_reg(*index)?;
-                let ptr = ptr_val.into_pointer_value();
+                let ptr = if ptr_val.is_pointer_value() {
+                    ptr_val.into_pointer_value()
+                } else {
+                    self.builder.build_int_to_ptr(ptr_val.into_int_value(), self.context.ptr_type(inkwell::AddressSpace::default()), "int_to_ptr")? 
+                };
                 let idx = idx_val.into_int_value();
-                unsafe {
-                    let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
-                    let val = self.builder.build_load(self.context.i64_type(), elem_ptr, "elem_load")?;
-                    self.store_reg(*out, val, ValueType::Int)?;
+
+                // Check if we know the element type of this array
+                if let Some(dtype) = self.array_element_types.get(container).cloned() {
+                    // Check if this is a nested array (Array<Array<T>> or deeper)
+                    if let Some(inner_dtype) = Self::get_inner_dtype(&dtype) {
+                        // This is an array-of-arrays! Load pointer and propagate inner type
+                        unsafe {
+                            let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
+                            let val = self.builder.build_load(self.context.i64_type(), elem_ptr, "elem_load")?;
+                            self.store_reg(*out, val, ValueType::Pointer)?;
+                            // Propagate the inner array's element type (clean, no HashMap!)
+                            self.array_element_types.insert(*out, inner_dtype);
+                        }
+                    } else {
+                        // Regular typed array (primitives)
+                        let (llvm_type, value_type) = match dtype {
+                            hlx_core::instruction::DType::F32 => (self.context.f32_type().as_basic_type_enum(), ValueType::Float),
+                            hlx_core::instruction::DType::F64 => (self.context.f64_type().as_basic_type_enum(), ValueType::Float),
+                            hlx_core::instruction::DType::I32 => (self.context.i32_type().as_basic_type_enum(), ValueType::Int),
+                            hlx_core::instruction::DType::I64 => (self.context.i64_type().as_basic_type_enum(), ValueType::Int),
+                            hlx_core::instruction::DType::Bool => (self.context.bool_type().as_basic_type_enum(), ValueType::Int),
+                            hlx_core::instruction::DType::Array(_) => unreachable!("Array case handled above"),
+                        };
+                        unsafe {
+                            let elem_ptr = self.builder.build_gep(llvm_type, ptr, &[idx], "gep")?;
+                            let val = self.builder.build_load(llvm_type, elem_ptr, "elem_load")?;
+                            self.store_reg(*out, val, value_type)?;
+                        }
+                    }
+                } else {
+                    // Fall back to i64 for untyped arrays
+                    unsafe {
+                        let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
+                        let val = self.builder.build_load(self.context.i64_type(), elem_ptr, "elem_load")?;
+                        self.store_reg(*out, val, ValueType::Int)?;
+                    }
                 }
             }
             Instruction::Store { container, index, value } => {
                 let (ptr_val, _) = self.load_reg(*container)?;
                 let (idx_val, _) = self.load_reg(*index)?;
                 let (val, _) = self.load_reg(*value)?;
-                let ptr = ptr_val.into_pointer_value();
+                let ptr = if ptr_val.is_pointer_value() {
+                    ptr_val.into_pointer_value()
+                } else {
+                    self.builder.build_int_to_ptr(ptr_val.into_int_value(), self.context.ptr_type(inkwell::AddressSpace::default()), "int_to_ptr")? 
+                };
                 let idx = idx_val.into_int_value();
-                unsafe {
-                    let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
-                    self.builder.build_store(elem_ptr, val)?;
+
+                // Check if we know the element type of this array
+                if let Some(dtype) = self.array_element_types.get(container).cloned() {
+                    // Handle nested arrays (store as pointers) vs primitives
+                    if let hlx_core::instruction::DType::Array(_) = &dtype {
+                        // Storing into array-of-arrays: store pointer as i64
+                        let val_to_store = if val.is_pointer_value() {
+                            self.builder.build_ptr_to_int(val.into_pointer_value(), self.context.i64_type(), "p_to_i")?.into()
+                        } else {
+                            val
+                        };
+                        unsafe {
+                            let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
+                            self.builder.build_store(elem_ptr, val_to_store)?;
+                        }
+                    } else {
+                        // Storing primitives: use typed store - NO BITCASTING!
+                        let llvm_type = match dtype {
+                            hlx_core::instruction::DType::F32 => self.context.f32_type().as_basic_type_enum(),
+                            hlx_core::instruction::DType::F64 => self.context.f64_type().as_basic_type_enum(),
+                            hlx_core::instruction::DType::I32 => self.context.i32_type().as_basic_type_enum(),
+                            hlx_core::instruction::DType::I64 => self.context.i64_type().as_basic_type_enum(),
+                            hlx_core::instruction::DType::Bool => self.context.bool_type().as_basic_type_enum(),
+                            hlx_core::instruction::DType::Array(_) => unreachable!("Array case handled above"),
+                        };
+                        unsafe {
+                            let elem_ptr = self.builder.build_gep(llvm_type, ptr, &[idx], "gep")?;
+                            self.builder.build_store(elem_ptr, val)?;
+                        }
+                    }
+                } else {
+                    // Fall back to i64 storage with bitcasting for untyped arrays
+                    let val_to_store = if val.is_float_value() {
+                        self.builder.build_bit_cast(val.into_float_value(), self.context.i64_type(), "f_to_i")?.into()
+                    } else if val.is_pointer_value() {
+                        self.builder.build_ptr_to_int(val.into_pointer_value(), self.context.i64_type(), "p_to_i")?.into()
+                    } else {
+                        val
+                    };
+                    unsafe {
+                        let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
+                        self.builder.build_store(elem_ptr, val_to_store)?;
+                    }
                 }
             }
             Instruction::TensorCreate { out, shape, .. } => {
-                let ptr_val = self.builder.build_call(self.module.get_function("__hlx_tensor_create").unwrap(), &[i64_t.const_int(shape[0] as u64, false).into(), i64_t.const_int(shape[1] as u64, false).into()], "ta")?.try_as_basic_value().left().unwrap();
+                let create_func = self.get_function("__hlx_tensor_create")?;
+                let ptr_val = self.builder.build_call(create_func, &[i64_t.const_int(shape[0] as u64, false).into(), i64_t.const_int(shape[1] as u64, false).into()], "ta")?
+                    .try_as_basic_value().left()
+                    .ok_or_else(|| anyhow!("__hlx_tensor_create call returned void"))?;
                 self.store_reg(*out, ptr_val, ValueType::Pointer)?;
             }
             Instruction::MatMul { out, lhs, rhs } => {
                 let (a, _) = self.load_reg(*lhs)?;
                 let (b, _) = self.load_reg(*rhs)?;
-                let res_val = self.builder.build_call(self.module.get_function("__hlx_matmul").unwrap(), &[a.into(), b.into()], "mm")?.try_as_basic_value().left().unwrap();
+                let matmul_func = self.get_function("__hlx_matmul")?;
+                let res_val = self.builder.build_call(matmul_func, &[a.into(), b.into()], "mm")?
+                    .try_as_basic_value().left()
+                    .ok_or_else(|| anyhow!("__hlx_matmul call returned void"))?;
                 self.store_reg(*out, res_val, ValueType::Pointer)?;
             }
             Instruction::Print { val } => {
-                let (v, _) = self.load_reg(*val)?;
-                let f = *self.functions.get("printf").unwrap();
-                let fmt = self.context.const_string(b"%lld\n\0", false);
+                let (v, v_type) = self.load_reg(*val)?;
+                let f = self.get_function("printf")?;
+                
+                let fmt_str = if v_type == ValueType::Pointer {
+                    b"%s\n\0" as &[u8]
+                } else if v_type == ValueType::Float {
+                    b"%f\n\0" as &[u8]
+                } else {
+                    b"%lld\n\0" as &[u8]
+                };
+
+                let fmt = self.context.const_string(fmt_str, false);
                 let g = self.module.add_global(fmt.get_type(), Some(inkwell::AddressSpace::default()), "fi");
                 g.set_initializer(&fmt); g.set_constant(true); g.set_linkage(Linkage::Internal);
                 let gep = unsafe { self.builder.build_gep(fmt.get_type(), g.as_pointer_value(), &[self.context.i32_type().const_int(0, false), self.context.i32_type().const_int(0, false)], "fg")? };
@@ -782,7 +1675,7 @@ impl<'ctx> CodeGen<'ctx> {
             }
             Instruction::PrintStr { val } => {
                 let (v, _) = self.load_reg(*val)?;
-                let f = *self.functions.get("printf").unwrap();
+                let f = self.get_function("printf")?;
                 let fmt = self.context.const_string(b"%s\n\0", false);
                 let g = self.module.add_global(fmt.get_type(), Some(inkwell::AddressSpace::default()), "fs");
                 g.set_initializer(&fmt); g.set_constant(true); g.set_linkage(Linkage::Internal);
@@ -819,7 +1712,7 @@ impl<'ctx> CodeGen<'ctx> {
                     }
                 }
             }
-            _ => {}
+            _ => {} 
         }
         Ok(())
     }
@@ -848,7 +1741,7 @@ impl<'ctx> CodeGen<'ctx> {
                 let ptr_as_int = self.builder.build_ptr_to_int(gep, i64_t, "pi")?;
                 Ok((ptr_as_int.into(), ValueType::Pointer))
             }
-            _ => Err(anyhow!("Unsupported constant: {:?}", val)),
+            _ => Err(anyhow!("Unsupported constant: {}", val)),
         }
     }
     
@@ -858,30 +1751,19 @@ impl<'ctx> CodeGen<'ctx> {
             // Detailed error for debugging
             let known_regs: Vec<_> = self.reg_types.keys().copied().collect();
             anyhow!(
-                "Reg type missing for r{}.\n\
-                \n\
-                This means the compiler tried to load from a register that was never stored to.\n\
-                Known typed registers: {:?}\n\
-                \n\
-                Possible causes:\n\
-                1. User code has uninitialized variable (LSP should catch this)\n\
-                2. Compiler bug: IR generator emitted Load before Store\n\
-                3. Backend bug: Instruction didn't call store_reg() for output\n\
-                \n\
-                See DEBUGGING_REG_TYPE_MISSING.md for investigation steps.",
+                "Reg type missing for r{}.\n\nThis means the compiler tried to load from a register that was never stored to.\nKnown typed registers: {:?}\n\nPossible causes:\n1. User code has uninitialized variable (LSP should catch this)\n2. Compiler bug: IR generator emitted Load before Store\n3. Backend bug: Instruction didn't call store_reg() for output\n\nSee DEBUGGING_REG_TYPE_MISSING.md for investigation steps.",
                 reg, known_regs
             )
         })?;
 
-        // Registers are allocated as i64, bitcast to f64 if needed
+        // Always load as i64 (storage type)
+        let i64_val = self.builder.build_load(self.context.i64_type(), *ptr, "reg_load")?.into_int_value();
+
+        // Cast back to val_type
         let val = match val_type {
-            ValueType::Int | ValueType::Pointer => {
-                self.builder.build_load(self.context.i64_type(), *ptr, "reg_load")?
-            }
-            ValueType::Float => {
-                let as_int = self.builder.build_load(self.context.i64_type(), *ptr, "reg_load_int")?;
-                self.builder.build_bit_cast(as_int, self.context.f64_type(), "int_to_float")?
-            }
+            ValueType::Int => i64_val.into(),
+            ValueType::Float => self.builder.build_bit_cast(i64_val, self.context.f64_type(), "i2f")?.into(),
+            ValueType::Pointer => self.builder.build_int_to_ptr(i64_val, self.context.ptr_type(inkwell::AddressSpace::default()), "i2p")?.into(),
         };
 
         Ok((val, val_type))
@@ -890,28 +1772,25 @@ impl<'ctx> CodeGen<'ctx> {
     fn store_reg(&mut self, reg: Register, val: BasicValueEnum<'ctx>, val_type: ValueType) -> Result<()> {
         let ptr = self.reg_map.get(&reg).ok_or_else(|| anyhow!("Reg missing"))?;
 
-        // If storing float, bitcast to i64 first (all registers are i64 allocas)
-        let to_store = match val_type {
-            ValueType::Int | ValueType::Pointer => val,
-            ValueType::Float => {
-                self.builder.build_bit_cast(val, self.context.i64_type(), "float_to_int")?
-            }
+        // Cast to i64 (storage type)
+        let val_to_store = if val.is_pointer_value() {
+            self.builder.build_ptr_to_int(val.into_pointer_value(), self.context.i64_type(), "p2i")?.into()
+        } else if val.is_float_value() {
+            self.builder.build_bit_cast(val.into_float_value(), self.context.i64_type(), "f2i")?.into()
+        } else {
+            val
         };
 
-        self.builder.build_store(*ptr, to_store)?;
+        self.builder.build_store(*ptr, val_to_store)?;
         self.reg_types.insert(reg, val_type);
         Ok(())
-    }
-    
-    fn get_block(&self, target: u32) -> Result<BasicBlock<'ctx>> {
-        self.block_map.get(&target).copied().ok_or_else(|| anyhow!("Target missing"))
     }
 
     pub fn print_ir(&self) { self.module.print_to_stderr(); }
 
     pub fn run_jit(&self) -> Result<i64> {
         let ee = self.module.create_jit_execution_engine(OptimizationLevel::None)
-            .map_err(|e| anyhow!("Failed to create JIT: {:?}", e))?;
+            .map_err(|e| anyhow!("Failed to create JIT: {}", e))?;
         unsafe {
             let func = ee.get_function::<unsafe extern "C" fn() -> i64>("main")?;
             Ok(func.call())
@@ -924,7 +1803,8 @@ impl<'ctx> CodeGen<'ctx> {
         let target = Target::from_triple(&triple)
             .map_err(|e| anyhow!("Target error: {}", e))?;
 
-        let triple_str = triple.as_str().to_str().unwrap();
+        let triple_str = triple.as_str().to_str()
+            .map_err(|_| anyhow!("Target triple contains invalid UTF-8"))?;
         let is_bare_metal = triple_str.contains("none");
 
         let cpu_name = TargetMachine::get_host_cpu_name();
@@ -933,13 +1813,15 @@ impl<'ctx> CodeGen<'ctx> {
         let cpu = if is_bare_metal {
             "generic"
         } else {
-            cpu_name.to_str().unwrap()
+            cpu_name.to_str()
+                .map_err(|_| anyhow!("CPU name contains invalid UTF-8"))?
         };
 
         let features = if is_bare_metal {
             ""
         } else {
-            cpu_features.to_str().unwrap()
+            cpu_features.to_str()
+                .map_err(|_| anyhow!("CPU features string contains invalid UTF-8"))?
         };
 
         let target_machine = target.create_target_machine(
@@ -963,7 +1845,8 @@ impl<'ctx> CodeGen<'ctx> {
         let target = Target::from_triple(&triple)
             .map_err(|e| anyhow!("Target error: {}", e))?;
 
-        let triple_str = triple.as_str().to_str().unwrap();
+        let triple_str = triple.as_str().to_str()
+            .map_err(|_| anyhow!("Target triple contains invalid UTF-8"))?;
         let is_bare_metal = triple_str.contains("none");
 
         let cpu_name = TargetMachine::get_host_cpu_name();
@@ -972,13 +1855,15 @@ impl<'ctx> CodeGen<'ctx> {
         let cpu = if is_bare_metal {
             "generic"
         } else {
-            cpu_name.to_str().unwrap()
+            cpu_name.to_str()
+                .map_err(|_| anyhow!("CPU name contains invalid UTF-8"))?
         };
 
         let features = if is_bare_metal {
             ""
         } else {
-            cpu_features.to_str().unwrap()
+            cpu_features.to_str()
+                .map_err(|_| anyhow!("CPU features string contains invalid UTF-8"))?
         };
 
         let target_machine = target.create_target_machine(
@@ -1034,20 +1919,16 @@ impl<'ctx> hlx_runtime::backend::BackendCapability for CodeGen<'ctx> {
             "append".to_string(),
             "slice".to_string(),
 
-            // NOTABLY MISSING: Math functions (sin, cos, tan, log, exp)
-            // These require libc linking which isn't set up yet
-            // "sin" - ❌ NOT IN LLVM BACKEND YET
-            // "cos" - ❌ NOT IN LLVM BACKEND YET
-            // "tan" - ❌ NOT IN LLVM BACKEND YET
-            // "log" - ❌ NOT IN LLVM BACKEND YET
-            // "exp" - ❌ NOT IN LLVM BACKEND YET
-
-            // JSON operations - may need external lib
-            // "json_parse" - ❌ NOT IN LLVM BACKEND YET
-            // "json_stringify" - ❌ NOT IN LLVM BACKEND YET
-
-            // HTTP operations - definitely needs external lib
-            // "http_request" - ❌ NOT IN LLVM BACKEND YET
+            // Math functions (NOW SUPPORTED!)
+            "sin".to_string(),
+            "cos".to_string(),
+            "tan".to_string(),
+            "sqrt".to_string(),
+            "log".to_string(),
+            "exp".to_string(),
+            "floor".to_string(),
+            "ceil".to_string(),
+            "round".to_string(),
         ]
     }
 

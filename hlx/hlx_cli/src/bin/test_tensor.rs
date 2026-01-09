@@ -7,7 +7,7 @@ use std::fs;
 
 fn main() -> anyhow::Result<()> {
     let context = Context::create();
-    let mut codegen = CodeGen::new(&context, "tensor_test");
+    let mut codegen = CodeGen::new(&context, "tensor_test")?;
     
     println!("Loading tensor library...");
     let lib_src = fs::read_to_string("lib/tensor.hlxa")?;

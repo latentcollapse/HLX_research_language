@@ -362,11 +362,26 @@ fn inspect(input: &PathBuf, json: bool) -> Result<()> {
             if let Some(ver) = &meta.compiler_version {
                 println!("  Compiler: {}", ver);
             }
+            if !meta.debug_symbols.is_empty() {
+                println!("  Debug symbols: {} entries", meta.debug_symbols.len());
+            }
         }
-        
+
+        // Build debug symbol map for display
+        let mut debug_map = std::collections::HashMap::new();
+        if let Some(meta) = &krate.metadata {
+            for sym in &meta.debug_symbols {
+                debug_map.insert(sym.inst_idx, (sym.line, sym.col));
+            }
+        }
+
         println!("\nInstructions:");
         for (i, inst) in krate.instructions.iter().enumerate() {
-            println!("  {:4}: {:?}", i, inst);
+            if let Some((line, col)) = debug_map.get(&i) {
+                println!("  {:4}: [line {}:{}] {:?}", i, line, col, inst);
+            } else {
+                println!("  {:4}: {:?}", i, inst);
+            }
         }
     }
     
@@ -685,10 +700,10 @@ fn compile_native(
     let context = Context::create();
     let mut codegen = if let Some(target_triple) = target {
         println!("Compiling for target: {}", target_triple);
-        CodeGen::with_target(&context, "hlx_program", Some(target_triple))
+        CodeGen::with_target(&context, "hlx_program", Some(target_triple))?
     } else {
         println!("Compiling for host target");
-        CodeGen::new(&context, "hlx_program")
+        CodeGen::new(&context, "hlx_program")?
     };
 
     // Compile crate to LLVM IR

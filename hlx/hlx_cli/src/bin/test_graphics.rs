@@ -7,7 +7,7 @@ use std::fs;
 
 fn main() -> anyhow::Result<()> {
     let context = Context::create();
-    let mut codegen = CodeGen::new(&context, "graphics_test");
+    let mut codegen = CodeGen::new(&context, "graphics_test")?;
     
     println!("Loading libraries...");
     let gfx_src = fs::read_to_string("lib/graphics.hlxa")?;

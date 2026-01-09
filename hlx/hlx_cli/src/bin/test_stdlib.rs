@@ -7,7 +7,7 @@ use std::fs;
 
 fn main() -> anyhow::Result<()> {
     let context = Context::create();
-    let mut codegen = CodeGen::new(&context, "stdlib_test");
+    let mut codegen = CodeGen::new(&context, "stdlib_test")?;
 
     println!("Loading standard libraries...");
 
