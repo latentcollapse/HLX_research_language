@@ -149,14 +149,14 @@ The self-hosted compiler is ~76KB of readable code. Study a real compiler that c
 - Panic-proof LLVM backend (all error paths handled)
 - Native code generation (x86_64, ARM, bare-metal)
 - SPIR-V GPU compute backend
-- LSP with go-to-definition and diagnostics
+- LSP with semantic tokens (Phase 1 & 2 complete)
 - DWARF debugging support
 - Standard library (math, vector, I/O)
 - Cryptographic verification (SHA256)
 - Three-stage bootstrap (Stage 2 == Stage 3)
+- Optional type annotations
 
 ### 🚧 In Progress
-- LSP Phase 2 (autocomplete, semantic tokens)
 - Package manager (`hlx get`)
 - Code formatter (`hlx fmt`)
 - Foreign Function Interface (FFI)
