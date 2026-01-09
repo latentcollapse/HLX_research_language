@@ -71,7 +71,7 @@ Compile and run:
 ./bootstrap.sh
 
 # Expected hash (verify on your machine):
-# 5b8fa2ee59205fbf6e8710570db3ab0ddf59a3b4c5cbbbe64312923ade111f20
+# c92fbf41f1395c614703f15f0d6417c5b0f0ef35f2e24f871bb874bae90bb184
 ```
 
 ## Architecture
