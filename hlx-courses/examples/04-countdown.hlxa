@@ -1,0 +1,22 @@
+// Chapter 4: Repeating Actions
+// A countdown timer demonstration
+
+program countdown {
+    fn main() {
+        print("===== COUNTDOWN =====");
+        print("Counting down from 10...");
+        print("");
+
+        let i = 10;
+        loop (i > 0, 10) {
+            print(i);
+            i = i - 1;
+        }
+
+        print("Blastoff!");
+        print("");
+        print("Mission complete!");
+
+        return 0;
+    }
+}
