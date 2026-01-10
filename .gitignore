@@ -53,3 +53,10 @@ perf.data.old
 *.lcc
 reactor_dump.json
 output.mp4
+
+# Build Artifacts
+build.log
+*.o
+hlx/test_cfg
+hlx/test_typed_arrays
+hlx/test_typed_simple

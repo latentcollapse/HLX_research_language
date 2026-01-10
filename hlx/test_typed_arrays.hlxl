@@ -1,0 +1,29 @@
+// Test typed arrays - fixing Gemini's bitcast hack problem
+
+program test_typed_arrays {
+
+block main() {
+    // Create a typed array of floats
+    let vertices: Array<Float> = alloc_array(3);
+
+    // Store some float values
+    vertices[0] = 1.5;
+    vertices[1] = 2.5;
+    vertices[2] = 3.5;
+
+    // Load them back and use in float operations
+    let x = vertices[0];
+    let y = vertices[1];
+    let z = vertices[2];
+
+    // These operations should work because x, y, z are correctly typed as Float
+    let sum = x + y + z;
+    let product = x * y * z;
+
+    print(sum);
+    print(product);
+
+    return 0;
+}
+
+}

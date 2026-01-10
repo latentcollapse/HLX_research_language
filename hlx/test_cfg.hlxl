@@ -1,0 +1,28 @@
+program test_cfg {
+
+block test_cfg() {
+    let x = 0;
+    let sum = 0;
+
+    loop (x < 10, 100) {
+        if (x % 2 == 0) {
+            sum = sum + x;
+        } else {
+            sum = sum + 1;
+        }
+        x = x + 1;
+    }
+
+    if (sum > 20) {
+        return sum;
+    } else {
+        return 0;
+    }
+}
+
+block main() {
+    let result = test_cfg();
+    return result;
+}
+
+}
