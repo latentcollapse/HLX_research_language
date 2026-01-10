@@ -732,6 +732,90 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
+    /// Pre-populate array element types before type inference
+    /// This ensures Index operations can correctly infer their output types
+    fn populate_array_types(&mut self, name: &str, params: &[Register], start_pc: u32, instructions: &[Instruction]) {
+        // First, populate from function signature parameters
+        if let Some(sig) = self.function_signatures.get(name).cloned() {
+            for (i, &reg) in params.iter().enumerate() {
+                if let Some(dtype) = sig.get(i) {
+                    if let hlx_core::instruction::DType::Array(inner) = dtype {
+                        self.array_element_types.insert(reg, (**inner).clone());
+                    }
+                }
+            }
+        }
+
+        // Then scan all instructions to build a complete type map and infer array types
+        let mut register_values: HashMap<Register, hlx_core::value::Value> = HashMap::new();
+        let mut pc = start_pc as usize;
+
+        // First pass: collect constant values
+        while pc < instructions.len() {
+            let inst = &instructions[pc];
+            if pc > start_pc as usize && matches!(inst, Instruction::FuncDef { .. }) {
+                break;
+            }
+
+            match inst {
+                Instruction::Constant { out, val } => {
+                    register_values.insert(*out, val.clone());
+                }
+                Instruction::Neg { out, src } => {
+                    // Propagate type through negation
+                    if let Some(val) = register_values.get(src) {
+                        let negated = match val {
+                            hlx_core::value::Value::Integer(i) => hlx_core::value::Value::Integer(-i),
+                            hlx_core::value::Value::Float(f) => hlx_core::value::Value::Float(-f),
+                            _ => val.clone(),
+                        };
+                        register_values.insert(*out, negated);
+                    }
+                }
+                _ => {}
+            }
+
+            pc += 1;
+        }
+
+        // Second pass: handle arrays and allocations
+        pc = start_pc as usize;
+        while pc < instructions.len() {
+            let inst = &instructions[pc];
+            if pc > start_pc as usize && matches!(inst, Instruction::FuncDef { .. }) {
+                break;
+            }
+
+            match inst {
+                Instruction::ArrayCreate { out, elements, element_type } => {
+                    // If element_type is explicitly specified, use it
+                    if let Some(dtype) = element_type {
+                        self.array_element_types.insert(*out, dtype.clone());
+                    } else if !elements.is_empty() {
+                        // Infer element type from first element
+                        if let Some(first_val) = register_values.get(&elements[0]) {
+                            let inferred_dtype = match first_val {
+                                hlx_core::value::Value::Float(_) => hlx_core::instruction::DType::F64,
+                                hlx_core::value::Value::Integer(_) => hlx_core::instruction::DType::I64,
+                                hlx_core::value::Value::Boolean(_) => hlx_core::instruction::DType::Bool,
+                                _ => hlx_core::instruction::DType::I64, // default
+                            };
+                            self.array_element_types.insert(*out, inferred_dtype);
+                        }
+                    }
+                }
+                Instruction::ArrayAlloc { out, element_type, .. } => {
+                    if let Some(dtype) = element_type {
+                        self.array_element_types.insert(*out, dtype.clone());
+                    }
+                }
+                _ => {}
+            }
+
+            pc += 1;
+        }
+    }
+
     /// Infer the LLVM type for each register based on how it's defined
     fn infer_register_types(&self, start_pc: u32, instructions: &[Instruction]) -> HashMap<Register, ValueType> {
         let mut types = HashMap::new();
@@ -900,10 +984,14 @@ impl<'ctx> CodeGen<'ctx> {
         // Validate CFG (warns about unreachable blocks)
         cfg.validate_reachability()?;
 
-        // STEP 2: Infer types for all registers
+        // STEP 2: Pre-populate array element types before type inference
+        // This fixes the bug where Index operations couldn't determine float array element types
+        self.populate_array_types(name, params, start_pc, instructions);
+
+        // STEP 3: Infer types for all registers
         let _register_types = self.infer_register_types(start_pc, instructions);
 
-        // STEP 3: Collect used registers and create LLVM BasicBlocks for all block leaders
+        // STEP 4: Collect used registers and create LLVM BasicBlocks for all block leaders
         let mut pc = start_pc as usize;
         let mut used_regs = HashSet::new();
         for &r in params { used_regs.insert(r); }
@@ -924,24 +1012,13 @@ impl<'ctx> CodeGen<'ctx> {
             pc += 1;
         }
 
-        // STEP 4: Allocate registers with their inferred types
+        // STEP 5: Allocate registers with their inferred types
         for &r in &used_regs {
             let ptr = self.builder.build_alloca(self.context.i64_type(), &format!("r{}", r))?;
             self.reg_map.insert(r, ptr);
         }
 
-        // Initialize parameter types from global signatures
-        if let Some(sig) = self.function_signatures.get(name).cloned() {
-            for (i, &reg) in params.iter().enumerate() {
-                if let Some(dtype) = sig.get(i) {
-                    // If it's an array, register its element type for propagation
-                    if let hlx_core::instruction::DType::Array(inner) = dtype {
-                        self.array_element_types.insert(reg, (**inner).clone());
-                    }
-                }
-            }
-        }
-
+        // Initialize function parameters
         for (i, &reg) in params.iter().enumerate() {
             let val = self.get_param(function, i as u32, &format!("param_{}", i))?;
 
