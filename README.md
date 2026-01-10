@@ -615,7 +615,6 @@ HLX was built through collaborative human-AI engineering, demonstrating that det
 ## Contact & Discussion
 
 - **Issues**: [Codeberg Issues](https://codeberg.org/latentcollapse/HLX_Deterministic_Language/issues)
-- **Discussions**: [Reddit r/ClaudeAI](https://www.reddit.com/r/ClaudeAI/) or [r/ProgrammingLanguages](https://www.reddit.com/r/ProgrammingLanguages/)
 - **Email**: See CONTRIBUTORS.md
 
 We're especially interested in feedback from:
