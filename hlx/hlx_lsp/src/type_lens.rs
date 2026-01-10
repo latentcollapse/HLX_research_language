@@ -4,7 +4,6 @@
 //! Helps understand data flow and catch type errors early.
 
 use tower_lsp::lsp_types::*;
-use hlx_core::Value;
 
 /// Type inference engine
 pub struct TypeLens {

@@ -67,7 +67,7 @@ impl InlinePreviewEngine {
         let contract_id = &line[id_start..id_end];
 
         // Skip if contract doesn't exist
-        let spec = catalogue.get_contract(contract_id)?;
+        let _spec = catalogue.get_contract(contract_id)?;
 
         // Skip contracts with side effects (I/O, HTTP, etc.)
         if self.has_side_effects(contract_id) {

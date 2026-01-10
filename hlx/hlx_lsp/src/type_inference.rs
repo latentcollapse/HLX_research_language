@@ -2,7 +2,7 @@
 //!
 //! Infers types from source code and checks for type errors.
 
-use crate::type_system::{Type, TypeError, BinaryOp, UnaryOp};
+use crate::type_system::{Type, TypeError, BinaryOp};
 use std::collections::HashMap;
 use regex::Regex;
 

@@ -59,7 +59,7 @@ impl RefactoringEngine {
     /// Extract selected code into a function
     pub fn extract_function(
         &self,
-        uri: &Url,
+        _uri: &Url,
         range: &Range,
         function_name: &str,
         text: &str,
@@ -131,7 +131,7 @@ impl RefactoringEngine {
         let definition = self.symbol_index.find_definition(position, uri, text)?;
 
         // Get variable name and value
-        let (var_name, var_value) = self.parse_variable_definition(text, &definition.range)?;
+        let (_var_name, var_value) = self.parse_variable_definition(text, &definition.range)?;
 
         // Find all references (excluding definition)
         let mut references = self.symbol_index.find_references(position, uri, text);

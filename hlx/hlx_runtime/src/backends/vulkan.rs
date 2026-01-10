@@ -50,7 +50,9 @@ const SHADER_ACTIVATION: &[u8] = include_bytes!("vulkan/shaders/activation.spv")
 const SHADER_SOFTMAX: &[u8] = include_bytes!("vulkan/shaders/softmax.spv");
 const SHADER_LAYERNORM: &[u8] = include_bytes!("vulkan/shaders/layernorm.spv");
 const SHADER_CROSS_ENTROPY: &[u8] = include_bytes!("vulkan/shaders/cross_entropy.spv");
+#[allow(dead_code)] // Reserved for future elementwise operations
 const SHADER_ELEMENTWISE: &[u8] = include_bytes!("vulkan/shaders/elementwise.spv");
+#[allow(dead_code)] // Reserved for future reduction operations
 const SHADER_REDUCTION: &[u8] = include_bytes!("vulkan/shaders/reduction.spv");
 
 impl VulkanBackend {

@@ -2,7 +2,7 @@
 //!
 //! This module parses HLX source and builds CFGs for dataflow analysis.
 
-use crate::control_flow::{ControlFlowGraph, NodeId, NodeKind};
+use crate::control_flow::{ControlFlowGraph, NodeKind};
 use regex::Regex;
 use std::collections::HashMap;
 

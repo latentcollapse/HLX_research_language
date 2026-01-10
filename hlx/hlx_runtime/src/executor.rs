@@ -100,7 +100,9 @@ impl Executor {
 enum ControlFlow {
     Continue,
     Jump(u32),
+    #[allow(dead_code)] // Reserved for future Break instruction
     Break,
+    #[allow(dead_code)] // Reserved for future Continue instruction
     ContinueIter,
 }
 
@@ -1507,8 +1509,7 @@ impl ExecutionContext {
             "malloc" => {
                 // Emulate malloc by allocating a byte array
                 if args.len() != 1 { return Err(HlxError::ValidationFail { message: "malloc() takes 1 arg".to_string() }); }
-                let size = match self.get_reg(args[0])? { Value::Integer(i) => *i as usize, _ => 0 };
-                let bytes = vec![0u8; size];
+                let _size = match self.get_reg(args[0])? { Value::Integer(i) => *i as usize, _ => 0 };
                 // In interpreter, we can't return a raw pointer easily that SDL understands if SDL expects *real* pointers.
                 // However, our SDL builtins don't use the pointer! They ignore it or handle it internally.
                 // Wait, SDL_PollEvent(event_ptr).
@@ -1530,7 +1531,7 @@ impl ExecutionContext {
                     v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }),
                 };
                 
-                let mut child = if cfg!(target_os = "windows") {
+                let child = if cfg!(target_os = "windows") {
                     Command::new("cmd").args(["/C", &cmd_str]).stdin(Stdio::piped()).spawn()
                 } else {
                     Command::new("sh").args(["-c", &cmd_str]).stdin(Stdio::piped()).spawn()

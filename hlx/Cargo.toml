@@ -4,8 +4,9 @@ members = [
     "hlx_core",
     "hlx_compiler",
     "hlx_runtime",
-    "hlx_cli", "hlx_backend_llvm", "hlx_lsp",
-    "autograph",
+    "hlx_cli",
+    "hlx_backend_llvm",
+    "hlx_lsp",
 ]
 
 [workspace.package]

@@ -186,7 +186,7 @@ impl PerformanceLens {
 
     /// Create inlay hint for performance cost
     pub fn create_inlay_hint(&self, cost: &PerformanceCost) -> InlayHint {
-        let (icon, color) = match cost.severity {
+        let (icon, _color) = match cost.severity {
             CostSeverity::Fast => ("⚡", "green"),
             CostSeverity::Normal => ("⏱", "blue"),
             CostSeverity::Slow => ("🐢", "orange"),

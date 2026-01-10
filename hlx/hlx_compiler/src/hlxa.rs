@@ -7,10 +7,10 @@ use nom::{
     character::complete::{char, multispace1, digit1, one_of},
     combinator::{opt, map, value, cut},
     multi::{many0, separated_list0},
-    sequence::{tuple, delimited, preceded, terminated},
+    sequence::{tuple, delimited, preceded},
     error::{VerboseError, context},
 };
-use tracing::{instrument, debug, trace};
+// Tracing imports removed - not currently used
 
 use crate::ast::*;
 use crate::parser::Parser;

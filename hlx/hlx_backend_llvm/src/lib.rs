@@ -6,13 +6,13 @@ use hlx_core::{HlxCrate, Instruction, Value, Register};
 use inkwell::context::Context;
 use inkwell::builder::Builder;
 use inkwell::module::{Module, Linkage};
-use inkwell::values::{FunctionValue, IntValue, FloatValue, BasicValueEnum, PointerValue};
+use inkwell::values::{FunctionValue, BasicValueEnum, PointerValue};
 use inkwell::basic_block::BasicBlock;
 use inkwell::{IntPredicate, FloatPredicate};
 use inkwell::types::BasicType;
 use inkwell::OptimizationLevel;
 use inkwell::targets::{Target, InitializationConfig, TargetMachine};
-use inkwell::debug_info::{AsDIScope, DebugInfoBuilder, DICompileUnit, DIFile, DISubprogram, DWARFSourceLanguage};
+use inkwell::debug_info::{AsDIScope, DebugInfoBuilder, DICompileUnit, DIFile, DWARFSourceLanguage};
 use std::collections::{HashMap, HashSet};
 use anyhow::{Result, anyhow};
 
@@ -28,6 +28,7 @@ enum ValueType {
 #[derive(Debug, Clone)]
 struct CfgBlock {
     /// Program counter where this block starts
+    #[allow(dead_code)] // Used for debugging and future optimizations
     start_pc: u32,
     /// Program counter where this block ends (inclusive)
     end_pc: u32,
@@ -270,7 +271,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     /// Helper: Extract pointer value from call result
-    pub fn call_result_to_ptr(&self, result: BasicValueEnum<'ctx>, call_name: &str) -> Result<PointerValue<'ctx>> {
+    pub fn call_result_to_ptr(&self, result: BasicValueEnum<'ctx>, _call_name: &str) -> Result<PointerValue<'ctx>> {
         result.into_pointer_value();
         Ok(result.into_pointer_value())
     }
@@ -832,9 +833,9 @@ impl<'ctx> CodeGen<'ctx> {
                     }
 
                     // Comparison operators produce Int (boolean)
-                    Instruction::Eq { out, .. } | Instruction::Ne { out, .. } |
-                    Instruction::Lt { out, .. } | Instruction::Gt { out, .. } |
-                    Instruction::Le { out, .. } | Instruction::Ge { out, .. } => {
+                    Instruction::Eq { .. } | Instruction::Ne { .. } |
+                    Instruction::Lt { .. } | Instruction::Gt { .. } |
+                    Instruction::Le { .. } | Instruction::Ge { .. } => {
                         ValueType::Int
                     }
 
@@ -860,7 +861,7 @@ impl<'ctx> CodeGen<'ctx> {
         self.builder.position_at_end(entry_bb);
 
         // Create debug subprogram for this function
-        if let (Some(debug_builder), Some(debug_file), Some(debug_compile_unit)) =
+        if let (Some(debug_builder), Some(debug_file), Some(_debug_compile_unit)) =
             (&self.debug_builder, &self.debug_file, &self.debug_compile_unit) {
             // Get line number for function start (if available from debug symbols)
             let func_line = self.debug_symbols.get(&(start_pc as usize))
@@ -900,7 +901,7 @@ impl<'ctx> CodeGen<'ctx> {
         cfg.validate_reachability()?;
 
         // STEP 2: Infer types for all registers
-        let register_types = self.infer_register_types(start_pc, instructions);
+        let _register_types = self.infer_register_types(start_pc, instructions);
 
         // STEP 3: Collect used registers and create LLVM BasicBlocks for all block leaders
         let mut pc = start_pc as usize;
@@ -1014,7 +1015,7 @@ impl<'ctx> CodeGen<'ctx> {
     fn compile_inst(&mut self, inst: &Instruction) -> Result<()> {
         // println!("DEBUG: Compiling inst {:?}", inst);
         let i64_t = self.context.i64_type();
-        let ptr_t = self.context.ptr_type(inkwell::AddressSpace::default());
+        let _ptr_t = self.context.ptr_type(inkwell::AddressSpace::default());
         match inst {
             Instruction::Constant { out, val } => {
                 let (v, v_type) = self.compile_constant(val)?;

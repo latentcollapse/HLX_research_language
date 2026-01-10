@@ -1,3 +1,5 @@
+#![allow(dead_code, unused_variables)]
+
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
@@ -40,7 +42,6 @@ use cfg_builder::CfgBuilder;
 use dataflow::{DataflowAnalyzer, UseCertainty};
 use type_inference::TypeInference;
 use quick_fixes::{QuickFixGenerator, QuickFixContext};
-use confidence::ConfidenceAnalyzer;
 use contract_suggestions::ContractSuggestionEngine;
 use auto_correct::AutoCorrector;
 use inline_preview::InlinePreviewEngine;

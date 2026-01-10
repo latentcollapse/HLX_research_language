@@ -148,9 +148,12 @@ impl SemanticTokensProvider {
 /// AST walker that collects semantic tokens
 struct ASTWalker<'a> {
     tokens: Vec<TokenInfo>,
+    #[allow(dead_code)]
     symbol_index: &'a SymbolIndex,
     builtin_registry: &'a BuiltinRegistry,
+    #[allow(dead_code)]
     uri: &'a Url,
+    #[allow(dead_code)]
     source: &'a str,
     current_function: Option<String>,  // Track current function for parameter identification
 }

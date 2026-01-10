@@ -4,7 +4,6 @@
 //! Enables Go to Definition, Find References, and other navigation features.
 
 use tower_lsp::lsp_types::*;
-use std::collections::HashMap;
 use dashmap::DashMap;
 
 /// A symbol in the codebase
@@ -298,7 +297,7 @@ impl SymbolIndex {
     }
 
     /// Find the definition of a symbol at a position
-    pub fn find_definition(&self, position: &Position, uri: &Url, text: &str) -> Option<Location> {
+    pub fn find_definition(&self, position: &Position, _uri: &Url, text: &str) -> Option<Location> {
         // Get the word at this position
         let word = self.get_word_at_position(text, position)?;
 
@@ -312,7 +311,7 @@ impl SymbolIndex {
     }
 
     /// Find all references to a symbol
-    pub fn find_references(&self, position: &Position, uri: &Url, text: &str) -> Vec<Location> {
+    pub fn find_references(&self, position: &Position, _uri: &Url, text: &str) -> Vec<Location> {
         // Get the word at this position
         let word = match self.get_word_at_position(text, position) {
             Some(w) => w,
@@ -348,10 +347,11 @@ impl SymbolIndex {
                         detail: symbol.detail.clone(),
                         kind: symbol.kind,
                         tags: None,
-                        deprecated: None,
                         range: symbol.location.range,
                         selection_range: symbol.location.range,
                         children: None,
+                        #[allow(deprecated)]
+                        deprecated: None,
                     });
                 }
             }
@@ -376,9 +376,10 @@ impl SymbolIndex {
                         name: symbol.name.clone(),
                         kind: symbol.kind,
                         tags: None,
-                        deprecated: None,
                         location: symbol.location.clone(),
                         container_name: None,
+                        #[allow(deprecated)]
+                        deprecated: None,
                     });
                 }
             }
