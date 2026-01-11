@@ -1,7 +1,7 @@
 # HLX: A Deterministic Systems Programming Language
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Status: Self-Hosting](https://img.shields.io/badge/Status-Self--Hosting-success.svg)](https://codeberg.org/latentcollapse/HLX_Deterministic_Language)
+[![Status: Self-Hosting](https://img.shields.io/badge/Status-Self--Hosting-success.svg)](https://github.com/latentcollapse/hlx-compiler)
 
 **HLX** is a self-hosting systems programming language designed for verifiable, reproducible computation. It compiles to native code via LLVM and GPU compute via SPIR-V. The language is built on four formal axioms that together provide properties not available in existing languages: **content-addressable code**, **lossless decompilation**, and **cryptographic verifiability of execution**.
 
@@ -224,7 +224,7 @@ The four axioms are **mutually reinforcing**:
 
 ### Build
 ```bash
-git clone https://codeberg.org/latentcollapse/HLX_Deterministic_Language.git
+git clone [https://github.com/latentcollapse/hlx-compiler.git
 cd HLX_Deterministic_Language/hlx
 cargo build --release
 ```
@@ -532,7 +532,7 @@ HLX is open source under Apache 2.0. We especially welcome:
 
 Development setup:
 ```bash
-git clone https://codeberg.org/latentcollapse/HLX_Deterministic_Language.git
+git clone https://github.com/latentcollapse/hlx-compiler.git
 cd HLX_Deterministic_Language/hlx
 cargo build --release
 cargo test
@@ -587,7 +587,7 @@ If you use HLX in research:
   title = {HLX: A Deterministic Systems Programming Language with Reversible Bytecode},
   author = {latentcollapse and contributors},
   year = {2026},
-  url = {https://codeberg.org/latentcollapse/HLX_Deterministic_Language},
+  url = {https://github.com/latentcollapse/hlx-compiler},
   note = {Self-hosting compiler with proven axioms A1 (determinism),
           A2 (reversibility), A3 (bijection), A4 (universal value)}
 }
@@ -614,7 +614,7 @@ HLX was built through collaborative human-AI engineering, demonstrating that det
 
 ## Contact & Discussion
 
-- **Issues**: [Codeberg Issues](https://codeberg.org/latentcollapse/HLX_Deterministic_Language/issues)
+- **Issues**: [GitHub Issues](https://github.com/latentcollapse/hlx-compiler)
 - **Email**: See CONTRIBUTORS.md
 
 We're especially interested in feedback from:
