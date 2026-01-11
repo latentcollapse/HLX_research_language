@@ -224,7 +224,7 @@ The four axioms are **mutually reinforcing**:
 
 ### Build
 ```bash
-git clone [https://github.com/latentcollapse/hlx-compiler.git
+git clone https://github.com/latentcollapse/hlx-compiler.git
 cd HLX_Deterministic_Language/hlx
 cargo build --release
 ```
