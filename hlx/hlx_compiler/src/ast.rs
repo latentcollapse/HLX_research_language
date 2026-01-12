@@ -52,8 +52,18 @@ pub struct Program {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Block {
     pub name: String,
-    pub params: Vec<(String, Option<Type>)>,
+    /// Span of the function name identifier
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name_span: Option<Span>,
+    /// Span of the "fn" keyword (if present)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fn_keyword_span: Option<Span>,
+    /// Parameters: (name, name_span, optional (type, type_span))
+    pub params: Vec<(String, Option<Span>, Option<(Type, Option<Span>)>)>,
     pub return_type: Option<Type>,
+    /// Span of the return type annotation (if present)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub return_type_span: Option<Span>,
     pub items: Vec<Spanned<Item>>,
 }
 
@@ -132,30 +142,65 @@ impl Type {
 pub enum Statement {
     /// let x = expr or let x: Type = expr
     Let {
+        /// Span of "let" keyword
+        #[serde(skip_serializing_if = "Option::is_none")]
+        keyword_span: Option<Span>,
         name: String,
+        /// Span of the variable name
+        #[serde(skip_serializing_if = "Option::is_none")]
+        name_span: Option<Span>,
         type_annotation: Option<Type>,
+        /// Span of the type annotation (if present)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        type_span: Option<Span>,
         value: Spanned<Expr>,
     },
-    
+
     /// local x = expr (block-scoped)
     Local {
+        /// Span of "local" keyword
+        #[serde(skip_serializing_if = "Option::is_none")]
+        keyword_span: Option<Span>,
         name: String,
+        /// Span of the variable name
+        #[serde(skip_serializing_if = "Option::is_none")]
+        name_span: Option<Span>,
         value: Spanned<Expr>,
     },
-    
+
     /// x = expr (reassignment) or arr[i] = expr
     Assign {
         lhs: Spanned<Expr>,
         value: Spanned<Expr>,
     },
-    
+
     /// return expr
     Return {
+        /// Span of "return" keyword
+        #[serde(skip_serializing_if = "Option::is_none")]
+        keyword_span: Option<Span>,
         value: Spanned<Expr>,
     },
-    
-    If { condition: Spanned<Expr>, then_branch: Vec<Spanned<Statement>>, else_branch: Option<Vec<Spanned<Statement>>> },
-    While { condition: Spanned<Expr>, body: Vec<Spanned<Statement>>, max_iter: u32 },
+
+    If {
+        /// Span of "if" keyword
+        #[serde(skip_serializing_if = "Option::is_none")]
+        if_keyword_span: Option<Span>,
+        condition: Spanned<Expr>,
+        then_branch: Vec<Spanned<Statement>>,
+        /// Span of "else" keyword (if present)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        else_keyword_span: Option<Span>,
+        else_branch: Option<Vec<Spanned<Statement>>>,
+    },
+    While {
+        /// Span of "loop" keyword
+        #[serde(skip_serializing_if = "Option::is_none")]
+        loop_keyword_span: Option<Span>,
+        condition: Spanned<Expr>,
+        body: Vec<Spanned<Statement>>,
+        max_iter: u32,
+    },
     Break,
     Continue,
     Expr(Spanned<Expr>),

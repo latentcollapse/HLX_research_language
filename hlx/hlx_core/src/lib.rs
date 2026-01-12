@@ -19,11 +19,13 @@ pub mod instruction;
 pub mod hlx_crate;
 pub mod lcb;
 pub mod error;
+pub mod builtins;
 
 pub use value::{Value, Contract, FieldIndex};
 pub use instruction::{Instruction, TensorShape, Register};
 pub use hlx_crate::HlxCrate;
 pub use error::{HlxError, Result};
+pub use builtins::{BuiltinRegistry, BuiltinSignature, ParamType, ReturnType, BackendImpl};
 
 /// Magic byte for LC-B format
 pub const LCB_MAGIC: u8 = 0x7C; // '|'

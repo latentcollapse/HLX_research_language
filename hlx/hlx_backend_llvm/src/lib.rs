@@ -1,5 +1,5 @@
 //! HLX LLVM Backend (Iron)
-//! 
+//!
 //! Compiles HLX IR (LC-B) to Native Machine Code via LLVM.
 
 use hlx_core::{HlxCrate, Instruction, Value, Register};
@@ -343,7 +343,7 @@ impl<'ctx> CodeGen<'ctx> {
             &cpu,
             &features,
             OptimizationLevel::Default,
-            inkwell::targets::RelocMode::Default,
+            inkwell::targets::RelocMode::PIC, // Position Independent Code for PIE compatibility
             inkwell::targets::CodeModel::Default,
         ).ok_or_else(|| anyhow!("Failed to create LLVM target machine for triple '{}'", triple))?;
 
@@ -371,8 +371,10 @@ impl<'ctx> CodeGen<'ctx> {
         functions.insert("fwrite".to_string(), module.add_function("fwrite", i64_type.fn_type(&[ptr_type.into(), i64_type.into(), i64_type.into(), ptr_type.into()], false), Some(Linkage::External)));
         functions.insert("fseek".to_string(), module.add_function("fseek", i32_type.fn_type(&[ptr_type.into(), i64_type.into(), i32_type.into()], false), Some(Linkage::External)));
         functions.insert("ftell".to_string(), module.add_function("ftell", i64_type.fn_type(&[ptr_type.into()], false), Some(Linkage::External)));
+        functions.insert("memcpy".to_string(), module.add_function("memcpy", ptr_type.fn_type(&[ptr_type.into(), ptr_type.into(), i64_type.into()], false), Some(Linkage::External)));
 
-        // Math (libm)
+        // Math (libm) - LLVM Intrinsics
+        // These correspond to BackendImpl::LLVMIntrinsic in the unified BuiltinRegistry
         let f64_type = context.f64_type();
         functions.insert("sin".to_string(), module.add_function("sin", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
         functions.insert("cos".to_string(), module.add_function("cos", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
@@ -383,6 +385,8 @@ impl<'ctx> CodeGen<'ctx> {
         functions.insert("round".to_string(), module.add_function("round", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
         functions.insert("log".to_string(), module.add_function("log", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
         functions.insert("exp".to_string(), module.add_function("exp", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
+        functions.insert("pow".to_string(), module.add_function("pow", f64_type.fn_type(&[f64_type.into(), f64_type.into()], false), Some(Linkage::External)));
+        functions.insert("abs".to_string(), module.add_function("fabs", f64_type.fn_type(&[f64_type.into()], false), Some(Linkage::External)));
 
         // SDL2
         let sdl_init = module.add_function("SDL_Init", i32_type.fn_type(&[i32_type.into()], false), Some(Linkage::External));
@@ -1390,8 +1394,19 @@ impl<'ctx> CodeGen<'ctx> {
                 if func.contains("to_int") {
                      println!("DEBUG: Call func='{}' len={} out={:?}", func, func.len(), out);
                 }
-                
-                // Builtin intrinsics
+
+                // === Builtin Intrinsics ===
+                //
+                // All builtin functions are defined in hlx_core::BuiltinRegistry.
+                // The registry categorizes builtins by their backend implementation:
+                //   - CompilerSpecial: Handled inline below (len, str_get, type conversions)
+                //   - LLVMIntrinsic: Math functions (sin, cos, sqrt, etc.) - handled via LLVM
+                //   - RuntimeCall: I/O, JSON, HTTP, etc. - not yet implemented here
+                //   - Math: Basic operations (min, max) - handled below
+                //
+                // TODO: Validate all CompilerSpecial and LLVMIntrinsic builtins have implementations
+
+                // Type conversions (CompilerSpecial)
                 if func == "to_int" {
                     let (val, _) = self.load_reg(args[0])?;
                     let res = if val.is_float_value() {
@@ -1434,6 +1449,74 @@ impl<'ctx> CodeGen<'ctx> {
                     self.store_reg(*out, res, ValueType::Int)?;
                     return Ok(());
                 }
+                if func == "str_get" {
+                    let (s, _) = self.load_reg(args[0])?;
+                    let (idx, _) = self.load_reg(args[1])?;
+                    
+                    let ptr = if s.is_pointer_value() {
+                        s.into_pointer_value()
+                    } else {
+                        self.builder.build_int_to_ptr(s.into_int_value(), self.context.ptr_type(inkwell::AddressSpace::default()), "ptr_cast")?
+                    };
+                    
+                    let idx_val = idx.into_int_value();
+                    let byte_ptr = unsafe { self.builder.build_gep(self.context.i8_type(), ptr, &[idx_val], "byte_gep")? };
+                    let byte_val = self.builder.build_load(self.context.i8_type(), byte_ptr, "byte_load")?.into_int_value();
+                    let res = self.builder.build_int_z_extend(byte_val, self.context.i64_type(), "char_ext")?;
+                    
+                    self.store_reg(*out, res.into(), ValueType::Int)?;
+                    return Ok(());
+                }
+
+                if func == "len" {
+                    let (val, val_type) = self.load_reg(args[0])?;
+                    let ptr = if val.is_pointer_value() {
+                        val.into_pointer_value()
+                    } else {
+                        self.builder.build_int_to_ptr(val.into_int_value(), self.context.ptr_type(inkwell::AddressSpace::default()), "ptr_cast")?
+                    };
+                    
+                    let strlen = self.get_function("strlen")?;
+                    let res = self.builder.build_call(strlen, &[ptr.into()], "len")?
+                        .try_as_basic_value().left()
+                        .ok_or_else(|| anyhow!("strlen returned void"))?;
+                    self.store_reg(*out, res, ValueType::Int)?;
+                    return Ok(());
+                }
+
+                if func == "slice" {
+                    let (s, _) = self.load_reg(args[0])?;
+                    let (start, _) = self.load_reg(args[1])?;
+                    let (end, _) = self.load_reg(args[2])?;
+
+                    let start_val = start.into_int_value();
+                    let end_val = end.into_int_value();
+                    let len_val = self.builder.build_int_sub(end_val, start_val, "slice_len")?;
+                    
+                    // malloc(len + 1)
+                    let size_plus_1 = self.builder.build_int_add(len_val, self.context.i64_type().const_int(1, false), "size_p1")?;
+                    let malloc = self.get_function("malloc")?;
+                    let new_ptr_res = self.builder.build_call(malloc, &[size_plus_1.into()], "slice_malloc")?
+                        .try_as_basic_value().left()
+                        .ok_or_else(|| anyhow!("malloc returned void"))?;
+                    let new_ptr = self.call_result_to_ptr(new_ptr_res, "malloc(slice)")?;
+
+                    // src_ptr = s + start
+                    let s_ptr = if s.is_pointer_value() { s.into_pointer_value() } else { self.builder.build_int_to_ptr(s.into_int_value(), self.context.ptr_type(inkwell::AddressSpace::default()), "s_ptr")? };
+                    let src_ptr = unsafe { self.builder.build_gep(self.context.i8_type(), s_ptr, &[start_val], "src_offset")? };
+
+                    // memcpy(dest, src, len)
+                    let memcpy = self.get_function("memcpy")?;
+                    self.builder.build_call(memcpy, &[new_ptr.into(), src_ptr.into(), len_val.into()], "memcpy_slice")?;
+
+                    // null terminate: new_ptr[len] = 0
+                    let end_ptr = unsafe { self.builder.build_gep(self.context.i8_type(), new_ptr, &[len_val], "end_ptr")? };
+                    self.builder.build_store(end_ptr, self.context.i8_type().const_int(0, false))?;
+
+                    self.store_reg(*out, new_ptr.into(), ValueType::Pointer)?;
+                    return Ok(());
+                }
+
                 if func == "to_string" {
                     let (val, val_type) = self.load_reg(args[0])?;
                     let malloc = self.get_function("malloc")?;
@@ -1554,27 +1637,117 @@ impl<'ctx> CodeGen<'ctx> {
                     self.array_element_types.insert(*out, dtype.clone());
                 }
 
-                // TODO: Use element_type to create properly typed arrays
-                // For now, fall back to i64 storage for backwards compatibility
+                // Determine element size and LLVM type based on element_type
+                let (elem_size, llvm_type) = if let Some(dtype) = element_type {
+                    let base_dtype = Self::get_base_dtype(dtype);
+                    match base_dtype {
+                        hlx_core::instruction::DType::F32 => (4, self.context.f32_type().as_basic_type_enum()),
+                        hlx_core::instruction::DType::F64 => (8, self.context.f64_type().as_basic_type_enum()),
+                        hlx_core::instruction::DType::I32 => (4, self.context.i32_type().as_basic_type_enum()),
+                        hlx_core::instruction::DType::I64 => (8, self.context.i64_type().as_basic_type_enum()),
+                        hlx_core::instruction::DType::Bool => (1, self.context.bool_type().as_basic_type_enum()),
+                        hlx_core::instruction::DType::Array(_) => (8, self.context.i64_type().as_basic_type_enum()), // Nested arrays are pointers
+                    }
+                } else {
+                    // Untyped arrays fall back to i64 storage for backwards compatibility
+                    (8, self.context.i64_type().as_basic_type_enum())
+                };
 
                 let malloc = self.get_function("malloc")?;
-                let ptr_val = self.builder.build_call(malloc, &[i64_t.const_int(elements.len() as u64 * 8, false).into()], "malloc_call")?
+                let ptr_val = self.builder.build_call(
+                    malloc,
+                    &[i64_t.const_int(elements.len() as u64 * elem_size, false).into()],
+                    "malloc_call"
+                )?
                     .try_as_basic_value().left()
                     .ok_or_else(|| anyhow!("malloc call for ArrayCreate returned void"))?;
                 let ptr = ptr_val.into_pointer_value();
+
+                // Store elements with proper typing
                 for (i, &reg) in elements.iter().enumerate() {
                     let (val, _v_type) = self.load_reg(reg)?;
                     let idx = self.context.i64_type().const_int(i as u64, false);
-                    let val_to_store = if val.is_float_value() {
-                        self.builder.build_bit_cast(val.into_float_value(), self.context.i64_type(), "f_to_i")?.into()
-                    } else if val.is_pointer_value() {
-                        self.builder.build_ptr_to_int(val.into_pointer_value(), self.context.i64_type(), "p_to_i")?.into()
+
+                    if element_type.is_some() {
+                        // Typed array: store values directly with their proper type
+                        unsafe {
+                            let elem_ptr = self.builder.build_gep(llvm_type, ptr, &[idx], "gep")?;
+
+                            // Type conversion if needed
+                            let val_to_store = match llvm_type {
+                                t if t.is_float_type() => {
+                                    if val.is_float_value() {
+                                        val
+                                    } else if val.is_int_value() {
+                                        // Convert int to float
+                                        self.builder.build_signed_int_to_float(
+                                            val.into_int_value(),
+                                            llvm_type.into_float_type(),
+                                            "int_to_float"
+                                        )?.into()
+                                    } else {
+                                        val
+                                    }
+                                }
+                                t if t.is_int_type() => {
+                                    if val.is_int_value() {
+                                        let int_val = val.into_int_value();
+                                        let target_width = llvm_type.into_int_type().get_bit_width();
+                                        let current_width = int_val.get_type().get_bit_width();
+
+                                        if target_width < current_width {
+                                            // Truncate if target is smaller
+                                            self.builder.build_int_truncate(
+                                                int_val,
+                                                llvm_type.into_int_type(),
+                                                "int_trunc"
+                                            )?.into()
+                                        } else if target_width > current_width {
+                                            // Sign extend if target is larger
+                                            self.builder.build_int_s_extend(
+                                                int_val,
+                                                llvm_type.into_int_type(),
+                                                "int_sext"
+                                            )?.into()
+                                        } else {
+                                            val
+                                        }
+                                    } else if val.is_float_value() {
+                                        // Convert float to int
+                                        self.builder.build_float_to_signed_int(
+                                            val.into_float_value(),
+                                            llvm_type.into_int_type(),
+                                            "float_to_int"
+                                        )?.into()
+                                    } else if val.is_pointer_value() {
+                                        // Pointer to int
+                                        self.builder.build_ptr_to_int(
+                                            val.into_pointer_value(),
+                                            llvm_type.into_int_type(),
+                                            "ptr_to_int"
+                                        )?.into()
+                                    } else {
+                                        val
+                                    }
+                                }
+                                _ => val,
+                            };
+
+                            self.builder.build_store(elem_ptr, val_to_store)?;
+                        }
                     } else {
-                        val
-                    };
-                    unsafe {
-                        let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
-                        self.builder.build_store(elem_ptr, val_to_store)?;
+                        // Untyped array: bitcast to i64 for backwards compatibility
+                        let val_to_store = if val.is_float_value() {
+                            self.builder.build_bit_cast(val.into_float_value(), self.context.i64_type(), "f_to_i")?.into()
+                        } else if val.is_pointer_value() {
+                            self.builder.build_ptr_to_int(val.into_pointer_value(), self.context.i64_type(), "p_to_i")?.into()
+                        } else {
+                            val
+                        };
+                        unsafe {
+                            let elem_ptr = self.builder.build_gep(self.context.i64_type(), ptr, &[idx], "gep")?;
+                            self.builder.build_store(elem_ptr, val_to_store)?;
+                        }
                     }
                 }
                 self.store_reg(*out, ptr_val, ValueType::Pointer)?;
@@ -1907,7 +2080,7 @@ impl<'ctx> CodeGen<'ctx> {
             cpu,
             features,
             OptimizationLevel::Default,
-            inkwell::targets::RelocMode::Default,
+            inkwell::targets::RelocMode::PIC, // Position Independent Code for PIE compatibility
             inkwell::targets::CodeModel::Default,
         ).ok_or_else(|| anyhow!("Failed to create target machine"))?;
 
@@ -1949,7 +2122,7 @@ impl<'ctx> CodeGen<'ctx> {
             cpu,
             features,
             OptimizationLevel::Default,
-            inkwell::targets::RelocMode::Default,
+            inkwell::targets::RelocMode::PIC, // Position Independent Code for PIE compatibility
             inkwell::targets::CodeModel::Default,
         ).ok_or_else(|| anyhow!("Failed to create target machine"))?;
 

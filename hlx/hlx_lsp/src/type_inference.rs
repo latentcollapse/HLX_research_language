@@ -3,6 +3,7 @@
 //! Infers types from source code and checks for type errors.
 
 use crate::type_system::{Type, TypeError, BinaryOp};
+use hlx_core::{BuiltinRegistry, ReturnType as CoreReturnType, ParamType as CoreParamType};
 use std::collections::HashMap;
 use regex::Regex;
 
@@ -24,27 +25,44 @@ impl TypeContext {
             builtins: HashMap::new(),
         };
 
-        // Add builtin function signatures
-        ctx.add_builtin("print", vec![Type::Any], Type::Null);
-        ctx.add_builtin("len", vec![Type::Any], Type::Int);
-        ctx.add_builtin("to_int", vec![Type::Any], Type::Int);
-        ctx.add_builtin("to_float", vec![Type::Any], Type::Float);
-        ctx.add_builtin("to_string", vec![Type::Any], Type::String);
-        ctx.add_builtin("append", vec![Type::Array(Box::new(Type::Any)), Type::Any], Type::Array(Box::new(Type::Any)));
-        ctx.add_builtin("slice", vec![Type::Array(Box::new(Type::Any)), Type::Int, Type::Int], Type::Array(Box::new(Type::Any)));
-
-        // Math functions (require Float)
-        ctx.add_builtin("sin", vec![Type::Float], Type::Float);
-        ctx.add_builtin("cos", vec![Type::Float], Type::Float);
-        ctx.add_builtin("tan", vec![Type::Float], Type::Float);
-        ctx.add_builtin("sqrt", vec![Type::Float], Type::Float);
-        ctx.add_builtin("log", vec![Type::Float], Type::Float);
-        ctx.add_builtin("exp", vec![Type::Float], Type::Float);
-        ctx.add_builtin("floor", vec![Type::Float], Type::Float);
-        ctx.add_builtin("ceil", vec![Type::Float], Type::Float);
-        ctx.add_builtin("round", vec![Type::Float], Type::Float);
+        // Load all builtins from the unified registry
+        let registry = BuiltinRegistry::new();
+        for sig in registry.all() {
+            let params = sig.params.iter().map(|p| Self::convert_param_type(p)).collect();
+            let ret = Self::convert_return_type(&sig.return_type);
+            ctx.add_builtin(sig.name, params, ret);
+        }
 
         ctx
+    }
+
+    /// Convert core ParamType to LSP Type
+    fn convert_param_type(param: &CoreParamType) -> Type {
+        match param {
+            CoreParamType::Any => Type::Any,
+            CoreParamType::Int => Type::Int,
+            CoreParamType::Float => Type::Float,
+            CoreParamType::String => Type::String,
+            CoreParamType::Bool => Type::Bool,
+            CoreParamType::Array => Type::Array(Box::new(Type::Any)),
+            CoreParamType::Object => Type::Object,
+            CoreParamType::Handle => Type::String, // Handles are strings at runtime
+        }
+    }
+
+    /// Convert core ReturnType to LSP Type
+    fn convert_return_type(ret: &CoreReturnType) -> Type {
+        match ret {
+            CoreReturnType::Null => Type::Null,
+            CoreReturnType::Any => Type::Any,
+            CoreReturnType::Int => Type::Int,
+            CoreReturnType::Float => Type::Float,
+            CoreReturnType::String => Type::String,
+            CoreReturnType::Bool => Type::Bool,
+            CoreReturnType::Array => Type::Array(Box::new(Type::Any)),
+            CoreReturnType::Object => Type::Object,
+            CoreReturnType::Handle => Type::String,
+        }
     }
 
     fn add_builtin(&mut self, name: &str, params: Vec<Type>, ret: Type) {

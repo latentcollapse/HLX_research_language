@@ -283,8 +283,20 @@ mod tests {
 
     #[test]
     fn test_levenshtein_distance() {
+        // Create a minimal valid catalogue for testing
+        let catalogue = ContractCatalogue {
+            version: String::from("test"),
+            last_updated: String::from("2026-01-12"),
+            total_contracts: 0,
+            contract_id_space: String::from("test"),
+            tier_system: HashMap::new(),
+            contracts: HashMap::new(),
+            open_slots: None,
+            notes: None,
+        };
+
         let builder = AIDiagnosticBuilder {
-            catalogue: unsafe { &*(std::ptr::null() as *const ContractCatalogue) },
+            catalogue: &catalogue,
             common_mistakes: HashMap::new(),
         };
 

@@ -69,6 +69,33 @@ fn ws(input: &str) -> ParseResult<'_, ()> {
     Ok((input, ()))
 }
 
+/// Parse a keyword and return its span (for semantic highlighting)
+fn keyword_with_span<'a>(original: &'a str, keyword: &'static str, input: &'a str) -> ParseResult<'a, Span> {
+    let (after_ws, _) = ws(input)?;
+    let start_input = after_ws;
+    let (remaining, _) = tag(keyword)(after_ws)?;
+    let span = compute_span(original, start_input, remaining);
+    Ok((remaining, span))
+}
+
+/// Parse an identifier and return both the identifier and its span
+fn ident_with_span<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, (String, Span)> {
+    let (after_ws, _) = ws(input)?;
+    let start_input = after_ws;
+    let (remaining, id) = ident(after_ws)?;
+    let span = compute_span(original, start_input, remaining);
+    Ok((remaining, (id, span)))
+}
+
+/// Parse a type annotation and return both the type and its span
+fn type_with_span<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, (Type, Span)> {
+    let (after_ws, _) = ws(input)?;
+    let start_input = after_ws;
+    let (remaining, typ) = parse_type(after_ws)?;
+    let span = compute_span(original, start_input, remaining);
+    Ok((remaining, (typ, span)))
+}
+
 fn is_ident_start(c: char) -> bool { c.is_alphabetic() || c == '_' }
 fn is_ident_cont(c: char) -> bool { c.is_alphanumeric() || c == '_' }
 
@@ -305,30 +332,43 @@ fn statement<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Statement
         // let name = value; or let name: Type = value;
         context("let statement",
             |i| {
-                let (i, _) = preceded(ws, tag("let"))(i)?;
-                let (i, n) = cut(context("variable name", preceded(ws, ident)))(i)?;
-                let (i, t) = opt(preceded(preceded(ws, char(':')), preceded(ws, parse_type)))(i)?;
+                let (i, let_kw_span) = keyword_with_span(original, "let", i)?;
+                let (i, (n, n_span)) = cut(context("variable name", |i2| ident_with_span(original, i2)))(i)?;
+                let (i, (t, t_span)) = match opt(preceded(preceded(ws, char(':')), |i2| type_with_span(original, i2)))(i)? {
+                    (i, Some((typ, span))) => (i, (Some(typ), Some(span))),
+                    (i, None) => (i, (None, None)),
+                };
                 let (i, _) = cut(context("'=' after variable name", preceded(ws, char('='))))(i)?;
                 let (i, v) = cut(context("expression", |i2| spanned(original, |i3| expr(original, i3))(i2)))(i)?;
                 let (i, _) = cut(context("';' after let statement", preceded(ws, char(';'))))(i)?;
-                Ok((i, Statement::Let { name: n, type_annotation: t, value: v }))
+                Ok((i, Statement::Let {
+                    keyword_span: Some(let_kw_span),
+                    name: n,
+                    name_span: Some(n_span),
+                    type_annotation: t,
+                    type_span: t_span,
+                    value: v
+                }))
             }
         ),
 
         // return value;
         context("return statement",
             |i| {
-                let (i, _) = preceded(ws, tag("return"))(i)?;
+                let (i, ret_kw_span) = keyword_with_span(original, "return", i)?;
                 let (i, v) = cut(context("expression", |i2| spanned(original, |i3| expr(original, i3))(i2)))(i)?;
                 let (i, _) = cut(context("';' after return", preceded(ws, char(';'))))(i)?;
-                Ok((i, Statement::Return { value: v }))
+                Ok((i, Statement::Return {
+                    keyword_span: Some(ret_kw_span),
+                    value: v
+                }))
             }
         ),
 
         // if condition { ... } else { ... }
         context("if statement",
             |i| {
-                let (i, _) = preceded(ws, tag("if"))(i)?;
+                let (i, if_kw_span) = keyword_with_span(original, "if", i)?;
                 let (i, cond) = cut(context("condition", |i2| {
                     spanned(original, |i3| {
                         alt((
@@ -340,21 +380,31 @@ fn statement<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Statement
                 let (i, _) = cut(context("'{' after if condition", preceded(ws, char('{'))))(i)?;
                 let (i, then_body) = many0(|i2| spanned(original, |i3| statement(original, i3))(i2))(i)?;
                 let (i, _) = cut(context("'}' to close if block", preceded(ws, char('}'))))(i)?;
-                let (i, els) = opt(|i2| {
-                    let (i2, _) = preceded(ws, tag("else"))(i2)?;
+                let (i, else_opt) = opt(|i2| {
+                    let (i2, else_kw_span) = keyword_with_span(original, "else", i2)?;
                     let (i2, _) = preceded(ws, char('{'))(i2)?;
                     let (i2, body) = many0(|i3| spanned(original, |i4| statement(original, i4))(i3))(i2)?;
                     let (i2, _) = preceded(ws, char('}'))(i2)?;
-                    Ok((i2, body))
+                    Ok((i2, (body, else_kw_span)))
                 })(i)?;
-                Ok((i, Statement::If { condition: cond, then_branch: then_body, else_branch: els }))
+                let (els, else_kw_span) = match else_opt {
+                    Some((body, span)) => (Some(body), Some(span)),
+                    None => (None, None),
+                };
+                Ok((i, Statement::If {
+                    if_keyword_span: Some(if_kw_span),
+                    condition: cond,
+                    then_branch: then_body,
+                    else_keyword_span: else_kw_span,
+                    else_branch: els
+                }))
             }
         ),
 
         // loop(condition, max_iter) { ... }
         context("loop statement",
             |i| {
-                let (i, _) = preceded(ws, tag("loop"))(i)?;
+                let (i, loop_kw_span) = keyword_with_span(original, "loop", i)?;
                 let (i, _) = cut(context("'(' after loop", preceded(ws, char('('))))(i)?;
                 let (i, cond) = cut(context("loop condition", |i2| spanned(original, |i3| expr(original, i3))(i2)))(i)?;
                 let (i, _) = cut(context("',' after condition", preceded(ws, char(','))))(i)?;
@@ -366,7 +416,12 @@ fn statement<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Statement
                 let (i, _) = cut(context("'{' after loop header", preceded(ws, char('{'))))(i)?;
                 let (i, body) = many0(|i2| spanned(original, |i3| statement(original, i3))(i2))(i)?;
                 let (i, _) = cut(context("'}' to close loop", preceded(ws, char('}'))))(i)?;
-                Ok((i, Statement::While { condition: cond, body, max_iter }))
+                Ok((i, Statement::While {
+                    loop_keyword_span: Some(loop_kw_span),
+                    condition: cond,
+                    body,
+                    max_iter
+                }))
             }
         ),
 
@@ -415,22 +470,35 @@ fn block<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Block> {
         // fn name(params) -> return_type { body }
         context("function definition",
             |i| {
-                let (i, _) = preceded(ws, tag("fn"))(i)?;
-                let (i, name) = cut(context("function name", preceded(ws, ident)))(i)?;
+                let (i, fn_kw_span) = keyword_with_span(original, "fn", i)?;
+                let (i, (name, name_span)) = cut(context("function name", |i2| ident_with_span(original, i2)))(i)?;
                 let (i, _) = cut(context("'(' for parameters", preceded(ws, char('('))))(i)?;
                 let (i, params) = separated_list0(preceded(ws, char(',')),
-                    tuple((
-                        preceded(ws, ident),
-                        opt(preceded(preceded(ws, char(':')), preceded(ws, parse_type)))
-                    ))
+                    |i2| {
+                        let (i2, (param_name, param_span)) = ident_with_span(original, i2)?;
+                        let (i2, typ_opt) = opt(preceded(preceded(ws, char(':')), |i3| type_with_span(original, i3)))(i2)?;
+                        let typ_with_span = typ_opt.map(|(t, s)| (t, Some(s)));
+                        Ok((i2, (param_name, Some(param_span), typ_with_span)))
+                    }
                 )(i)?;
                 let (i, _) = cut(context("')' after parameters", preceded(ws, char(')'))))(i)?;
-                let (i, return_type) = opt(preceded(preceded(ws, tag("->")), preceded(ws, parse_type)))(i)?;
+                let (i, (return_type, return_type_span)) = match opt(preceded(preceded(ws, tag("->")), |i2| type_with_span(original, i2)))(i)? {
+                    (i, Some((t, s))) => (i, (Some(t), Some(s))),
+                    (i, None) => (i, (None, None)),
+                };
                 let (i, _) = cut(context("'{' to start function body", preceded(ws, char('{'))))(i)?;
                 let (i, body) = many0(|i2| spanned(original, |i3| statement(original, i3))(i2))(i)?;
                 let (i, _) = cut(context("'}' to close function", preceded(ws, char('}'))))(i)?;
                 let items = body.into_iter().map(|s| Spanned::new(Item::Statement(s.node), s.span)).collect();
-                Ok((i, Block { name, params, return_type, items }))
+                Ok((i, Block {
+                    name,
+                    name_span: Some(name_span),
+                    fn_keyword_span: Some(fn_kw_span),
+                    params,
+                    return_type,
+                    return_type_span,
+                    items
+                }))
             }
         ),
         // block name() { body }
@@ -444,7 +512,15 @@ fn block<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Block> {
                 let (i, body) = many0(|i2| spanned(original, |i3| statement(original, i3))(i2))(i)?;
                 let (i, _) = cut(context("'}' to close block", preceded(ws, char('}'))))(i)?;
                 let items = body.into_iter().map(|s| Spanned::new(Item::Statement(s.node), s.span)).collect();
-                Ok((i, Block { name, params: vec![], return_type: None, items }))
+                Ok((i, Block {
+                    name,
+                    name_span: None,
+                    fn_keyword_span: None,
+                    params: vec![],
+                    return_type: None,
+                    return_type_span: None,
+                    items
+                }))
             }
         ),
     ))(input)
@@ -567,7 +643,7 @@ impl HlxaEmitter {
     fn emit_statement(&self, stmt: &Statement, indent: usize) -> String {
         let ind = "    ".repeat(indent);
         match stmt {
-            Statement::Let { name, type_annotation, value } => {
+            Statement::Let { name, type_annotation, value, .. } => {
                 if let Some(typ) = type_annotation {
                     format!("{}let {}: {} = {};", ind, name, typ.to_string(), self.emit_expr(&value.node))
                 } else {
@@ -577,10 +653,10 @@ impl HlxaEmitter {
             Statement::Assign { lhs, value } => {
                 format!("{}{} = {};", ind, self.emit_expr(&lhs.node), self.emit_expr(&value.node))
             },
-            Statement::Return { value } => {
+            Statement::Return { value, .. } => {
                 format!("{}return {};", ind, self.emit_expr(&value.node))
             },
-            Statement::If { condition, then_branch, else_branch } => {
+            Statement::If { condition, then_branch, else_branch, .. } => {
                 let mut result = format!("{}if ({}) {{\n", ind, self.emit_expr(&condition.node));
                 for stmt in then_branch {
                     result.push_str(&self.emit_statement(&stmt.node, indent + 1));
@@ -597,7 +673,7 @@ impl HlxaEmitter {
                 }
                 result
             },
-            Statement::While { condition, body, max_iter } => {
+            Statement::While { condition, body, max_iter, .. } => {
                 let mut result = format!("{}loop({}, {}) {{\n", ind, self.emit_expr(&condition.node), max_iter);
                 for stmt in body {
                     result.push_str(&self.emit_statement(&stmt.node, indent + 1));
@@ -623,8 +699,8 @@ impl Emitter for HlxaEmitter {
 
         for block in &program.blocks {
             let params_str = block.params.iter()
-                .map(|(name, typ)| {
-                    if let Some(t) = typ {
+                .map(|(name, _name_span, typ_opt)| {
+                    if let Some((t, _type_span)) = typ_opt {
                         format!("{}: {}", name, t.to_string())
                     } else {
                         name.clone()

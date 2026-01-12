@@ -5,11 +5,14 @@
 
 use tower_lsp::lsp_types::*;
 use crate::contracts::ContractCatalogue;
+use hlx_core::BuiltinRegistry;
 
 /// Signature help provider
 pub struct SignatureHelpProvider {
     /// Trigger characters
     pub triggers: Vec<String>,
+    /// Unified builtin registry
+    registry: BuiltinRegistry,
 }
 
 impl SignatureHelpProvider {
@@ -20,6 +23,7 @@ impl SignatureHelpProvider {
                 ",".to_string(),  // Next parameter
                 "(".to_string(),  // Function call start
             ],
+            registry: BuiltinRegistry::new(),
         }
     }
 
@@ -114,28 +118,55 @@ impl SignatureHelpProvider {
         position: &Position,
         function_name: &str,
     ) -> Option<SignatureHelp> {
-        // For now, handle built-in functions
-        let builtin_sigs = self.get_builtin_signatures();
+        // Check if it's a builtin function
+        let sig = self.registry.get(function_name)?;
 
-        if let Some(sig_info) = builtin_sigs.get(function_name) {
-            // Determine active parameter
-            let line = text.lines().nth(position.line as usize)?;
-            let before_cursor = &line[..position.character.min(line.len() as u32) as usize];
+        // Determine active parameter
+        let line = text.lines().nth(position.line as usize)?;
+        let before_cursor = &line[..position.character.min(line.len() as u32) as usize];
 
-            // Count commas to determine parameter position
-            let active_param = before_cursor.matches(',').count() as u32;
+        // Count commas to determine parameter position
+        let active_param = before_cursor.matches(',').count() as u32;
 
-            let mut signature = sig_info.clone();
-            signature.active_parameter = Some(active_param);
+        // Build parameter information
+        let parameters: Vec<ParameterInformation> = sig.params.iter().enumerate().map(|(i, param)| {
+            ParameterInformation {
+                label: ParameterLabel::Simple(format!("arg{}: {}", i, param.to_string())),
+                documentation: None,
+            }
+        }).collect();
 
-            return Some(SignatureHelp {
-                signatures: vec![signature],
-                active_signature: Some(0),
-                active_parameter: Some(active_param),
-            });
-        }
+        // Build signature label
+        let param_labels: Vec<String> = sig.params.iter().enumerate()
+            .map(|(i, p)| format!("arg{}: {}", i, p.to_string()))
+            .collect();
 
-        None
+        let label = if sig.max_args.is_none() && sig.min_args == 0 {
+            format!("{}(...)", function_name)
+        } else if sig.max_args.is_none() {
+            format!("{}({}, ...)", function_name, param_labels.join(", "))
+        } else {
+            format!("{}({})", function_name, param_labels.join(", "))
+        };
+
+        let signature = SignatureInformation {
+            label,
+            documentation: Some(Documentation::MarkupContent(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: format!("**{}**\n\n{}\n\n**Returns**: {}",
+                    function_name,
+                    sig.description,
+                    sig.return_type.to_string()),
+            })),
+            parameters: if parameters.is_empty() { None } else { Some(parameters) },
+            active_parameter: Some(active_param),
+        };
+
+        Some(SignatureHelp {
+            signatures: vec![signature],
+            active_signature: Some(0),
+            active_parameter: Some(active_param),
+        })
     }
 
     /// Get active parameter index based on cursor position
@@ -149,172 +180,6 @@ impl SignatureHelpProvider {
         }
 
         0
-    }
-
-    /// Get built-in function signatures
-    fn get_builtin_signatures(&self) -> std::collections::HashMap<String, SignatureInformation> {
-        let mut sigs = std::collections::HashMap::new();
-
-        // print
-        sigs.insert("print".to_string(), SignatureInformation {
-            label: "print(value)".to_string(),
-            documentation: Some(Documentation::String(
-                "Print a value to stdout".to_string()
-            )),
-            parameters: Some(vec![
-                ParameterInformation {
-                    label: ParameterLabel::Simple("value: any".to_string()),
-                    documentation: Some(Documentation::String("Value to print".to_string())),
-                }
-            ]),
-            active_parameter: Some(0),
-        });
-
-        // len
-        sigs.insert("len".to_string(), SignatureInformation {
-            label: "len(container)".to_string(),
-            documentation: Some(Documentation::String(
-                "Get the length of a string, array, or object".to_string()
-            )),
-            parameters: Some(vec![
-                ParameterInformation {
-                    label: ParameterLabel::Simple("container: string | array | object".to_string()),
-                    documentation: Some(Documentation::String("Container to measure".to_string())),
-                }
-            ]),
-            active_parameter: Some(0),
-        });
-
-        // to_int
-        sigs.insert("to_int".to_string(), SignatureInformation {
-            label: "to_int(value)".to_string(),
-            documentation: Some(Documentation::String(
-                "Convert value to integer (truncates floats)".to_string()
-            )),
-            parameters: Some(vec![
-                ParameterInformation {
-                    label: ParameterLabel::Simple("value: any".to_string()),
-                    documentation: Some(Documentation::String("Value to convert".to_string())),
-                }
-            ]),
-            active_parameter: Some(0),
-        });
-
-        // slice
-        sigs.insert("slice".to_string(), SignatureInformation {
-            label: "slice(array, start, length)".to_string(),
-            documentation: Some(Documentation::String(
-                "Extract a slice from an array".to_string()
-            )),
-            parameters: Some(vec![
-                ParameterInformation {
-                    label: ParameterLabel::Simple("array: array".to_string()),
-                    documentation: Some(Documentation::String("Source array".to_string())),
-                },
-                ParameterInformation {
-                    label: ParameterLabel::Simple("start: int".to_string()),
-                    documentation: Some(Documentation::String("Starting index".to_string())),
-                },
-                ParameterInformation {
-                    label: ParameterLabel::Simple("length: int".to_string()),
-                    documentation: Some(Documentation::String("Number of elements".to_string())),
-                },
-            ]),
-            active_parameter: Some(0),
-        });
-
-        // append
-        sigs.insert("append".to_string(), SignatureInformation {
-            label: "append(array, item)".to_string(),
-            documentation: Some(Documentation::String(
-                "Return new array with item appended".to_string()
-            )),
-            parameters: Some(vec![
-                ParameterInformation {
-                    label: ParameterLabel::Simple("array: array".to_string()),
-                    documentation: Some(Documentation::String("Source array".to_string())),
-                },
-                ParameterInformation {
-                    label: ParameterLabel::Simple("item: any".to_string()),
-                    documentation: Some(Documentation::String("Item to append".to_string())),
-                },
-            ]),
-            active_parameter: Some(0),
-        });
-
-        // type
-        sigs.insert("type".to_string(), SignatureInformation {
-            label: "type(value)".to_string(),
-            documentation: Some(Documentation::String(
-                "Get the type name of a value".to_string()
-            )),
-            parameters: Some(vec![
-                ParameterInformation {
-                    label: ParameterLabel::Simple("value: any".to_string()),
-                    documentation: Some(Documentation::String("Value to check".to_string())),
-                }
-            ]),
-            active_parameter: Some(0),
-        });
-
-        // read_file
-        sigs.insert("read_file".to_string(), SignatureInformation {
-            label: "read_file(path)".to_string(),
-            documentation: Some(Documentation::String(
-                "Read file contents as string".to_string()
-            )),
-            parameters: Some(vec![
-                ParameterInformation {
-                    label: ParameterLabel::Simple("path: string".to_string()),
-                    documentation: Some(Documentation::String("File path".to_string())),
-                }
-            ]),
-            active_parameter: Some(0),
-        });
-
-        // http_request
-        sigs.insert("http_request".to_string(), SignatureInformation {
-            label: "http_request(method, url, body, headers)".to_string(),
-            documentation: Some(Documentation::String(
-                "Make an HTTP request".to_string()
-            )),
-            parameters: Some(vec![
-                ParameterInformation {
-                    label: ParameterLabel::Simple("method: string".to_string()),
-                    documentation: Some(Documentation::String("HTTP method (GET, POST, etc)".to_string())),
-                },
-                ParameterInformation {
-                    label: ParameterLabel::Simple("url: string".to_string()),
-                    documentation: Some(Documentation::String("Target URL".to_string())),
-                },
-                ParameterInformation {
-                    label: ParameterLabel::Simple("body: string".to_string()),
-                    documentation: Some(Documentation::String("Request body".to_string())),
-                },
-                ParameterInformation {
-                    label: ParameterLabel::Simple("headers: object".to_string()),
-                    documentation: Some(Documentation::String("HTTP headers".to_string())),
-                },
-            ]),
-            active_parameter: Some(0),
-        });
-
-        // json_parse
-        sigs.insert("json_parse".to_string(), SignatureInformation {
-            label: "json_parse(json_string)".to_string(),
-            documentation: Some(Documentation::String(
-                "Parse JSON string into HLX value".to_string()
-            )),
-            parameters: Some(vec![
-                ParameterInformation {
-                    label: ParameterLabel::Simple("json_string: string".to_string()),
-                    documentation: Some(Documentation::String("JSON to parse".to_string())),
-                }
-            ]),
-            active_parameter: Some(0),
-        });
-
-        sigs
     }
 
     /// Detect if we're inside a contract or function call

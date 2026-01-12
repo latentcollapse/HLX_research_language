@@ -251,28 +251,40 @@ impl<'a> ASTWalker<'a> {
 
     /// Visit a block (function definition)
     fn visit_block(&mut self, block: &Block) {
-        // Highlight "fn" keyword (TODO: need keyword spans from parser)
+        // Highlight "fn" keyword
+        if let Some(fn_span) = block.fn_keyword_span {
+            self.add_token(fn_span, SemanticTokenType::KEYWORD, 0);
+        }
 
         // Highlight function name as function declaration
-        // TODO: We don't have the span for the function name itself
-        // For now, we'll rely on symbol_index to provide this
+        if let Some(name_span) = block.name_span {
+            let modifiers = Self::modifier_to_bitflag(&SemanticTokenModifier::DECLARATION);
+            self.add_token(name_span, SemanticTokenType::FUNCTION, modifiers);
+        }
 
         self.current_function = Some(block.name.clone());
 
         // Highlight parameters
-        for (param_name, type_annotation) in &block.params {
-            // TODO: Need param name spans from parser
-            // For now, skip - we'll get these from symbol_index
+        for (param_name, param_span, type_opt) in &block.params {
+            // Highlight parameter name
+            if let Some(p_span) = param_span {
+                let modifiers = Self::modifier_to_bitflag(&SemanticTokenModifier::DECLARATION);
+                self.add_token(*p_span, SemanticTokenType::PARAMETER, modifiers);
+            }
 
             // Highlight type annotation if present
-            if let Some(typ) = type_annotation {
-                // TODO: Need type span
+            if let Some((typ, type_span)) = type_opt {
+                if let Some(t_span) = type_span {
+                    self.add_token(*t_span, SemanticTokenType::TYPE, 0);
+                }
             }
         }
 
         // Highlight return type if present
         if let Some(return_type) = &block.return_type {
-            // TODO: Need return type span
+            if let Some(rt_span) = block.return_type_span {
+                self.add_token(rt_span, SemanticTokenType::TYPE, 0);
+            }
         }
 
         // Visit statements in function body
@@ -289,28 +301,57 @@ impl<'a> ASTWalker<'a> {
     /// Visit a statement
     fn visit_statement(&mut self, stmt: &Statement, span: Span) {
         match stmt {
-            Statement::Let { name, type_annotation, value } => {
-                // Highlight "let" keyword (TODO: need keyword span)
+            Statement::Let { keyword_span, name, name_span, type_annotation, type_span, value } => {
+                // Highlight "let" keyword
+                if let Some(kw_span) = keyword_span {
+                    self.add_token(*kw_span, SemanticTokenType::KEYWORD, 0);
+                }
 
                 // Highlight variable name as variable declaration
-                // TODO: Need variable name span
+                if let Some(n_span) = name_span {
+                    let modifiers = Self::modifier_to_bitflag(&SemanticTokenModifier::DECLARATION);
+                    self.add_token(*n_span, SemanticTokenType::VARIABLE, modifiers);
+                }
 
                 // Highlight type annotation if present
-                if let Some(typ) = type_annotation {
-                    // TODO: Need type span
+                if let Some(t_span) = type_span {
+                    self.add_token(*t_span, SemanticTokenType::TYPE, 0);
                 }
 
                 // Visit the value expression
                 self.visit_expr(&value.node, value.span);
             }
 
-            Statement::Return { value } => {
-                // Highlight "return" keyword (TODO: need keyword span)
+            Statement::Local { keyword_span, name, name_span, value } => {
+                // Highlight "local" keyword
+                if let Some(kw_span) = keyword_span {
+                    self.add_token(*kw_span, SemanticTokenType::KEYWORD, 0);
+                }
+
+                // Highlight variable name as variable declaration
+                if let Some(n_span) = name_span {
+                    let modifiers = Self::modifier_to_bitflag(&SemanticTokenModifier::DECLARATION);
+                    self.add_token(*n_span, SemanticTokenType::VARIABLE, modifiers);
+                }
+
+                // Visit the value expression
                 self.visit_expr(&value.node, value.span);
             }
 
-            Statement::If { condition, then_branch, else_branch } => {
-                // Highlight "if" keyword (TODO)
+            Statement::Return { keyword_span, value } => {
+                // Highlight "return" keyword
+                if let Some(kw_span) = keyword_span {
+                    self.add_token(*kw_span, SemanticTokenType::KEYWORD, 0);
+                }
+                self.visit_expr(&value.node, value.span);
+            }
+
+            Statement::If { if_keyword_span, condition, then_branch, else_keyword_span, else_branch } => {
+                // Highlight "if" keyword
+                if let Some(kw_span) = if_keyword_span {
+                    self.add_token(*kw_span, SemanticTokenType::KEYWORD, 0);
+                }
+
                 self.visit_expr(&condition.node, condition.span);
 
                 for stmt in then_branch {
@@ -318,15 +359,23 @@ impl<'a> ASTWalker<'a> {
                 }
 
                 if let Some(else_stmts) = else_branch {
-                    // Highlight "else" keyword (TODO)
+                    // Highlight "else" keyword
+                    if let Some(else_kw_span) = else_keyword_span {
+                        self.add_token(*else_kw_span, SemanticTokenType::KEYWORD, 0);
+                    }
+
                     for stmt in else_stmts {
                         self.visit_statement(&stmt.node, stmt.span);
                     }
                 }
             }
 
-            Statement::While { condition, body, .. } => {
-                // Highlight "loop" keyword (TODO)
+            Statement::While { loop_keyword_span, condition, body, .. } => {
+                // Highlight "loop" keyword
+                if let Some(kw_span) = loop_keyword_span {
+                    self.add_token(*kw_span, SemanticTokenType::KEYWORD, 0);
+                }
+
                 self.visit_expr(&condition.node, condition.span);
                 for stmt in body {
                     self.visit_statement(&stmt.node, stmt.span);

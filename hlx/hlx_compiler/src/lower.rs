@@ -17,8 +17,8 @@ pub fn lower_to_crate(program: &Program) -> Result<HlxCrate> {
     // First pass: collect signatures
     for block in &program.blocks {
         let mut param_dtypes = Vec::new();
-        for (_, typ) in &block.params {
-            if let Some(t) = typ {
+        for (_, _span, typ_opt) in &block.params {
+            if let Some((t, _t_span)) = typ_opt {
                 param_dtypes.push(LoweringContext::type_to_dtype(t).unwrap_or(hlx_core::instruction::DType::I64));
             } else {
                 param_dtypes.push(hlx_core::instruction::DType::I64);
@@ -137,7 +137,7 @@ impl LoweringContext {
     fn lower_block(&mut self, block: &Block) -> Result<Vec<Register>> {
         self.push_scope();
         let mut params = Vec::new();
-        for (param, _typ) in &block.params {
+        for (param, _span, _typ) in &block.params {
             let reg = self.alloc_reg();
             self.bind(param, reg);
             params.push(reg);
@@ -161,7 +161,7 @@ impl LoweringContext {
     
     fn lower_stmt(&mut self, stmt: &Statement, span: Span) -> Result<()> {
         match stmt {
-            Statement::Let { name, type_annotation, value } => {
+            Statement::Let { name, type_annotation, value, .. } => {
                 // Set expected type before lowering the value expression
                 if let Some(typ) = type_annotation {
                     self.expected_type = Some(typ.clone());
@@ -202,11 +202,11 @@ impl LoweringContext {
                     _ => return Err(HlxError::ValidationFail { message: "Invalid assignment target".to_string() }),
                 }
             }
-            Statement::Return { value } => {
+            Statement::Return { value, .. } => {
                 let reg = self.lower_expr(&value.node)?;
                 self.emit_with_span(Instruction::Return { val: reg }, span);
             }
-            Statement::If { condition, then_branch, else_branch } => {
+            Statement::If { condition, then_branch, else_branch, .. } => {
                 let cond_reg = self.lower_expr(&condition.node)?;
                 let if_idx = self.instructions.len();
                 self.emit_with_span(Instruction::If { cond: cond_reg, then_block: 0, else_block: 0 }, span);
@@ -232,7 +232,7 @@ impl LoweringContext {
                     *target = end_idx;
                 }
             }
-            Statement::While { condition, body, max_iter } => {
+            Statement::While { condition, body, max_iter, .. } => {
                 let loop_pc = self.instructions.len() as u32;
                 let cond_reg = self.lower_expr(&condition.node)?;
 

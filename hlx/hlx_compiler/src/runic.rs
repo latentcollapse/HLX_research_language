@@ -87,8 +87,8 @@ impl RunicEmitter {
         out.push_str(&format!("{} {}(", glyphs::BLOCK, block.name));
         
         let params_str = block.params.iter()
-            .map(|(name, typ)| {
-                if let Some(t) = typ {
+            .map(|(name, _name_span, typ_opt)| {
+                if let Some((t, _type_span)) = typ_opt {
                     format!("{}: {}", name, t.to_string())
                 } else {
                     name.clone()
@@ -122,7 +122,7 @@ impl RunicEmitter {
         out.push_str(&self.indent_str());
         
         match stmt {
-            Statement::Let { name, type_annotation, value } => {
+            Statement::Let { name, type_annotation, value, .. } => {
                 out.push_str(glyphs::LET);
                 out.push(' ');
                 out.push_str(name);
@@ -134,7 +134,7 @@ impl RunicEmitter {
                 self.emit_expr(&value.node, out)?;
                 out.push(';');
             }
-            Statement::Local { name, value } => {
+            Statement::Local { name, value, .. } => {
                 out.push_str(glyphs::LOCAL);
                 out.push(' ');
                 out.push_str(name);
@@ -152,14 +152,14 @@ impl RunicEmitter {
                 out.push(';');
             }
             
-            Statement::Return { value } => {
+            Statement::Return { value, .. } => {
                 out.push_str(glyphs::RETURN);
                 out.push(' ');
                 self.emit_expr(&value.node, out)?;
                 out.push(';');
             }
-            
-            Statement::If { condition, then_branch, else_branch } => {
+
+            Statement::If { condition, then_branch, else_branch, .. } => {
                 out.push_str(glyphs::IF);
                 out.push_str(" (");
                 self.emit_expr(&condition.node, out)?;
@@ -192,7 +192,7 @@ impl RunicEmitter {
                 }
             }
             
-            Statement::While { condition, body, max_iter: _ } => {
+            Statement::While { condition, body, .. } => {
                 out.push_str(glyphs::WHILE);
                 self.emit_expr(&condition.node, out)?;
                 out.push_str(" { ");
@@ -449,8 +449,8 @@ impl HlxlEmitter {
         out.push_str(&format!("block {}(", block.name));
         
         let params_str = block.params.iter()
-            .map(|(name, typ)| {
-                if let Some(t) = typ {
+            .map(|(name, _name_span, typ_opt)| {
+                if let Some((t, _type_span)) = typ_opt {
                     format!("{}: {}", name, t.to_string())
                 } else {
                     name.clone()
@@ -480,15 +480,15 @@ impl HlxlEmitter {
         out.push_str(&self.indent_str());
         
         match stmt {
-            Statement::Let { name, type_annotation: _, value } => {
+            Statement::Let { name, type_annotation: _, value, .. } => {
                 out.push_str("let ");
                 out.push_str(name);
                 // Type annotations not emitted in this debug output
                 out.push_str(" = ");
                 self.emit_expr(&value.node, out)?;
             }
-            
-            Statement::Local { name, value } => {
+
+            Statement::Local { name, value, .. } => {
                 out.push_str("local ");
                 out.push_str(name);
                 out.push_str(" = ");
@@ -501,12 +501,12 @@ impl HlxlEmitter {
                 self.emit_expr(&value.node, out)?;
             }
             
-            Statement::Return { value } => {
+            Statement::Return { value, .. } => {
                 out.push_str("return ");
                 self.emit_expr(&value.node, out)?;
             }
-            
-            Statement::If { condition, then_branch, else_branch } => {
+
+            Statement::If { condition, then_branch, else_branch, .. } => {
                 out.push_str("if (");
                 self.emit_expr(&condition.node, out)?;
                 out.push_str(") {\n");
@@ -536,7 +536,7 @@ impl HlxlEmitter {
                 }
             }
             
-            Statement::While { condition, body, max_iter } => {
+            Statement::While { condition, body, max_iter, .. } => {
                 out.push_str("loop (");
                 self.emit_expr(&condition.node, out)?;
                 out.push_str(&format!(", {}", max_iter));
