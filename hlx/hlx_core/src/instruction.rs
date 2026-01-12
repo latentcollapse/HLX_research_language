@@ -164,6 +164,43 @@ pub enum Instruction {
         src: Register,
     },
 
+    // === Bitwise Operations ===
+    
+    /// Bitwise AND: out = lhs & rhs
+    BitAnd {
+        out: Register,
+        lhs: Register,
+        rhs: Register,
+    },
+
+    /// Bitwise OR: out = lhs | rhs
+    BitOr {
+        out: Register,
+        lhs: Register,
+        rhs: Register,
+    },
+
+    /// Bitwise XOR: out = lhs ^ rhs
+    BitXor {
+        out: Register,
+        lhs: Register,
+        rhs: Register,
+    },
+
+    /// Shift left: out = lhs << rhs
+    Shl {
+        out: Register,
+        lhs: Register,
+        rhs: Register,
+    },
+
+    /// Shift right: out = lhs >> rhs
+    Shr {
+        out: Register,
+        lhs: Register,
+        rhs: Register,
+    },
+
     // === Tensor Operations ===
     
     /// Matrix multiplication: out = lhs @ rhs
@@ -489,6 +526,11 @@ impl Instruction {
             Instruction::And { out, .. } => Some(*out),
             Instruction::Or { out, .. } => Some(*out),
             Instruction::Not { out, .. } => Some(*out),
+            Instruction::BitAnd { out, .. } => Some(*out),
+            Instruction::BitOr { out, .. } => Some(*out),
+            Instruction::BitXor { out, .. } => Some(*out),
+            Instruction::Shl { out, .. } => Some(*out),
+            Instruction::Shr { out, .. } => Some(*out),
             Instruction::MatMul { out, .. } => Some(*out),
             Instruction::MatMulBias { out, .. } => Some(*out),
             Instruction::TensorCreate { out, .. } => Some(*out),
@@ -552,6 +594,11 @@ impl Instruction {
             Instruction::And { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::Or { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::Not { src, .. } => vec![*src],
+            Instruction::BitAnd { lhs, rhs, .. } => vec![*lhs, *rhs],
+            Instruction::BitOr { lhs, rhs, .. } => vec![*lhs, *rhs],
+            Instruction::BitXor { lhs, rhs, .. } => vec![*lhs, *rhs],
+            Instruction::Shl { lhs, rhs, .. } => vec![*lhs, *rhs],
+            Instruction::Shr { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::MatMul { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::MatMulBias { lhs, rhs, bias, .. } => vec![*lhs, *rhs, *bias],
             Instruction::TensorCreate { .. } => vec![],

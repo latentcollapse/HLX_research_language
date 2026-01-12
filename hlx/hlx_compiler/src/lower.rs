@@ -439,6 +439,11 @@ impl LoweringContext {
                             BinOp::Ge => Instruction::Ge { out, lhs: l, rhs: r },
                             BinOp::Eq => Instruction::Eq { out, lhs: l, rhs: r },
                             BinOp::Ne => Instruction::Ne { out, lhs: l, rhs: r },
+                            BinOp::BitAnd => Instruction::BitAnd { out, lhs: l, rhs: r },
+                            BinOp::BitOr => Instruction::BitOr { out, lhs: l, rhs: r },
+                            BinOp::BitXor => Instruction::BitXor { out, lhs: l, rhs: r },
+                            BinOp::Shl => Instruction::Shl { out, lhs: l, rhs: r },
+                            BinOp::Shr => Instruction::Shr { out, lhs: l, rhs: r },
                             _ => unreachable!("AND/OR handled above"),
                         };
                         self.emit(inst);

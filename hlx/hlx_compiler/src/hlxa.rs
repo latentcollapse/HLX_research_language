@@ -336,6 +336,11 @@ fn bin_op(input: &str) -> ParseResult<'_, BinOp> {
         value(BinOp::Gt, char('>')),
         value(BinOp::And, tag("and")),
         value(BinOp::Or, tag("or")),
+        value(BinOp::Shl, tag("<<")),
+        value(BinOp::Shr, tag(">>")),
+        value(BinOp::BitAnd, char('&')),
+        value(BinOp::BitOr, char('|')),
+        value(BinOp::BitXor, char('^')),
     )))(input)
 }
 
@@ -837,6 +842,11 @@ impl HlxaEmitter {
                     BinOp::Ge => ">=",
                     BinOp::And => "and",
                     BinOp::Or => "or",
+                    BinOp::BitAnd => "&",
+                    BinOp::BitOr => "|",
+                    BinOp::BitXor => "^",
+                    BinOp::Shl => "<<",
+                    BinOp::Shr => ">>",
                 };
                 format!("{} {} {}", self.emit_expr(&lhs.node), op_str, self.emit_expr(&rhs.node))
             },

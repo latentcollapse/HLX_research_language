@@ -398,6 +398,13 @@ pub enum BinOp {
     // Logical
     And,    // and, ∧
     Or,     // or, ∨
+
+    // Bitwise
+    BitAnd, // &
+    BitOr,  // |
+    BitXor, // ^
+    Shl,    // <<
+    Shr,    // >>
 }
 
 impl BinOp {
@@ -417,6 +424,11 @@ impl BinOp {
             BinOp::Ge => ">=",
             BinOp::And => "and",
             BinOp::Or => "or",
+            BinOp::BitAnd => "&",
+            BinOp::BitOr => "|",
+            BinOp::BitXor => "^",
+            BinOp::Shl => "<<",
+            BinOp::Shr => ">>",
         }
     }
 
@@ -436,6 +448,11 @@ impl BinOp {
             BinOp::Ge => "≥",
             BinOp::And => "∧",
             BinOp::Or => "∨",
+            BinOp::BitAnd => "&",
+            BinOp::BitOr => "|",
+            BinOp::BitXor => "⊕",
+            BinOp::Shl => "≪",
+            BinOp::Shr => "≫",
         }
     }
 
@@ -444,9 +461,13 @@ impl BinOp {
         match self {
             BinOp::Or => 1,
             BinOp::And => 2,
-            BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => 3,
-            BinOp::Add | BinOp::Sub => 4,
-            BinOp::Mul | BinOp::Div | BinOp::Mod => 5,
+            BinOp::BitOr => 3,
+            BinOp::BitXor => 4,
+            BinOp::BitAnd => 5,
+            BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => 6,
+            BinOp::Shl | BinOp::Shr => 7,
+            BinOp::Add | BinOp::Sub => 8,
+            BinOp::Mul | BinOp::Div | BinOp::Mod => 9,
         }
     }
 }
