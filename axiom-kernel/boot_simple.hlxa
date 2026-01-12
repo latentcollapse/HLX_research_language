@@ -1,0 +1,97 @@
+module boot {
+    capability: raw_memory
+    
+    const VGA_BUFFER: u64 = 0xB8000;
+    const GDT_BASE: u64 = 0x1000;
+    
+    #[entry]
+    fn _start() {
+        init_gdt();
+        clear_screen();
+        print_banner();
+    }
+    
+    fn init_gdt() {
+        let gdt_base = GDT_BASE;
+        
+        // Null descriptor
+        write_gdt_entry(gdt_base, 0, 0, 0, 0, 0);
+        
+        // Code segment (0x08)
+        write_gdt_entry(gdt_base, 1, 0xFFFFF, 0, 0x9A, 0xCF);
+        
+        // Data segment (0x10)
+        write_gdt_entry(gdt_base, 2, 0xFFFFF, 0, 0x92, 0xCF);
+        
+        // Load GDT
+        asm("lgdt (%0)" : : "r"(gdt_base) : "memory");
+    }
+    
+    fn write_gdt_entry(base: u64, index: u64, limit: u64, seg_base: u64, access: u64, gran: u64) {
+        let addr = base + (index * 8);
+        
+        // Write limit (lower 16 bits)
+        let limit_low = limit & 0xFFFF;
+        write16(addr + 0, limit_low);
+        
+        // Write base (lower 16 bits)
+        let base_low = seg_base & 0xFFFF;
+        write16(addr + 2, base_low);
+        
+        // Write base (middle 8 bits)
+        let base_mid = (seg_base >> 16) & 0xFF;
+        write8(addr + 4, base_mid);
+        
+        // Write access byte
+        write8(addr + 5, access);
+        
+        // Write granularity and limit (upper 4 bits)
+        let gran_limit = (gran & 0xF0) | ((limit >> 16) & 0x0F);
+        write8(addr + 6, gran_limit);
+        
+        // Write base (upper 8 bits)
+        let base_high = (seg_base >> 24) & 0xFF;
+        write8(addr + 7, base_high);
+    }
+    
+    fn clear_screen() {
+        let vga = VGA_BUFFER;
+        let blank = 0x0F20;
+        
+        loop(i < 2000, 2000) {
+            write16(vga + (i * 2), blank);
+        }
+    }
+    
+    fn print_banner() {
+        let vga = VGA_BUFFER;
+        
+        // Write 'H' in green
+        write_colored_char(vga, 0, 72, 0x0A);
+        // Write 'E' in green
+        write_colored_char(vga, 2, 69, 0x0A);
+        // Write 'L' in green
+        write_colored_char(vga, 4, 76, 0x0A);
+        // Write 'I' in green
+        write_colored_char(vga, 6, 73, 0x0A);
+        // Write 'N' in green
+        write_colored_char(vga, 8, 78, 0x0A);
+        // Write 'U' in green
+        write_colored_char(vga, 10, 85, 0x0A);
+        // Write 'X' in green
+        write_colored_char(vga, 12, 88, 0x0A);
+    }
+    
+    fn write_colored_char(vga: u64, offset: u64, ascii: u64, color: u64) {
+        let value = (color << 8) | ascii;
+        write16(vga + offset, value);
+    }
+    
+    fn write8(addr: u64, value: u64) {
+        asm("movb %1, (%0)" : : "r"(addr), "r"(value) : "memory");
+    }
+    
+    fn write16(addr: u64, value: u64) {
+        asm("movw %1, (%0)" : : "r"(addr), "r"(value) : "memory");
+    }
+}
