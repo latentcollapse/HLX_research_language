@@ -45,13 +45,46 @@ impl<T> Spanned<T> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Program {
     pub name: String,
+    pub modules: Vec<Module>,
     pub blocks: Vec<Block>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Module {
+    pub name: String,
+    pub capabilities: Vec<String>,
+    pub constants: Vec<Constant>,
+    pub structs: Vec<StructDef>,
+    pub enums: Vec<EnumDef>,
+    pub blocks: Vec<Block>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Constant {
+    pub name: String,
+    pub typ: Type,
+    pub value: Spanned<Expr>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StructDef {
+    pub name: String,
+    pub fields: Vec<(String, Type)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EnumDef {
+    pub name: String,
+    pub variants: Vec<String>,
 }
 
 /// A named block (function-like)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Block {
     pub name: String,
+    /// Attributes like #[no_mangle], #[entry], etc.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub attributes: Vec<String>,
     /// Span of the function name identifier
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name_span: Option<Span>,
@@ -204,6 +237,13 @@ pub enum Statement {
     Break,
     Continue,
     Expr(Spanned<Expr>),
+    /// Inline assembly: asm("template" : outputs : inputs : clobbers)
+    Asm {
+        template: String,
+        outputs: Vec<(String, String)>,  // (constraint, variable)
+        inputs: Vec<(String, Spanned<Expr>)>,  // (constraint, expression)
+        clobbers: Vec<String>,
+    },
 }
 
 /// Expressions
@@ -250,6 +290,12 @@ pub enum Expr {
     Field {
         object: Box<Spanned<Expr>>,
         field: String,
+    },
+    
+    /// Type cast: expr as Type
+    Cast {
+        expr: Box<Spanned<Expr>>,
+        target_type: Type,
     },
     
     /// Pipe: expr |> func

@@ -213,6 +213,12 @@ impl RunicEmitter {
             Statement::Expr(e) => {
                 self.emit_expr(&e.node, out)?;
             }
+            
+            Statement::Asm { template, .. } => {
+                out.push_str("asm(\"");
+                out.push_str(template);
+                out.push_str("\");");
+            }
         }
         
         Ok(())
@@ -288,6 +294,15 @@ impl RunicEmitter {
                 self.emit_expr(&object.node, out)?;
                 out.push('.');
                 out.push_str(field);
+                Ok(())
+            }
+            
+            Expr::Cast { expr, target_type } => {
+                out.push('(');
+                self.emit_expr(&expr.node, out)?;
+                out.push_str(" as ");
+                out.push_str(&format!("{:?}", target_type));
+                out.push(')');
                 Ok(())
             }
             
@@ -565,6 +580,12 @@ impl HlxlEmitter {
                 self.emit_expr(&e.node, out)?;
                 out.push(';');
             }
+            
+            Statement::Asm { template, .. } => {
+                out.push_str("asm(\"");
+                out.push_str(template);
+                out.push_str("\");");
+            }
         }
         
         Ok(())
@@ -645,6 +666,15 @@ impl HlxlEmitter {
                 self.emit_expr(&object.node, out)?;
                 out.push('.');
                 out.push_str(field);
+                Ok(())
+            }
+            
+            Expr::Cast { expr, target_type } => {
+                out.push('(');
+                self.emit_expr(&expr.node, out)?;
+                out.push_str(" as ");
+                out.push_str(&format!("{:?}", target_type));
+                out.push(')');
                 Ok(())
             }
             

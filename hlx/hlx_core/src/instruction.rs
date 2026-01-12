@@ -347,6 +347,15 @@ pub enum Instruction {
         body: u32, // Capsule index
     },
 
+    /// Define a module (metadata instruction, usually at top level)
+    ModuleDef {
+        name: String,
+        capabilities: Vec<String>,
+        constants: Vec<(String, DType, Register)>,
+        structs: Vec<(String, Vec<(String, DType)>)>,
+        blocks: Vec<(String, Vec<Register>, u32)>,
+    },
+
     /// Call a function by name
     Call {
         out: Register,
@@ -506,6 +515,7 @@ impl Instruction {
             Instruction::Resolve { val_out, .. } => Some(*val_out),
             Instruction::Snapshot { handle_out } => Some(*handle_out),
             Instruction::Asm { out, .. } => *out,
+            Instruction::ModuleDef { .. } => None,
             // These don't produce output registers
             Instruction::If { .. } => None,
             Instruction::Jump { .. } => None,
@@ -583,6 +593,13 @@ impl Instruction {
             Instruction::Resolve { handle, .. } => vec![*handle],
             Instruction::Snapshot { .. } => vec![],
             Instruction::Asm { .. } => vec![],
+            Instruction::ModuleDef { constants, .. } => {
+                let mut regs = Vec::new();
+                for (_, _, reg) in constants {
+                    regs.push(*reg);
+                }
+                regs
+            },
             Instruction::Nop => vec![],
         }
     }

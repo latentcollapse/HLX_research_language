@@ -14,7 +14,7 @@ pub fn lower_to_crate(program: &Program) -> Result<HlxCrate> {
     let mut ctx = LoweringContext::new();
     let mut signatures = HashMap::new();
     
-    // First pass: collect signatures
+    // First pass: collect signatures for blocks
     for block in &program.blocks {
         let mut param_dtypes = Vec::new();
         for (_, _span, typ_opt) in &block.params {
@@ -27,7 +27,40 @@ pub fn lower_to_crate(program: &Program) -> Result<HlxCrate> {
         signatures.insert(block.name.clone(), param_dtypes);
     }
 
-    // Second pass: lower functions
+    // Second pass: lower modules and their contents
+    for module in &program.modules {
+        let mut module_constants = Vec::new();
+        for constant in &module.constants {
+            let const_reg = ctx.lower_expr(&constant.value.node)?;
+            module_constants.push((constant.name.clone(), LoweringContext::type_to_dtype(&constant.typ).unwrap_or(hlx_core::instruction::DType::I64), const_reg));
+        }
+
+        let mut module_structs = Vec::new();
+        for struct_def in &module.structs {
+            let mut struct_fields = Vec::new();
+            for (field_name, field_type) in &struct_def.fields {
+                struct_fields.push((field_name.clone(), LoweringContext::type_to_dtype(field_type).unwrap_or(hlx_core::instruction::DType::I64)));
+            }
+            module_structs.push((struct_def.name.clone(), struct_fields));
+        }
+
+        let mut module_blocks = Vec::new();
+        for block in &module.blocks {
+            let func_start = ctx.instructions.len() as u32;
+            let params = ctx.lower_block(block)?;
+            module_blocks.push((block.name.clone(), params, func_start));
+        }
+
+        ctx.instructions.push(Instruction::ModuleDef {
+            name: module.name.clone(),
+            capabilities: module.capabilities.clone(),
+            constants: module_constants,
+            structs: module_structs,
+            blocks: module_blocks,
+        });
+    }
+
+    // Third pass: lower top-level functions
     for block in &program.blocks {
         let func_start = ctx.instructions.len() as u32;
         let params = ctx.lower_block(block)?;
@@ -262,6 +295,41 @@ impl LoweringContext {
             Statement::Expr(e) => { self.lower_expr(&e.node)?; }
             Statement::Break => { self.emit_with_span(Instruction::Break, span); }
             Statement::Continue => { self.emit_with_span(Instruction::Continue, span); }
+            Statement::Asm { template, outputs, inputs, clobbers } => {
+                // Build constraints string from outputs, inputs, and clobbers
+                let mut constraints_parts = Vec::new();
+                
+                // Output constraints
+                for (constraint, _var) in outputs {
+                    constraints_parts.push(format!("={}", constraint));
+                }
+                
+                // Input constraints
+                for (constraint, _expr) in inputs {
+                    constraints_parts.push(constraint.clone());
+                }
+                
+                // Clobbers
+                for clobber in clobbers {
+                    constraints_parts.push(format!("~{{{}}}", clobber));
+                }
+                
+                let constraints = constraints_parts.join(",");
+                
+                // Determine output register (if any)
+                let out = if !outputs.is_empty() {
+                    Some(self.alloc_reg())
+                } else {
+                    None
+                };
+                
+                self.emit_with_span(Instruction::Asm {
+                    out,
+                    template: template.clone(),
+                    constraints,
+                    side_effects: !clobbers.is_empty() || clobbers.iter().any(|c| c == "memory"),
+                }, span);
+            }
             _ => {}
         }
         Ok(())
@@ -466,6 +534,27 @@ impl LoweringContext {
                     }
                     let out = self.alloc_reg();
                     self.emit(Instruction::Call { out, func: "strlen".to_string(), args: arg_regs });
+                    Ok(out)
+                } else if name == "str" || name == "to_string" {
+                    if arg_regs.len() != 1 {
+                        return Err(HlxError::ValidationFail { message: "str/to_string takes exactly 1 argument".to_string() });
+                    }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Call { out, func: "str".to_string(), args: arg_regs });
+                    Ok(out)
+                } else if name == "verify_parity" {
+                    if arg_regs.len() != 1 {
+                        return Err(HlxError::ValidationFail { message: "verify_parity takes exactly 1 argument".to_string() });
+                    }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Call { out, func: "verify_parity".to_string(), args: arg_regs });
+                    Ok(out)
+                } else if name == "hash_logic" {
+                    if arg_regs.len() != 1 {
+                        return Err(HlxError::ValidationFail { message: "hash_logic takes exactly 1 argument".to_string() });
+                    }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Call { out, func: "hash_logic".to_string(), args: arg_regs });
                     Ok(out)
                 } else if name == "fopen" {
                     if arg_regs.len() != 2 {

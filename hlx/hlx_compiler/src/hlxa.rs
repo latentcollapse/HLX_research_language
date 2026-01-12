@@ -103,7 +103,7 @@ fn ident(input: &str) -> ParseResult<'_, String> {
     let (input, first) = take_while1(is_ident_start)(input)?;
     let (input, rest) = take_while(is_ident_cont)(input)?;
     let id = format!("{}{}", first, rest);
-    let keywords = ["let", "return", "if", "else", "loop", "program", "block", "fn", "null", "true", "false", "and", "or", "not", "break", "continue"];
+    let keywords = ["let", "return", "if", "else", "loop", "program", "block", "fn", "null", "true", "false", "and", "or", "not", "break", "continue", "module", "enum", "struct", "const"];
     if keywords.contains(&id.as_str()) {
         return Err(nom::Err::Error(VerboseError {
             errors: vec![(input, nom::error::VerboseErrorKind::Context("keyword"))]
@@ -113,7 +113,14 @@ fn ident(input: &str) -> ParseResult<'_, String> {
 }
 
 fn parse_type(input: &str) -> ParseResult<'_, Type> {
-    // Try to parse Array<T> first
+    // Try to parse [T] array syntax
+    if let Ok((input, _)) = char::<_, VerboseError<&str>>('[')(input) {
+        let (input, inner) = preceded(ws, parse_type)(input)?;
+        let (input, _) = preceded(ws, char(']'))(input)?;
+        return Ok((input, Type::Array(Box::new(inner))));
+    }
+    
+    // Try to parse Array<T> syntax
     if let Ok((input, _)) = tag::<_, _, VerboseError<&str>>("Array")(input) {
         let (input, _) = preceded(ws, char('<'))(input)?;
         let (input, inner) = preceded(ws, parse_type)(input)?;
@@ -158,10 +165,16 @@ fn literal(input: &str) -> ParseResult<'_, Literal> {
         value(Literal::Null, tag("null")),
         value(Literal::Bool(true), tag("true")),
         value(Literal::Bool(false), tag("false")),
+        // Hexadecimal integer (0x...)
+        map(preceded(tag("0x"), take_while1(|c: char| c.is_ascii_hexdigit())), |hex: &str| {
+            Literal::Int(i64::from_str_radix(hex, 16).unwrap())
+        }),
+        // Float
         map(tuple((opt(char('-')), digit1, char('.'), digit1)), |(s, w, _, f)| {
             let n = format!("{}{}.{}", s.unwrap_or(' '), w, f);
             Literal::Float(n.trim().parse().unwrap())
         }),
+        // Decimal integer
         map(tuple((opt(char('-')), digit1)), |(s, d)| {
             let n = format!("{}{}", s.unwrap_or(' '), d);
             Literal::Int(n.trim().parse().unwrap())
@@ -221,6 +234,8 @@ fn call_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
 enum Postfix {
     Index(Expr),
     Field(String),
+    Call(Vec<Spanned<Expr>>),
+    Cast(Type),
 }
 
 fn atom_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
@@ -228,7 +243,6 @@ fn atom_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
         map(preceded(ws, literal), Expr::Literal),
         |i| array_literal(original, i),
         |i| object_literal(original, i),
-        |i| call_expr(original, i),
         map(preceded(ws, ident), Expr::Ident),
         delimited(preceded(ws, char('(')), |i| expr(original, i), preceded(ws, char(')'))),
     ))(input)?;
@@ -242,7 +256,16 @@ fn atom_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
         map(preceded(
             preceded(ws, char('.')),
             ident
-        ), Postfix::Field)
+        ), Postfix::Field),
+        map(delimited(
+            preceded(ws, char('(')),
+            separated_list0(preceded(ws, char(',')), |i| spanned(original, |i2| expr(original, i2))(i)),
+            preceded(ws, char(')'))
+        ), Postfix::Call),
+        map(preceded(
+            preceded(ws, tag("as")),
+            preceded(ws, parse_type)
+        ), Postfix::Cast)
     )))(input)?;
 
     // Build spans for accumulated expressions
@@ -262,6 +285,18 @@ fn atom_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
                 (remaining, Expr::Field {
                     object: Box::new(Spanned::new(acc, acc_span)),
                     field
+                })
+            },
+            Postfix::Call(args) => {
+                (remaining, Expr::Call {
+                    func: Box::new(Spanned::new(acc, acc_span)),
+                    args
+                })
+            },
+            Postfix::Cast(target_type) => {
+                (remaining, Expr::Cast {
+                    expr: Box::new(Spanned::new(acc, acc_span)),
+                    target_type
                 })
             }
         }
@@ -454,6 +489,55 @@ fn statement<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Statement
             }
         ),
 
+        // asm statement: asm("template" : outputs : inputs : clobbers);
+        context("asm statement",
+            |i| {
+                let (i, _) = preceded(ws, tag("asm"))(i)?;
+                let (i, _) = cut(context("'(' after asm", preceded(ws, char('('))))(i)?;
+                
+                // Parse template string
+                let (i, template) = cut(context("asm template string", preceded(ws, parse_string_literal)))(i)?;
+                
+                // Parse optional outputs, inputs, clobbers (all separated by ':')
+                let (i, outputs) = opt(preceded(
+                    preceded(ws, char(':')),
+                    separated_list0(preceded(ws, char(',')), |i2| {
+                        let (i2, constraint) = preceded(ws, parse_string_literal)(i2)?;
+                        let (i2, _) = preceded(ws, char('('))(i2)?;
+                        let (i2, var) = preceded(ws, ident)(i2)?;
+                        let (i2, _) = preceded(ws, char(')'))(i2)?;
+                        Ok((i2, (constraint, var)))
+                    })
+                ))(i)?;
+                
+                let (i, inputs) = opt(preceded(
+                    preceded(ws, char(':')),
+                    separated_list0(preceded(ws, char(',')), |i2| {
+                        let (i2, constraint) = preceded(ws, parse_string_literal)(i2)?;
+                        let (i2, _) = preceded(ws, char('('))(i2)?;
+                        let (i2, expr_val) = spanned(original, |i3| expr(original, i3))(i2)?;
+                        let (i2, _) = preceded(ws, char(')'))(i2)?;
+                        Ok((i2, (constraint, expr_val)))
+                    })
+                ))(i)?;
+                
+                let (i, clobbers) = opt(preceded(
+                    preceded(ws, char(':')),
+                    separated_list0(preceded(ws, char(',')), preceded(ws, parse_string_literal))
+                ))(i)?;
+                
+                let (i, _) = cut(context("')' after asm", preceded(ws, char(')'))))(i)?;
+                let (i, _) = cut(context("';' after asm", preceded(ws, char(';'))))(i)?;
+                
+                Ok((i, Statement::Asm {
+                    template,
+                    outputs: outputs.unwrap_or_default(),
+                    inputs: inputs.unwrap_or_default(),
+                    clobbers: clobbers.unwrap_or_default(),
+                }))
+            }
+        ),
+
         // expression statement
         context("expression statement",
             |i| {
@@ -465,11 +549,23 @@ fn statement<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Statement
     ))(input)
 }
 
+/// Parse attributes like #[no_mangle], #[entry], etc.
+fn parse_attributes(input: &str) -> ParseResult<'_, Vec<String>> {
+    many0(|i| {
+        let (i, _) = preceded(ws, char('#'))(i)?;
+        let (i, _) = preceded(ws, char('['))(i)?;
+        let (i, attr_name) = preceded(ws, ident)(i)?;
+        let (i, _) = preceded(ws, char(']'))(i)?;
+        Ok((i, attr_name))
+    })(input)
+}
+
 fn block<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Block> {
     alt((
         // fn name(params) -> return_type { body }
         context("function definition",
             |i| {
+                let (i, attributes) = parse_attributes(i)?;
                 let (i, fn_kw_span) = keyword_with_span(original, "fn", i)?;
                 let (i, (name, name_span)) = cut(context("function name", |i2| ident_with_span(original, i2)))(i)?;
                 let (i, _) = cut(context("'(' for parameters", preceded(ws, char('('))))(i)?;
@@ -492,6 +588,7 @@ fn block<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Block> {
                 let items = body.into_iter().map(|s| Spanned::new(Item::Statement(s.node), s.span)).collect();
                 Ok((i, Block {
                     name,
+                    attributes: attributes.clone(),
                     name_span: Some(name_span),
                     fn_keyword_span: Some(fn_kw_span),
                     params,
@@ -504,6 +601,7 @@ fn block<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Block> {
         // block name() { body }
         context("block definition",
             |i| {
+                let (i, attributes) = parse_attributes(i)?;
                 let (i, _) = preceded(ws, tag("block"))(i)?;
                 let (i, name) = cut(context("block name", preceded(ws, ident)))(i)?;
                 let (i, _) = preceded(ws, char('('))(i)?;
@@ -514,6 +612,7 @@ fn block<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Block> {
                 let items = body.into_iter().map(|s| Spanned::new(Item::Statement(s.node), s.span)).collect();
                 Ok((i, Block {
                     name,
+                    attributes: attributes.clone(),
                     name_span: None,
                     fn_keyword_span: None,
                     params: vec![],
@@ -528,12 +627,134 @@ fn block<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Block> {
 
 fn parse_program(input: &str) -> ParseResult<'_, Program> {
     let original = input; // Save original for position tracking
+    
+    // Check if this is a standalone module by looking for the 'module' keyword
+    let (after_ws, _) = ws(input)?;
+    if let Ok((_, _)) = tag::<_, _, VerboseError<&str>>("module")(after_ws) {
+        // This is a standalone module
+        let (remaining, module) = parse_module(original, input)?;
+        return Ok((remaining, Program {
+            name: module.name.clone(),
+            modules: vec![module],
+            blocks: vec![],
+        }));
+    }
+    
+    // Otherwise, parse as a full program
     let (input, _) = context("'program' keyword", preceded(ws, tag("program")))(input)?;
     let (input, name) = cut(context("program name", preceded(ws, ident)))(input)?;
     let (input, _) = cut(context("'{' to start program", preceded(ws, char('{'))))(input)?;
+    let (input, modules) = many0(preceded(ws, |i| parse_module(original, i)))(input)?;
     let (input, blocks) = many0(preceded(ws, |i| block(original, i)))(input)?;
     let (input, _) = cut(context("'}' to close program", preceded(ws, char('}'))))(input)?;
-    Ok((input, Program { name, blocks }))
+    Ok((input, Program { name, modules, blocks }))
+}
+
+fn parse_module<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Module> {
+    let (input, _) = context("'module' keyword", preceded(ws, tag("module")))(input)?;
+    let (input, name) = cut(context("module name", preceded(ws, ident)))(input)?;
+    let (input, _) = cut(context("'{\' to start module", preceded(ws, char('{'))))(input)?;
+
+    // Parse capabilities (optional)
+    // Syntax: capability: cap1, cap2, cap3
+    let (input, capabilities) = opt(
+        preceded(
+            tuple((context("'capability' keyword", preceded(ws, tag("capability"))), preceded(ws, char(':')))),
+            cut(separated_list0(preceded(ws, char(',')), preceded(ws, ident)))
+        )
+    )(input)?;
+
+    // Parse module items (constants, structs, enums, functions) in any order
+    enum ModuleItem {
+        Constant(Constant),
+        Struct(StructDef),
+        Enum(EnumDef),
+        Block(Block),
+    }
+
+    let (input, items) = many0(preceded(ws, alt((
+        map(|i| parse_constant(original, i), ModuleItem::Constant),
+        map(|i| parse_struct_def(original, i), ModuleItem::Struct),
+        map(|i| parse_enum_def(original, i), ModuleItem::Enum),
+        map(|i| block(original, i), ModuleItem::Block),
+    ))))(input)?;
+
+    // Separate items by type
+    let mut constants = Vec::new();
+    let mut structs = Vec::new();
+    let mut enums = Vec::new();
+    let mut blocks = Vec::new();
+
+    for item in items {
+        match item {
+            ModuleItem::Constant(c) => constants.push(c),
+            ModuleItem::Struct(s) => structs.push(s),
+            ModuleItem::Enum(e) => enums.push(e),
+            ModuleItem::Block(b) => blocks.push(b),
+        }
+    }
+
+    let (input, _) = cut(context("'}' to close module", preceded(ws, char('}'))))(input)?;
+
+    Ok((input, Module {
+        name,
+        capabilities: capabilities.unwrap_or_default(),
+        constants,
+        structs,
+        enums,
+        blocks,
+    }))
+}
+
+fn parse_constant<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Constant> {
+    let (input, _) = context("'const' keyword", preceded(ws, tag("const")))(input)?;
+    let (input, name) = cut(context("constant name", preceded(ws, ident)))(input)?;
+    let (input, _) = cut(context("':' after constant name", preceded(ws, char(':'))))(input)?;
+    let (input, typ) = cut(context("constant type", preceded(ws, parse_type)))(input)?;
+    let (input, _) = cut(context("'=' after constant type", preceded(ws, char('='))))(input)?;
+    let (input, value) = cut(context("constant value", spanned(original, |i| expr(original, i))))(input)?;
+    let (input, _) = cut(context("';' after constant value", preceded(ws, char(';'))))(input)?;
+    Ok((input, Constant { name, typ, value }))
+}
+
+fn parse_struct_def<'a>(_original: &'a str, input: &'a str) -> ParseResult<'a, StructDef> {
+    let (input, _) = context("'struct' keyword", preceded(ws, tag("struct")))(input)?;
+    let (input, name) = cut(context("struct name", preceded(ws, ident)))(input)?;
+    let (input, _) = cut(context("'{' to start struct fields", preceded(ws, char('{'))))(input)?;
+    
+    // Parse fields - separated by commas or just whitespace, with optional trailing comma
+    let (input, fields) = many0(|i| {
+        let (i, _) = ws(i)?;
+        // Try to parse a field
+        let (i, field_name) = ident(i)?;
+        let (i, _) = preceded(ws, char(':'))(i)?;
+        let (i, field_type) = preceded(ws, parse_type)(i)?;
+        // Optional trailing comma
+        let (i, _) = opt(preceded(ws, char(',')))(i)?;
+        Ok((i, (field_name, field_type)))
+    })(input)?;
+    
+    let (input, _) = cut(context("'}' to close struct fields", preceded(ws, char('}'))))(input)?;
+    Ok((input, StructDef { name, fields }))
+}
+
+fn parse_enum_def<'a>(_original: &'a str, input: &'a str) -> ParseResult<'a, EnumDef> {
+    let (input, _) = context("'enum' keyword", preceded(ws, tag("enum")))(input)?;
+    let (input, name) = cut(context("enum name", preceded(ws, ident)))(input)?;
+    let (input, _) = cut(context("'{' to start enum variants", preceded(ws, char('{'))))(input)?;
+    
+    // Parse variants - separated by commas or just whitespace, with optional trailing comma
+    let (input, variants) = many0(|i| {
+        let (i, _) = ws(i)?;
+        // Try to parse a variant
+        let (i, variant_name) = ident(i)?;
+        // Optional trailing comma
+        let (i, _) = opt(preceded(ws, char(',')))(i)?;
+        Ok((i, variant_name))
+    })(input)?;
+    
+    let (input, _) = cut(context("'}' to close enum variants", preceded(ws, char('}'))))(input)?;
+    Ok((input, EnumDef { name, variants }))
 }
 
 pub struct HlxaParser;
