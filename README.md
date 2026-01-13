@@ -25,6 +25,8 @@ Existing approaches address these problems piecemeal:
 
 HLX addresses all four problems through **language-level constraints** rather than tooling. By making determinism, bijection, reversibility, and universal value representation **axioms** instead of goals, we achieve properties that emerge from the language design itself.
 
+https://github.com/latentcollapse/hlx-compiler/blob/main/DIFFERENTIAL_DEBUGGING_CASE_STUDY.md
+
 ### Why Not Existing Languages?
 
 **Why not C/Rust with reproducible build flags?**
