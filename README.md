@@ -3,6 +3,8 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Status: Self-Hosting](https://img.shields.io/badge/Status-Self--Hosting-success.svg)](https://github.com/latentcollapse/hlx-compiler)
 
+**Still under construction. This project is far from done**
+
 **HLX** is a self-hosting systems programming language designed for verifiable, reproducible computation. It compiles to native code via LLVM and GPU compute via SPIR-V. The language is built on four formal axioms that together provide properties not available in existing languages: **content-addressable code**, **lossless decompilation**, and **cryptographic verifiability of execution**.
 
 ---
