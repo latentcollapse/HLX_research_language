@@ -581,6 +581,7 @@ A: The self-hosting bootstrap *is* a proof by construction. If Stage 2 ≡ Stage
   This isn't a *mathematical* proof (no Coq/Isabelle mechanization yet), but it's empirical verification on a non-trivial codebase (~76KB). Formal mechanization is planned future work.
 
 **Q: Why Axioms instead of Formal Semantics?**
+
 A: Semantics are mutuable. Axioms are not
 ---
 
