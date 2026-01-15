@@ -53,6 +53,22 @@ pub use value_store::ValueStore;
 pub use speculation::{SpeculationCoordinator, SpeculationConfig, AgentState};
 
 use hlx_core::{HlxCrate, Value, Result};
+use std::cell::Cell;
+
+thread_local! {
+    /// Thread-local flag to disable speculation (prevents infinite recursion)
+    static SPECULATION_DISABLED: Cell<bool> = Cell::new(false);
+}
+
+/// Check if speculation is disabled for this thread
+pub(crate) fn is_speculation_disabled() -> bool {
+    SPECULATION_DISABLED.with(|d| d.get())
+}
+
+/// Disable speculation for this thread (used by speculation agents)
+pub(crate) fn disable_speculation() {
+    SPECULATION_DISABLED.with(|d| d.set(true));
+}
 
 /// Execute a crate with default configuration
 pub fn execute(krate: &HlxCrate) -> Result<Value> {

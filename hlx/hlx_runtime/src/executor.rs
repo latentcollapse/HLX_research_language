@@ -34,7 +34,7 @@ impl Executor {
     /// Run a crate and return its result
     pub fn run(&mut self, krate: &HlxCrate) -> Result<Value> {
         // Check if speculation is disabled (set by speculation coordinator to prevent recursion)
-        let speculation_disabled = std::env::var("HLX_SCALE_DISABLE").is_ok();
+        let speculation_disabled = crate::is_speculation_disabled();
 
         // Check if main() has @swarm pragma (Phase 1B: main-only speculation)
         if !speculation_disabled {

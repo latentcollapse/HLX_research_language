@@ -127,15 +127,15 @@ impl SpeculationCoordinator {
             let debug = self.config.debug;
 
             let handle = thread::spawn(move || {
+                // CRITICAL: Disable speculation for nested execution (prevents infinite recursion)
+                // This is thread-local and safe across all threads
+                crate::disable_speculation();
+
                 let log_enabled = debug || std::env::var("RUST_LOG").is_ok();
 
                 if log_enabled {
                     println!("[HLX-SCALE][AGENT-{}] Forked and starting execution", agent_id);
                 }
-
-                // CRITICAL: Disable speculation for nested execution
-                // Set env var to prevent infinite recursion
-                std::env::set_var("HLX_SCALE_DISABLE", "1");
 
                 // Execute the crate using the standard runtime executor
                 let result = match crate::execute(&krate) {
