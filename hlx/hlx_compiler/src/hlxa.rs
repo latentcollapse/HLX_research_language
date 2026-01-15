@@ -641,6 +641,7 @@ fn parse_program(input: &str) -> ParseResult<'_, Program> {
         let (remaining, module) = parse_module(original, input)?;
         return Ok((remaining, Program {
             name: module.name.clone(),
+            imports: vec![],
             modules: vec![module],
             blocks: vec![],
         }));
@@ -653,7 +654,7 @@ fn parse_program(input: &str) -> ParseResult<'_, Program> {
     let (input, modules) = many0(preceded(ws, |i| parse_module(original, i)))(input)?;
     let (input, blocks) = many0(preceded(ws, |i| block(original, i)))(input)?;
     let (input, _) = cut(context("'}' to close program", preceded(ws, char('}'))))(input)?;
-    Ok((input, Program { name, modules, blocks }))
+    Ok((input, Program { name, imports: vec![], modules, blocks }))
 }
 
 fn parse_module<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Module> {
@@ -705,6 +706,8 @@ fn parse_module<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Module
     Ok((input, Module {
         name,
         capabilities: capabilities.unwrap_or_default(),
+        imports: vec![],
+        exports: vec![],
         constants,
         structs,
         enums,

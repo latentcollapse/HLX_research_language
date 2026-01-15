@@ -87,6 +87,7 @@ impl<'a> Lifter<'a> {
                 .and_then(|m| m.source_file.clone())
                 .map(|s| s.trim_end_matches(".hlxl").to_string())
                 .unwrap_or_else(|| "main".to_string()),
+            imports: Vec::new(),
             modules: Vec::new(),
             blocks: self.blocks,
         })

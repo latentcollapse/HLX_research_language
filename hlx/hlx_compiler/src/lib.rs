@@ -9,9 +9,11 @@ pub mod lower;
 pub mod hlxa;
 pub mod runic;
 pub mod lift;
+pub mod module_resolver;
 
 pub use hlxa::{HlxaParser, HlxaEmitter};
 pub use runic::{RunicParser, RunicEmitter};
 pub use emitter::Emitter;
 pub use lower::lower_to_crate;
 pub use lift::lift_from_crate;
+pub use module_resolver::ModuleResolver;

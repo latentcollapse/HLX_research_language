@@ -45,14 +45,54 @@ impl<T> Spanned<T> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Program {
     pub name: String,
+    pub imports: Vec<Import>,
     pub modules: Vec<Module>,
     pub blocks: Vec<Block>,
+}
+
+/// Import declaration
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Import {
+    /// Module path (e.g., "std.math", "mylib.utils")
+    pub path: String,
+    /// Optional alias (e.g., import "std.math" as M)
+    pub alias: Option<String>,
+    /// Specific items to import (None = import all)
+    pub items: Option<Vec<ImportItem>>,
+    /// Span for error reporting
+    pub span: Span,
+}
+
+/// Individual imported item
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ImportItem {
+    /// Name of the item to import
+    pub name: String,
+    /// Optional alias for this item
+    pub alias: Option<String>,
+}
+
+/// Export declaration (marks items as public)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ExportKind {
+    /// Export a function/block
+    Function(String),
+    /// Export a constant
+    Constant(String),
+    /// Export a struct
+    Struct(String),
+    /// Export an enum
+    Enum(String),
+    /// Re-export an imported module
+    Module(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Module {
     pub name: String,
     pub capabilities: Vec<String>,
+    pub imports: Vec<Import>,
+    pub exports: Vec<ExportKind>,
     pub constants: Vec<Constant>,
     pub structs: Vec<StructDef>,
     pub enums: Vec<EnumDef>,
