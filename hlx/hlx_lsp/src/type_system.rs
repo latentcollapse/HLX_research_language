@@ -3,6 +3,7 @@
 //! Defines types and type operations for static analysis.
 
 use std::fmt;
+use hlx_core::{ResourceType, AccessPattern, MemoryLocation};
 
 /// HLX Type
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -23,6 +24,12 @@ pub enum Type {
     Object,
     /// Function type (param types, return type)
     Function(Vec<Type>, Box<Type>),
+    /// Handle type (resource, access, location)
+    Handle {
+        resource: ResourceType,
+        access: AccessPattern,
+        location: MemoryLocation,
+    },
     /// Unknown/inferred type
     Unknown,
     /// Any type (used for dynamic operations)
@@ -33,6 +40,43 @@ impl Type {
     /// Check if this type is numeric (Int or Float)
     pub fn is_numeric(&self) -> bool {
         matches!(self, Type::Int | Type::Float)
+    }
+
+    /// Check if this type is a handle
+    pub fn is_handle(&self) -> bool {
+        matches!(self, Type::Handle { .. })
+    }
+
+    /// Check if this handle is GPU-compatible (for gpu_dispatch)
+    pub fn is_gpu_compatible_handle(&self) -> bool {
+        match self {
+            Type::Handle { resource, location, .. } => {
+                matches!(location, MemoryLocation::GPU | MemoryLocation::Shared)
+                    && matches!(resource, ResourceType::Tensor | ResourceType::Buffer)
+            }
+            _ => false,
+        }
+    }
+
+    /// Check if this handle is CPU-readable
+    pub fn is_cpu_readable_handle(&self) -> bool {
+        match self {
+            Type::Handle { access, location, .. } => {
+                matches!(location, MemoryLocation::CPU | MemoryLocation::Shared)
+                    && matches!(access, AccessPattern::Read | AccessPattern::ReadWrite)
+            }
+            _ => false,
+        }
+    }
+
+    /// Check if this handle is writable
+    pub fn is_writable_handle(&self) -> bool {
+        match self {
+            Type::Handle { access, .. } => {
+                matches!(access, AccessPattern::Write | AccessPattern::ReadWrite)
+            }
+            _ => false,
+        }
     }
 
     /// Check if two types are compatible for operations
@@ -162,6 +206,9 @@ impl fmt::Display for Type {
                 }
                 write!(f, ") -> {}", ret)
             }
+            Type::Handle { resource, access, location } => {
+                write!(f, "Handle<{:?}, {:?}, {:?}>", resource, access, location)
+            }
             Type::Unknown => write!(f, "?"),
             Type::Any => write!(f, "Any"),
         }
@@ -225,6 +272,12 @@ pub enum TypeError {
     UndefinedFunction {
         name: String,
     },
+    /// Handle capability mismatch
+    HandleCapabilityMismatch {
+        operation: String,
+        handle_type: Type,
+        requirement: String,
+    },
 }
 
 impl fmt::Display for TypeError {
@@ -247,6 +300,10 @@ impl fmt::Display for TypeError {
             }
             TypeError::UndefinedFunction { name } => {
                 write!(f, "Undefined function: {}", name)
+            }
+            TypeError::HandleCapabilityMismatch { operation, handle_type, requirement } => {
+                write!(f, "Handle capability mismatch in '{}': {} does not satisfy requirement: {}",
+                    operation, handle_type, requirement)
             }
         }
     }

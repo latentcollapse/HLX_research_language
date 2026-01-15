@@ -20,12 +20,25 @@ pub mod hlx_crate;
 pub mod lcb;
 pub mod error;
 pub mod builtins;
+pub mod capabilities;
+pub mod handle;
 
 pub use value::{Value, Contract, FieldIndex};
 pub use instruction::{Instruction, TensorShape, Register};
 pub use hlx_crate::HlxCrate;
 pub use error::{HlxError, Result};
 pub use builtins::{BuiltinRegistry, BuiltinSignature, ParamType, ReturnType, BackendImpl};
+pub use capabilities::{RuntimeCapabilities, BuiltinSpec, BuiltinSpecBuilder, StabilityLevel};
+pub use handle::{
+    Handle, HandleMetadata,
+    Tensor, Window, Buffer, Shader, Image,
+    Read, Write, ReadWrite,
+    CPU, GPU, Shared,
+    TensorHandle, WindowHandle, BufferHandle, ShaderHandle, ImageHandle,
+    GpuTensorWrite, GpuTensorRead, GpuTensorRW,
+    CpuTensorWrite, CpuTensorRead, SharedTensorRead,
+    ResourceType, AccessPattern, MemoryLocation,
+};
 
 /// Magic byte for LC-B format
 pub const LCB_MAGIC: u8 = 0x7C; // '|'

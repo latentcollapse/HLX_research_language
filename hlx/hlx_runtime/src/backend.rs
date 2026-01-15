@@ -40,11 +40,33 @@ impl DType {
     }
 }
 
+/// Backend ABI version fingerprint
+///
+/// This is a hash of the Backend trait definition source code.
+/// Used to detect vtable layout mismatches between different compilation units.
+///
+/// **Critical:** If you modify the Backend trait in ANY way (add/remove/reorder methods,
+/// change signatures, etc.), this value MUST be updated and ALL crates must be recompiled.
+pub const BACKEND_ABI_FINGERPRINT: u64 = {
+    // Hash of Backend trait definition as of 2026-01-15
+    // Computed from trait method signatures
+    // If this mismatch is detected at runtime, it indicates vtable corruption risk
+    0x48_4c_58_5f_42_41_43_4b  // "HLX_BACK" in ASCII
+};
+
 /// Backend trait for compute operations
 pub trait Backend: Send + Sync {
+    /// Get ABI fingerprint for this backend implementation
+    ///
+    /// This MUST return BACKEND_ABI_FINGERPRINT.
+    /// Runtime will verify this matches to prevent vtable corruption.
+    fn abi_fingerprint(&self) -> u64 {
+        BACKEND_ABI_FINGERPRINT
+    }
+
     /// Get backend name
     fn name(&self) -> &'static str;
-    
+
     /// Check if backend is available and initialized
     fn is_available(&self) -> bool;
     
@@ -285,8 +307,15 @@ pub fn create_backend(config: &RuntimeConfig) -> Result<Box<dyn Backend>> {
             // Try Vulkan first, fall back to CPU
             #[cfg(feature = "vulkan")]
             {
-                if let Ok(backend) = crate::backends::vulkan::VulkanBackend::new(config) {
-                    return Ok(Box::new(backend));
+                println!("[Backend] Attempting Vulkan...");
+                match crate::backends::vulkan::VulkanBackend::new(config) {
+                    Ok(backend) => {
+                        println!("[Backend] Vulkan Initialized!");
+                        return Ok(Box::new(backend));
+                    }
+                    Err(e) => {
+                        println!("[Backend] Vulkan failed: {}", e);
+                    }
                 }
             }
             

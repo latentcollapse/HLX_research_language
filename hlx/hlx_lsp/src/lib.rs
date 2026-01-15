@@ -35,6 +35,8 @@ mod type_inference;
 mod quick_fixes;
 mod semantic_tokens;
 mod module_support;
+mod shader_validator;
+mod capability_validator;
 
 use contracts::{ContractCache, ContractCatalogue};
 use ai_diagnostics::AIDiagnosticBuilder;
@@ -60,6 +62,8 @@ use builtins::BuiltinRegistry;
 use backend_compat::BackendCompatChecker;
 use semantic_tokens::SemanticTokensProvider;
 use module_support::ModuleSupport;
+use shader_validator::ShaderContractCache;
+use capability_validator::CapabilityValidator;
 use tokio::sync::Mutex;
 
 pub struct Backend {
@@ -85,6 +89,8 @@ pub struct Backend {
     quick_fix_generator: Arc<QuickFixGenerator>,
     semantic_tokens_provider: Arc<SemanticTokensProvider>,
     module_support: Arc<Mutex<ModuleSupport>>,
+    shader_contract_cache: Arc<ShaderContractCache>,
+    capability_validator: Arc<CapabilityValidator>,
 }
 
 #[tower_lsp::async_trait]
@@ -914,6 +920,20 @@ impl Backend {
         let module_support = Arc::new(Mutex::new(ModuleSupport::new()));
         eprintln!("✓ Module support ready");
 
+        // Create shader contract cache
+        let shader_contract_cache = Arc::new(ShaderContractCache::new());
+        eprintln!("✓ Shader contract cache ready");
+
+        // Create capability validator
+        let capability_validator = Arc::new(CapabilityValidator::new());
+        // Try to load capabilities from runtime
+        if let Err(e) = capability_validator.load_capabilities() {
+            eprintln!("⚠ Failed to load runtime capabilities: {}", e);
+            eprintln!("  Builtin validation will be limited");
+        } else {
+            eprintln!("✓ Runtime capabilities loaded");
+        }
+
         Self {
             client,
             document_map: DashMap::new(),
@@ -937,6 +957,8 @@ impl Backend {
             quick_fix_generator,
             semantic_tokens_provider,
             module_support,
+            shader_contract_cache,
+            capability_validator,
         }
     }
 
@@ -1125,6 +1147,11 @@ impl Backend {
         let builtin_diags = self.validate_builtins(&text);
         diagnostics.extend(builtin_diags);
 
+        // Add builtin availability validation
+        // Catch builtins that require missing features or aren't in the runtime
+        let availability_diags = self.validate_builtin_availability(&text);
+        diagnostics.extend(availability_diags);
+
         // Add backend compatibility warnings
         // Catch features that work in interpreter but fail in native compilation
         // TODO: Detect target backend from file metadata or config
@@ -1147,6 +1174,11 @@ impl Backend {
         let mut module_support = self.module_support.lock().await;
         let module_diags = module_support.validate_imports(&text, &uri);
         diagnostics.extend(module_diags);
+
+        // Add shader contract validation
+        // Catches gpu_dispatch mismatches before runtime segfaults
+        let shader_diags = self.validate_shader_contracts(&text, &uri);
+        diagnostics.extend(shader_diags);
 
         self.client.publish_diagnostics(uri, diagnostics, None).await;
     }
@@ -1583,6 +1615,83 @@ impl Backend {
         diagnostics
     }
 
+    /// Validate builtin availability against runtime capabilities
+    /// This catches missing builtins and feature mismatches at compile-time
+    fn validate_builtin_availability(&self, text: &str) -> Vec<Diagnostic> {
+        let mut diagnostics = Vec::new();
+
+        // Only run if capabilities are loaded
+        if !self.capability_validator.is_loaded() {
+            return diagnostics;
+        }
+
+        use regex::Regex;
+        use std::sync::OnceLock;
+
+        // Pre-compile regex pattern for performance
+        static FUNC_CALL_PATTERN: OnceLock<Regex> = OnceLock::new();
+        let func_call_pattern = FUNC_CALL_PATTERN.get_or_init(|| {
+            Regex::new(r"(\w+)\s*\(").unwrap()
+        });
+
+        for (line_idx, line) in text.lines().enumerate() {
+            for cap in func_call_pattern.captures_iter(line) {
+                let func_name = cap.get(1).unwrap().as_str();
+                let match_start = cap.get(1).unwrap().start();
+
+                // Skip if this looks like a contract invocation (@123) or keyword
+                if line[..cap.get(0).unwrap().start()].trim_end().ends_with('@') {
+                    continue;
+                }
+
+                // Skip common keywords
+                if ["fn", "loop", "if", "while", "for"].contains(&func_name) {
+                    continue;
+                }
+
+                // Only check builtins that exist in the registry
+                if !self.builtin_registry.exists(func_name) {
+                    continue;
+                }
+
+                // Validate against runtime capabilities
+                use capability_validator::BuiltinValidation;
+                let validation = self.capability_validator.validate_builtin(func_name);
+
+                if let Some(message) = validation.to_diagnostic_message() {
+                    let severity = match validation {
+                        BuiltinValidation::NotFound { .. } => DiagnosticSeverity::ERROR,
+                        BuiltinValidation::MissingFeature { .. } => DiagnosticSeverity::ERROR,
+                        _ => DiagnosticSeverity::WARNING,
+                    };
+
+                    diagnostics.push(Diagnostic {
+                        range: Range {
+                            start: Position {
+                                line: line_idx as u32,
+                                character: match_start as u32,
+                            },
+                            end: Position {
+                                line: line_idx as u32,
+                                character: (match_start + func_name.len()) as u32,
+                            },
+                        },
+                        severity: Some(severity),
+                        code: Some(NumberOrString::String("builtin-unavailable".to_string())),
+                        source: Some("hlx-runtime".to_string()),
+                        message,
+                        related_information: None,
+                        tags: None,
+                        code_description: None,
+                        data: None,
+                    });
+                }
+            }
+        }
+
+        diagnostics
+    }
+
     /// Check for uninitialized variable uses via dataflow analysis
     /// This catches "Reg type missing" errors before native compilation
     fn check_uninitialized_vars(&self, text: &str) -> Vec<Diagnostic> {
@@ -1709,6 +1818,17 @@ impl Backend {
                         "Invalid unary operation.\n\n\
                         Cannot apply operator '{}' to type {}.",
                         op, operand
+                    )
+                }
+                type_system::TypeError::HandleCapabilityMismatch { operation, handle_type, requirement } => {
+                    format!(
+                        "Handle capability mismatch in '{}'.\n\n\
+                        Handle type {} does not satisfy requirement: {}.\n\n\
+                        Common fixes:\n\
+                        - Use 'stage_to_cpu()' to make GPU tensors readable on CPU\n\
+                        - Use 'upload_to_gpu()' to move tensors to GPU memory\n\
+                        - Use 'seal()' to transition Write handles to Read",
+                        operation, handle_type, requirement
                     )
                 }
             };
@@ -1870,6 +1990,135 @@ impl Backend {
         }
 
         None
+    }
+
+    /// Validate shader contracts for gpu_dispatch calls
+    /// This catches shader mismatches before runtime segfaults
+    fn validate_shader_contracts(&self, text: &str, uri: &Url) -> Vec<Diagnostic> {
+        use regex::Regex;
+        use shader_validator::ContractViolation;
+
+        let mut diagnostics = Vec::new();
+
+        // Regex to find gpu_dispatch calls
+        // Pattern: gpu_dispatch("shader.spv", [bindings...], push_constants)
+        let re = Regex::new(r#"gpu_dispatch\s*\(\s*"([^"]+)""#).unwrap();
+
+        // Get workspace root from URI
+        let workspace_root = uri.to_file_path()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+
+        for (line_idx, line) in text.lines().enumerate() {
+            for cap in re.captures_iter(line) {
+                let shader_path_str = cap.get(1).unwrap().as_str();
+                let match_start = cap.get(0).unwrap().start();
+
+                // Resolve shader path relative to workspace
+                let shader_path = if let Some(ref root) = workspace_root {
+                    root.join(shader_path_str)
+                } else {
+                    std::path::PathBuf::from(shader_path_str)
+                };
+
+                // Try to load shader contract
+                match self.shader_contract_cache.get_or_load(&shader_path) {
+                    Ok(contract) => {
+                        // Successfully loaded shader contract
+                        // Now we need to extract binding count and push constant size from the HLX code
+                        // This is a simplified heuristic - in a real implementation, we'd parse the AST
+
+                        // Try to find the bindings array after the shader path
+                        // Look for pattern like: [buf1, buf2, buf3]
+                        let rest_of_line = &line[cap.get(0).unwrap().end()..];
+                        let binding_count = if let Some(arr_start) = rest_of_line.find('[') {
+                            if let Some(arr_end) = rest_of_line[arr_start..].find(']') {
+                                let arr_content = &rest_of_line[arr_start + 1..arr_start + arr_end];
+                                if arr_content.trim().is_empty() {
+                                    0
+                                } else {
+                                    arr_content.matches(',').count() + 1
+                                }
+                            } else {
+                                0
+                            }
+                        } else {
+                            0
+                        };
+
+                        // TODO: Extract push constant size
+                        // For now, we'll just validate binding count
+                        let violations = contract.validate_dispatch(binding_count, None);
+
+                        for violation in violations {
+                            let (severity, code) = match &violation {
+                                ContractViolation::ShaderNotFound { .. } => {
+                                    (DiagnosticSeverity::ERROR, "shader-not-found")
+                                }
+                                ContractViolation::BindingCountMismatch { .. } => {
+                                    (DiagnosticSeverity::ERROR, "binding-count-mismatch")
+                                }
+                                ContractViolation::PushConstantSizeMismatch { .. } => {
+                                    (DiagnosticSeverity::ERROR, "push-constant-mismatch")
+                                }
+                                ContractViolation::MisalignedPushConstants { .. } => {
+                                    (DiagnosticSeverity::ERROR, "misaligned-push-constants")
+                                }
+                                ContractViolation::InvalidSpirv { .. } => {
+                                    (DiagnosticSeverity::ERROR, "invalid-spirv")
+                                }
+                            };
+
+                            diagnostics.push(Diagnostic {
+                                range: Range {
+                                    start: Position {
+                                        line: line_idx as u32,
+                                        character: match_start as u32,
+                                    },
+                                    end: Position {
+                                        line: line_idx as u32,
+                                        character: (match_start + cap.get(0).unwrap().as_str().len()) as u32,
+                                    },
+                                },
+                                severity: Some(severity),
+                                code: Some(NumberOrString::String(code.to_string())),
+                                source: Some("hlx-shader".to_string()),
+                                message: format!("{}", violation),
+                                related_information: None,
+                                tags: None,
+                                code_description: None,
+                                data: None,
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        // Shader file not found or invalid SPIR-V
+                        diagnostics.push(Diagnostic {
+                            range: Range {
+                                start: Position {
+                                    line: line_idx as u32,
+                                    character: match_start as u32,
+                                },
+                                end: Position {
+                                    line: line_idx as u32,
+                                    character: (match_start + cap.get(0).unwrap().as_str().len()) as u32,
+                                },
+                            },
+                            severity: Some(DiagnosticSeverity::WARNING),
+                            code: Some(NumberOrString::String("shader-load-failed".to_string())),
+                            source: Some("hlx-shader".to_string()),
+                            message: format!("Could not load shader contract: {}", e),
+                            related_information: None,
+                            tags: None,
+                            code_description: None,
+                            data: None,
+                        });
+                    }
+                }
+            }
+        }
+
+        diagnostics
     }
 }
 

@@ -20,3 +20,7 @@ dashmap = "6.1.0"
 regex = "1.10"
 url = "2.5"
 parking_lot = "0.12"
+
+# Shader validation
+rspirv = "0.12"
+spirv = "0.3"

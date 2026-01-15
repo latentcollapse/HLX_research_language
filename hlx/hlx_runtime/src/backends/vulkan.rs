@@ -377,6 +377,7 @@ impl Backend for VulkanBackend {
 
     fn alloc_tensor(&mut self, shape: &[usize], dtype: DType) -> Result<TensorHandle> {
         let size_bytes = (shape.iter().product::<usize>() * dtype.size_bytes()) as u64;
+        println!("[Vulkan] Allocating Tensor: {:?} ({:?}) -> {} bytes", shape, dtype, size_bytes);
         
         unsafe {
             // Create VkBuffer
@@ -413,6 +414,7 @@ impl Backend for VulkanBackend {
                 size_bytes: size_bytes as usize,
             });
 
+            println!("[Vulkan] Allocation successful. Handle: {}", handle.0);
             Ok(handle)
         }
     }
@@ -2238,8 +2240,15 @@ impl VulkanBackend {
         push_constants: &[u8],
         workgroup_count: [u32; 3],
     ) -> Result<()> {
+        use std::io::Write;
+        println!("[Vulkan] Dispatching Compute...");
+        std::io::stdout().flush().ok();
+        
         unsafe {
             // 1. Create Descriptor Set Layout
+            println!("[Vulkan] Creating DS Layout with {} bindings", bindings.len());
+            std::io::stdout().flush().ok();
+            
             let mut vk_bindings = Vec::with_capacity(bindings.len());
             for i in 0..bindings.len() {
                 vk_bindings.push(vk::DescriptorSetLayoutBinding::builder()
@@ -2257,7 +2266,7 @@ impl VulkanBackend {
                 .map_err(|e| HlxError::BackendError { message: format!("DS layout failed: {}", e) })?;
 
             // 2. Create Pipeline Layout
-            // Only create push constant range if needed, but PipelineLayout creation expects slice
+            println!("[Vulkan] Creating Pipeline Layout (PC size: {})", push_constants.len());
             let push_ranges = if !push_constants.is_empty() {
                 vec![vk::PushConstantRange::builder()
                     .stage_flags(vk::ShaderStageFlags::COMPUTE)
@@ -2276,6 +2285,7 @@ impl VulkanBackend {
                 .map_err(|e| HlxError::BackendError { message: format!("Pipeline layout failed: {}", e) })?;
 
             // 3. Create Pipeline
+            println!("[Vulkan] Creating Shader Module ({} bytes)", shader_bytes.len());
             let code_len = shader_bytes.len() / 4;
             let mut code = Vec::with_capacity(code_len);
             for i in 0..code_len {
@@ -2302,10 +2312,12 @@ impl VulkanBackend {
                 .stage(stage_info.build())
                 .layout(pipeline_layout);
 
+            println!("[Vulkan] Creating Compute Pipeline...");
             let pipeline = self.device.create_compute_pipelines(vk::PipelineCache::null(), &[pipeline_info.build()], None)
                 .map_err(|e| HlxError::BackendError { message: format!("Pipeline creation failed: {:?}", e) })?[0];
 
             // 4. Descriptor Pool & Set
+            println!("[Vulkan] Allocating Descriptor Pool...");
             let pool_sizes = [vk::DescriptorPoolSize {
                 ty: vk::DescriptorType::STORAGE_BUFFER,
                 descriptor_count: std::cmp::max(1, bindings.len() as u32),
@@ -2323,6 +2335,7 @@ impl VulkanBackend {
                 .map_err(|e| HlxError::BackendError { message: format!("Set alloc failed: {}", e) })?[0];
 
             // 5. Update Descriptor Sets
+            println!("[Vulkan] Updating Descriptor Sets...");
             if !bindings.is_empty() {
                 let mut writes = Vec::with_capacity(bindings.len());
                 let mut buffer_infos = Vec::with_capacity(bindings.len()); 
@@ -2344,6 +2357,7 @@ impl VulkanBackend {
             }
 
             // 6. Record & Dispatch
+            println!("[Vulkan] Recording Commands...");
             let begin_info = vk::CommandBufferBeginInfo::builder().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
             self.device.begin_command_buffer(self.transfer_command_buffer, &begin_info).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
 
@@ -2352,22 +2366,42 @@ impl VulkanBackend {
             if !push_constants.is_empty() {
                 self.device.cmd_push_constants(self.transfer_command_buffer, pipeline_layout, vk::ShaderStageFlags::COMPUTE, 0, push_constants);
             }
+            println!("[Vulkan] Dispatching ({}, {}, {})...", workgroup_count[0], workgroup_count[1], workgroup_count[2]);
             self.device.cmd_dispatch(self.transfer_command_buffer, workgroup_count[0], workgroup_count[1], workgroup_count[2]);
 
             self.device.end_command_buffer(self.transfer_command_buffer).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
 
+            println!("[Vulkan] Submitting...");
             let submit_info = vk::SubmitInfo::builder().command_buffers(std::slice::from_ref(&self.transfer_command_buffer));
             self.device.queue_submit(self.queue, &[submit_info.build()], self.transfer_fence).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
 
+            println!("[Vulkan] Waiting...");
             self.device.wait_for_fences(&[self.transfer_fence], true, u64::MAX).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
             self.device.reset_fences(&[self.transfer_fence]).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
 
             // 7. Cleanup
+            println!("[Vulkan] Cleanup: Descriptor Pool...");
+            std::io::stdout().flush().ok();
             self.device.destroy_descriptor_pool(descriptor_pool, None);
+            
+            println!("[Vulkan] Cleanup: Pipeline...");
+            std::io::stdout().flush().ok();
             self.device.destroy_pipeline(pipeline, None);
+            
+            println!("[Vulkan] Cleanup: Shader Module...");
+            std::io::stdout().flush().ok();
             self.device.destroy_shader_module(shader_module, None);
+            
+            println!("[Vulkan] Cleanup: Pipeline Layout...");
+            std::io::stdout().flush().ok();
             self.device.destroy_pipeline_layout(pipeline_layout, None);
+            
+            println!("[Vulkan] Cleanup: DS Layout...");
+            std::io::stdout().flush().ok();
             self.device.destroy_descriptor_set_layout(ds_layout, None);
+            
+            println!("[Vulkan] Cleanup: Done.");
+            std::io::stdout().flush().ok();
         }
         Ok(())
     }

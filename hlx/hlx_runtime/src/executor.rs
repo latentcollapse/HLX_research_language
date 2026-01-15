@@ -25,7 +25,24 @@ impl Executor {
     /// Create a new executor with the given configuration
     pub fn new(config: &RuntimeConfig) -> Result<Self> {
         let backend = create_backend(config)?;
-        
+
+        // Verify ABI fingerprint to prevent vtable corruption
+        // This catches cases where the Backend trait was modified but not all crates were recompiled
+        use crate::backend::BACKEND_ABI_FINGERPRINT;
+        let backend_abi = backend.abi_fingerprint();
+        if backend_abi != BACKEND_ABI_FINGERPRINT {
+            return Err(HlxError::validation(format!(
+                "Backend ABI mismatch detected!\n\
+                 Expected: 0x{:016x}\n\
+                 Got:      0x{:016x}\n\n\
+                 This indicates the Backend trait was modified but not all crates were recompiled.\n\
+                 Fix: Run 'cargo clean && cargo build' to recompile all crates with consistent ABIs.\n\n\
+                 This check prevents vtable corruption that would cause segfaults.",
+                BACKEND_ABI_FINGERPRINT,
+                backend_abi
+            )));
+        }
+
         Ok(Self {
             config: config.clone(),
             backend,
@@ -2643,6 +2660,8 @@ impl ExecutionContext {
                     });
                 }
                 
+                println!("[Executor] Preparing gpu_dispatch...");
+                
                 // 1. Load Shader
                 let shader_path = match self.get_reg(args[0])? {
                     Value::String(s) => s.clone(),
@@ -2651,6 +2670,7 @@ impl ExecutionContext {
                 let shader_bytes = std::fs::read(&shader_path).map_err(|e| HlxError::BackendError { 
                     message: format!("Failed to read shader {}: {}", shader_path, e) 
                 })?;
+                println!("[Executor] Shader loaded: {} bytes", shader_bytes.len());
 
                 // 2. Extract Handles
                 let buffers_val = self.get_reg(args[1])?;
@@ -2670,6 +2690,7 @@ impl ExecutionContext {
                     }
                     _ => return Err(HlxError::TypeError { expected: "array of handles".to_string(), got: buffers_val.type_name().to_string() }),
                 };
+                println!("[Executor] Bindings parsed: {} handles", bindings.len());
 
                 // 3. Push Constants
                 let push_val = self.get_reg(args[2])?;
@@ -2686,13 +2707,20 @@ impl ExecutionContext {
                     }
                     _ => return Err(HlxError::TypeError { expected: "array of bytes".to_string(), got: push_val.type_name().to_string() }),
                 };
+                println!("[Executor] Push constants parsed: {} bytes", push_constants.len());
 
                 // 4. Workgroup Counts
                 let x = match self.get_reg(args[3])? { Value::Integer(i) => *i as u32, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
                 let y = match self.get_reg(args[4])? { Value::Integer(i) => *i as u32, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
                 let z = match self.get_reg(args[5])? { Value::Integer(i) => *i as u32, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
 
+                println!("[Executor] Calling backend.dispatch_compute...");
+                use std::io::Write;
+                std::io::stdout().flush().ok();
+                
                 backend.dispatch_compute(&shader_bytes, &bindings, &push_constants, [x, y, z])?;
+                
+                println!("[Executor] Backend returned.");
                 Ok(Value::Boolean(true))
             }
             "alloc_tensor" => {

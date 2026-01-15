@@ -14,6 +14,7 @@ blake3 = { workspace = true }
 thiserror.workspace = true
 hex.workspace = true
 im = { version = "15.1", features = ["serde"] }
+chrono = "0.4"
 
 [dev-dependencies]
 criterion.workspace = true

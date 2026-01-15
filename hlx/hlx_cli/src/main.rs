@@ -19,7 +19,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::fs;
 
-use hlx_core::{HlxCrate, Value, lcb};
+use hlx_core::{HlxCrate, Value, lcb, RuntimeCapabilities, BuiltinSpecBuilder, StabilityLevel};
 use hlx_compiler::{HlxaParser, HlxaEmitter, RunicEmitter, parser::Parser as ParseTrait, Emitter, lower};
 use hlx_runtime::execute;
 
@@ -152,6 +152,14 @@ enum Commands {
         /// Output as JSON
         #[arg(long)]
         json: bool,
+
+        /// Generate flamegraph
+        #[arg(long)]
+        flamegraph: bool,
+
+        /// Flamegraph sampling frequency (Hz)
+        #[arg(long, default_value = "1000")]
+        frequency: u32,
     },
 
     /// Compile to native code using LLVM backend
@@ -174,6 +182,17 @@ enum Commands {
         /// Print LLVM IR to stderr
         #[arg(long)]
         print_ir: bool,
+    },
+
+    /// Emit runtime capabilities schema
+    Capabilities {
+        /// Output file (stdout if not specified)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Output format (json or toml)
+        #[arg(long, default_value = "json")]
+        format: String,
     },
 }
 
@@ -216,11 +235,14 @@ fn main() -> Result<()> {
         Commands::Test => {
             run_tests()?;
         }
-        Commands::Bench { input, hlx_s, iterations, json } => {
-            bench(&input, hlx_s, iterations, json)?;
+        Commands::Bench { input, hlx_s, iterations, json, flamegraph, frequency } => {
+            bench(&input, hlx_s, iterations, json, flamegraph, frequency)?;
         }
         Commands::CompileNative { input, output, target, asm, print_ir } => {
             compile_native(&input, output, target.as_deref(), asm, print_ir)?;
+        }
+        Commands::Capabilities { output, format } => {
+            emit_capabilities(output, &format)?;
         }
     }
 
@@ -590,8 +612,25 @@ fn run_tests() -> Result<()> {
     Ok(())
 }
 
+/// Check if profiling is available (perf_event_paranoid setting)
+fn can_profile() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(contents) = fs::read_to_string("/proc/sys/kernel/perf_event_paranoid") {
+            if let Ok(value) = contents.trim().parse::<i32>() {
+                return value <= 1;  // Need <=1 for user profiling
+            }
+        }
+        false
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        true  // Assume other platforms are OK
+    }
+}
+
 /// Benchmark execution performance
-fn bench(input: &PathBuf, hlx_s: bool, iterations: usize, json: bool) -> Result<()> {
+fn bench(input: &PathBuf, hlx_s: bool, iterations: usize, json: bool, flamegraph: bool, frequency: u32) -> Result<()> {
     use std::time::{Duration, Instant};
     use serde_json::json;
 
@@ -621,11 +660,36 @@ fn bench(input: &PathBuf, hlx_s: bool, iterations: usize, json: bool) -> Result<
         println!();
     }
 
+    // Check if profiling is possible before attempting
+    if flamegraph && !can_profile() {
+        eprintln!("Warning: Flamegraph requested but profiling is not available.");
+        eprintln!("On Linux, run: sudo sysctl -w kernel.perf_event_paranoid=-1");
+        eprintln!("Current value is too restrictive. Continuing without flamegraph...");
+        eprintln!();
+    }
+
     // Warmup run
     let _ = execute(&krate)?;
 
     // Benchmark runs
     let mut durations = Vec::with_capacity(iterations);
+
+    // Start profiling if flamegraph requested and available
+    let guard = if flamegraph && can_profile() {
+        match pprof::ProfilerGuardBuilder::default()
+            .frequency(frequency as i32)
+            .blocklist(&["libc", "libgcc", "pthread", "vdso"])
+            .build() {
+            Ok(g) => Some(g),
+            Err(e) => {
+                eprintln!("Warning: Could not start profiler: {}", e);
+                eprintln!("Continuing without flamegraph...");
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     for i in 0..iterations {
         let start = Instant::now();
@@ -641,6 +705,16 @@ fn bench(input: &PathBuf, hlx_s: bool, iterations: usize, json: bool) -> Result<
     // Compute statistics
     let total: Duration = durations.iter().sum();
     let mean = total / iterations as u32;
+
+    // Generate flamegraph if requested
+    if let Some(guard) = guard {
+        if let Err(e) = generate_flamegraph(&guard, input, hlx_s, iterations, mean, &krate) {
+            eprintln!("Warning: Flamegraph generation failed: {}", e);
+            eprintln!("Note: On Linux, you may need to run:");
+            eprintln!("  sudo sysctl -w kernel.perf_event_paranoid=-1");
+            eprintln!("  or use: cargo build --release && perf record ...");
+        }
+    }
     let min = durations.iter().min().unwrap();
     let max = durations.iter().max().unwrap();
 
@@ -691,6 +765,114 @@ fn bench(input: &PathBuf, hlx_s: bool, iterations: usize, json: bool) -> Result<
             println!("  hlx bench {} -n {}", input.display(), iterations);
         }
     }
+
+    Ok(())
+}
+
+/// Generate flamegraph from profiling data
+fn generate_flamegraph(
+    guard: &pprof::ProfilerGuard,
+    input: &PathBuf,
+    hlx_s: bool,
+    iterations: usize,
+    mean: std::time::Duration,
+    krate: &HlxCrate,
+) -> Result<()> {
+    use std::io::Write;
+    use chrono::Local;
+
+    // Create perf_data directory if it doesn't exist
+    fs::create_dir_all("perf_data")?;
+
+    // Generate timestamp
+    let timestamp = Local::now().format("%Y%m%d_%H%M%S");
+
+    // Extract test name from input path
+    let test_name = input.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown");
+
+    // Generate mode label
+    let mode = if hlx_s { "speculation" } else { "serial" };
+
+    // Check if @scale pragma exists
+    let has_scale = krate.metadata.as_ref()
+        .and_then(|m| m.hlx_scale_substrates.get("main"))
+        .map(|info| info.enable_speculation && info.agent_count > 1)
+        .unwrap_or(false);
+
+    let scale_info = if has_scale {
+        krate.metadata.as_ref()
+            .and_then(|m| m.hlx_scale_substrates.get("main"))
+            .map(|info| format!("_scale{}_barriers{}", info.agent_count, info.barrier_count))
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    // Build detailed filename
+    let filename = format!(
+        "perf_data/flamegraph-{}-{}{}_n{}_mean{:.0}ms_{}.svg",
+        test_name,
+        mode,
+        scale_info,
+        iterations,
+        mean.as_secs_f64() * 1000.0,
+        timestamp
+    );
+
+    // Generate report
+    let report = guard.report().build()
+        .context("Failed to build profiler report")?;
+
+    // Create flamegraph
+    let file = fs::File::create(&filename)
+        .with_context(|| format!("Failed to create flamegraph file: {}", filename))?;
+    let mut writer = std::io::BufWriter::new(file);
+
+    // Generate title with metadata
+    let title = format!(
+        "HLX Bench: {} | {} | {} iterations | mean: {:.2}ms{}",
+        test_name,
+        mode,
+        iterations,
+        mean.as_secs_f64() * 1000.0,
+        if has_scale {
+            krate.metadata.as_ref()
+                .and_then(|m| m.hlx_scale_substrates.get("main"))
+                .map(|info| format!(" | @scale(size={}) | {} barriers", info.agent_count, info.barrier_count))
+                .unwrap_or_default()
+        } else {
+            String::new()
+        }
+    );
+
+    // Create custom options for detailed flamegraph
+    let mut options = inferno::flamegraph::Options::default();
+    options.title = title.clone();
+    options.count_name = "samples".to_string();
+    options.name_type = "Function:".to_string();
+    options.hash = true;  // Consistent colors
+    options.font_size = 12;  // Larger font
+    options.min_width = 0.1;  // Show more detail
+
+    // Convert report to flamegraph format
+    let mut collapsed = Vec::new();
+    report.flamegraph(&mut collapsed)
+        .context("Failed to generate flamegraph data")?;
+
+    // Generate SVG
+    inferno::flamegraph::from_reader(
+        &mut options,
+        &collapsed[..],
+        &mut writer,
+    ).context("Failed to write flamegraph SVG")?;
+
+    writer.flush()?;
+
+    println!();
+    println!("Flamegraph generated: {}", filename);
+    println!("  Title: {}", title);
 
     Ok(())
 }
@@ -870,6 +1052,207 @@ fn compile_native(
         println!("\nNext steps:");
         println!("  1. Link with appropriate linker script for your target");
         println!("  2. For bare metal: ld -T linker.ld {} -o kernel.elf", output_path.display());
+    }
+
+    Ok(())
+}
+
+/// Emit runtime capabilities schema
+fn emit_capabilities(output: Option<PathBuf>, format: &str) -> Result<()> {
+    let mut caps = RuntimeCapabilities::new();
+
+    // Add all known builtins
+    // Core builtins (always available)
+    caps.add_builtin(
+        BuiltinSpecBuilder::new("print")
+            .signature("print(message: String) -> ()")
+            .description("Print a message to stdout")
+            .parameter("message", "String", "Message to print", false)
+            .returns("()")
+            .build(),
+    );
+
+    caps.add_builtin(
+        BuiltinSpecBuilder::new("to_string")
+            .signature("to_string(value: int|float) -> String")
+            .description("Convert a value to string")
+            .parameter("value", "int|float", "Value to convert", false)
+            .returns("String")
+            .build(),
+    );
+
+    caps.add_builtin(
+        BuiltinSpecBuilder::new("to_int")
+            .signature("to_int(value: float|String) -> int")
+            .description("Convert a value to integer")
+            .parameter("value", "float|String", "Value to convert", false)
+            .returns("int")
+            .build(),
+    );
+
+    caps.add_builtin(
+        BuiltinSpecBuilder::new("to_float")
+            .signature("to_float(value: int|String) -> float")
+            .description("Convert a value to float")
+            .parameter("value", "int|String", "Value to convert", false)
+            .returns("float")
+            .build(),
+    );
+
+    caps.add_builtin(
+        BuiltinSpecBuilder::new("arr_concat")
+            .signature("arr_concat(a: Array, b: Array) -> Array")
+            .description("Concatenate two arrays")
+            .parameter("a", "Array", "First array", false)
+            .parameter("b", "Array", "Second array", false)
+            .returns("Array")
+            .build(),
+    );
+
+    // GPU builtins (require vulkan or cuda)
+    caps.add_builtin(
+        BuiltinSpecBuilder::new("alloc_tensor")
+            .signature("alloc_tensor(shape: Array, dtype: String) -> Handle")
+            .description("Allocate a GPU tensor")
+            .require_feature("vulkan")
+            .parameter("shape", "Array", "Tensor shape dimensions", false)
+            .parameter("dtype", "String", "Data type (i32, f32, etc.)", false)
+            .returns("Handle")
+            .stability(StabilityLevel::Stable)
+            .build(),
+    );
+
+    caps.add_builtin(
+        BuiltinSpecBuilder::new("gpu_dispatch")
+            .signature("gpu_dispatch(shader: String, bindings: Array, push_constants: Array, x: int, y: int, z: int) -> ()")
+            .description("Dispatch a compute shader")
+            .require_feature("vulkan")
+            .parameter("shader", "String", "Path to SPIR-V shader", false)
+            .parameter("bindings", "Array<Handle>", "Buffer bindings", false)
+            .parameter("push_constants", "Array", "Push constant data", false)
+            .parameter("x", "int", "Workgroup count X", false)
+            .parameter("y", "int", "Workgroup count Y", false)
+            .parameter("z", "int", "Workgroup count Z", false)
+            .returns("()")
+            .stability(StabilityLevel::Stable)
+            .build(),
+    );
+
+    // Pipe/IPC builtins
+    caps.add_builtin(
+        BuiltinSpecBuilder::new("pipe_open")
+            .signature("pipe_open(command: String) -> int")
+            .description("Open a pipe to a shell command")
+            .parameter("command", "String", "Shell command to execute", false)
+            .returns("int")
+            .stability(StabilityLevel::Stable)
+            .build(),
+    );
+
+    caps.add_builtin(
+        BuiltinSpecBuilder::new("pipe_write")
+            .signature("pipe_write(pid: int, data: Handle|String) -> ()")
+            .description("Write data to a pipe")
+            .parameter("pid", "int", "Pipe ID from pipe_open", false)
+            .parameter("data", "Handle|String", "Data to write", false)
+            .returns("()")
+            .build(),
+    );
+
+    caps.add_builtin(
+        BuiltinSpecBuilder::new("pipe_read")
+            .signature("pipe_read(pid: int) -> String")
+            .description("Read data from a pipe")
+            .parameter("pid", "int", "Pipe ID from pipe_open", false)
+            .returns("String")
+            .build(),
+    );
+
+    caps.add_builtin(
+        BuiltinSpecBuilder::new("pipe_close")
+            .signature("pipe_close(pid: int) -> ()")
+            .description("Close a pipe")
+            .parameter("pid", "int", "Pipe ID to close", false)
+            .returns("()")
+            .build(),
+    );
+
+    // Snapshot/debugging builtins
+    caps.add_builtin(
+        BuiltinSpecBuilder::new("snapshot")
+            .signature("snapshot() -> Handle")
+            .description("Capture current execution state")
+            .returns("Handle")
+            .stability(StabilityLevel::Experimental)
+            .build(),
+    );
+
+    caps.add_builtin(
+        BuiltinSpecBuilder::new("restore")
+            .signature("restore(handle: Handle) -> ()")
+            .description("Restore execution state from snapshot")
+            .parameter("handle", "Handle", "Snapshot handle", false)
+            .returns("()")
+            .stability(StabilityLevel::Experimental)
+            .build(),
+    );
+
+    // Add backend capabilities
+    // Check if Vulkan is available (simplified check)
+    #[cfg(feature = "vulkan")]
+    {
+        use hlx_runtime::backends::VulkanBackend;
+        match VulkanBackend::new() {
+            Ok(_backend) => {
+                caps.add_backend(hlx_core::capabilities::BackendCapability {
+                    name: "vulkan".to_string(),
+                    available: true,
+                    version: Some("1.3".to_string()),
+                    operations: vec![
+                        "alloc_tensor".to_string(),
+                        "gpu_dispatch".to_string(),
+                    ],
+                    limits: std::collections::HashMap::new(),
+                });
+            }
+            Err(_) => {
+                caps.add_backend(hlx_core::capabilities::BackendCapability {
+                    name: "vulkan".to_string(),
+                    available: false,
+                    version: None,
+                    operations: vec![],
+                    limits: std::collections::HashMap::new(),
+                });
+            }
+        }
+    }
+
+    // CPU backend is always available
+    caps.add_backend(hlx_core::capabilities::BackendCapability {
+        name: "cpu".to_string(),
+        available: true,
+        version: Some(env!("CARGO_PKG_VERSION").to_string()),
+        operations: vec!["interpret".to_string()],
+        limits: std::collections::HashMap::new(),
+    });
+
+    // Serialize to requested format
+    let output_str = match format {
+        "json" => caps.to_json().context("Failed to serialize capabilities to JSON")?,
+        "toml" => {
+            // For now, just use JSON - TOML serialization can be added later
+            caps.to_json().context("Failed to serialize capabilities")?
+        }
+        _ => anyhow::bail!("Unsupported format: {}", format),
+    };
+
+    // Write to output or stdout
+    if let Some(path) = output {
+        fs::write(&path, output_str)
+            .with_context(|| format!("Failed to write to {}", path.display()))?;
+        eprintln!("Capabilities written to: {}", path.display());
+    } else {
+        println!("{}", output_str);
     }
 
     Ok(())
