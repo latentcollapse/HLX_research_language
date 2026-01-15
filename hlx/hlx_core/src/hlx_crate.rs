@@ -57,7 +57,7 @@ pub struct CrateMetadata {
     pub debug_symbols: Vec<DebugSymbol>,
 
     /// HLX-Scale substrate information: function name -> substrate config
-    /// Used by runtime to route @swarm functions to speculation coordinator
+    /// Used by runtime to route @scale functions to speculation coordinator
     #[serde(default)]
     pub hlx_scale_substrates: HashMap<String, HlxScaleInfo>,
 }

@@ -50,14 +50,21 @@ pub use config::RuntimeConfig;
 pub use backend::Backend;
 pub use executor::Executor;
 pub use value_store::ValueStore;
-pub use speculation::{SpeculationCoordinator, SpeculationConfig, AgentState};
+pub use speculation::{SpeculationCoordinator, SpeculationConfig, AgentState, BarrierCoordinator};
 
 use hlx_core::{HlxCrate, Value, Result};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::sync::Arc;
 
 thread_local! {
     /// Thread-local flag to disable speculation (prevents infinite recursion)
     static SPECULATION_DISABLED: Cell<bool> = Cell::new(false);
+
+    /// Thread-local barrier coordinator for speculation agents
+    static BARRIER_COORDINATOR: RefCell<Option<Arc<BarrierCoordinator>>> = RefCell::new(None);
+
+    /// Thread-local agent ID for speculation agents
+    static AGENT_ID: Cell<Option<usize>> = Cell::new(None);
 }
 
 /// Check if speculation is disabled for this thread
@@ -68,6 +75,22 @@ pub(crate) fn is_speculation_disabled() -> bool {
 /// Disable speculation for this thread (used by speculation agents)
 pub(crate) fn disable_speculation() {
     SPECULATION_DISABLED.with(|d| d.set(true));
+}
+
+/// Set barrier coordinator for this thread (used by speculation agents)
+pub(crate) fn set_barrier_coordinator(coordinator: Option<Arc<BarrierCoordinator>>, agent_id: Option<usize>) {
+    BARRIER_COORDINATOR.with(|c| *c.borrow_mut() = coordinator);
+    AGENT_ID.with(|id| id.set(agent_id));
+}
+
+/// Get barrier coordinator for this thread
+pub(crate) fn get_barrier_coordinator() -> Option<Arc<BarrierCoordinator>> {
+    BARRIER_COORDINATOR.with(|c| c.borrow().clone())
+}
+
+/// Get agent ID for this thread
+pub(crate) fn get_agent_id() -> Option<usize> {
+    AGENT_ID.with(|id| id.get())
 }
 
 /// Execute a crate with default configuration

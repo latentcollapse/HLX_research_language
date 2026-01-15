@@ -199,6 +199,26 @@ pub trait Backend: Send + Sync {
         eps: f64,
         step: u64,
     ) -> Result<()>;
+
+    // === Generic Compute ===
+
+    /// Dispatch a generic compute shader
+    /// 
+    /// * `shader_bytes`: Raw SPIR-V binary
+    /// * `bindings`: List of tensors to bind as storage buffers (binding = index)
+    /// * `push_constants`: Raw bytes for push constants
+    /// * `workgroup_count`: [x, y, z] dispatch dimensions
+    fn dispatch_compute(
+        &mut self,
+        shader_bytes: &[u8],
+        bindings: &[TensorHandle],
+        push_constants: &[u8],
+        workgroup_count: [u32; 3],
+    ) -> Result<()> {
+        Err(hlx_core::HlxError::BackendError { 
+            message: "Generic compute dispatch not supported by this backend".to_string() 
+        })
+    }
     
     // === Synchronization ===
 

@@ -264,7 +264,7 @@ let result = coordinator.execute_speculative(&krate)?;
    - Enables phased speculation (verify intermediate states)
 
 6. **Integration with Executor**
-   - Auto-detect `@swarm` functions during execution
+   - Auto-detect `@scale` functions during execution
    - Route to speculation coordinator automatically
    - Transparent to user code
 
@@ -295,7 +295,7 @@ let result = coordinator.execute_speculative(&krate)?;
 
 ### 3. No Executor Integration
 **Problem:** User must manually call speculation coordinator
-**Solution:** Phase 1B - auto-detect and route `@swarm` functions
+**Solution:** Phase 1B - auto-detect and route `@scale` functions
 
 ### 4. Limited Debugging
 **Problem:** Hard to diagnose why agents diverge (shouldn't happen with A1, but bugs exist)

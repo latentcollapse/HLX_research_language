@@ -31,7 +31,7 @@ Implemented:
 - `SubstrateInference` engine with deterministic caching
 - Multi-pass inference strategy:
   1. Explicit `@substrate(...)` pragmas (100% confidence)
-  2. Swarm configuration `@swarm(...)` hints (80-100% confidence)
+  2. Swarm configuration `@scale(...)` hints (80-100% confidence)
   3. AST hash-based caching (deterministic)
   4. Operation vocabulary analysis (CPU vs Quantum scoring)
 - Barrier counting (recursive through control flow)
@@ -48,10 +48,10 @@ Added support for:
 @substrate(quantum_sim)
 fn my_function() { ... }
 
-@swarm(size=2^50)
+@scale(size=2^50)
 fn massive_parallel() { ... }
 
-@swarm(size=1000, substrate=cpu)
+@scale(size=1000, substrate=cpu)
 fn moderate_parallel() { ... }
 ```
 

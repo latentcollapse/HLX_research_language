@@ -7,7 +7,7 @@
 //! - Swarm configuration (size hints)
 
 use crate::ast::{Block, Expr, Item, Program, Statement};
-use crate::substrate::{Substrate, SubstrateInfo, OperationHints, SwarmConfig, SwarmSize};
+use crate::substrate::{Substrate, SubstrateInfo, OperationHints, ScaleConfig, ScaleSize};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::collections::hash_map::DefaultHasher;
@@ -66,8 +66,8 @@ impl SubstrateInference {
         }
 
         // Step 2: Check for swarm configuration
-        if let Some(swarm) = self.parse_swarm_config(block) {
-            return self.infer_from_swarm(&swarm, block);
+        if let Some(swarm) = self.parse_scale_config(block) {
+            return self.infer_from_scale(&swarm, block);
         }
 
         // Step 3: Hash-based inference (deterministic)
@@ -98,20 +98,20 @@ impl SubstrateInference {
         None
     }
 
-    /// Parse @swarm configuration from block attributes
-    fn parse_swarm_config(&self, block: &Block) -> Option<SwarmConfig> {
+    /// Parse @scale configuration from block attributes
+    fn parse_scale_config(&self, block: &Block) -> Option<ScaleConfig> {
         for attr in &block.attributes {
-            if attr.starts_with("swarm(") && attr.ends_with(')') {
-                // Simple parsing for now: swarm(size=1000)
+            if attr.starts_with("scale(") && attr.ends_with(')') {
+                // Simple parsing for now: scale(size=1000)
                 let config_str = &attr[6..attr.len()-1];
-                return self.parse_swarm_simple(config_str);
+                return self.parse_scale_simple(config_str);
             }
         }
         None
     }
 
     /// Simple swarm config parser (basic key=value pairs)
-    fn parse_swarm_simple(&self, config: &str) -> Option<SwarmConfig> {
+    fn parse_scale_simple(&self, config: &str) -> Option<ScaleConfig> {
         let mut size = None;
         let mut substrate = None;
 
@@ -120,7 +120,7 @@ impl SubstrateInference {
             if parts.len() == 2 {
                 match parts[0].trim() {
                     "size" => {
-                        size = SwarmSize::parse(parts[1].trim());
+                        size = ScaleSize::parse(parts[1].trim());
                     }
                     "substrate" => {
                         substrate = Substrate::parse(parts[1].trim());
@@ -130,7 +130,7 @@ impl SubstrateInference {
             }
         }
 
-        size.map(|s| SwarmConfig {
+        size.map(|s| ScaleConfig {
             size: s,
             substrate,
             memory_limit: None,
@@ -140,7 +140,7 @@ impl SubstrateInference {
     }
 
     /// Infer substrate from swarm configuration
-    fn infer_from_swarm(&self, swarm: &SwarmConfig, block: &Block) -> SubstrateInfo {
+    fn infer_from_scale(&self, swarm: &ScaleConfig, block: &Block) -> SubstrateInfo {
         // If substrate explicitly specified in swarm, use it
         if let Some(explicit) = swarm.substrate {
             return SubstrateInfo {

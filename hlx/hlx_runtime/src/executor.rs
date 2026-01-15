@@ -36,7 +36,7 @@ impl Executor {
         // Check if speculation is disabled (set by speculation coordinator to prevent recursion)
         let speculation_disabled = crate::is_speculation_disabled();
 
-        // Check if main() has @swarm pragma (Phase 1B: main-only speculation)
+        // Check if main() has @scale pragma (Phase 1B: main-only speculation)
         if !speculation_disabled {
             if let Some(metadata) = &krate.metadata {
                 if let Some(main_info) = metadata.hlx_scale_substrates.get("main") {
@@ -44,7 +44,7 @@ impl Executor {
                     let log_enabled = self.config.debug || std::env::var("RUST_LOG").is_ok();
 
                     if log_enabled {
-                        println!("[HLX-SCALE] main() has @swarm(size={}), enabling speculation",
+                        println!("[HLX-SCALE] main() has @scale(size={}), enabling speculation",
                                 main_info.agent_count);
                         println!("[HLX-SCALE] Substrate: {}, Barriers: {}",
                                 main_info.substrate, main_info.barrier_count);
@@ -246,7 +246,26 @@ impl ExecutionContext {
             Err(HlxError::ValidationFail { message: "Empty call stack during register access".to_string() })
         }
     }
-    
+
+    /// Compute hash of current execution state (for barrier verification)
+    fn compute_state_hash(&self) -> String {
+        use blake3::Hasher;
+        let mut hasher = Hasher::new();
+
+        // Hash all registers in current frame (sorted by register number for determinism)
+        if let Some(frame) = self.call_stack.last() {
+            let mut sorted_regs: Vec<_> = frame.registers.iter().collect();
+            sorted_regs.sort_by_key(|(reg, _)| **reg);
+
+            for (reg, val) in sorted_regs {
+                hasher.update(&reg.to_le_bytes());
+                hasher.update(format!("{:?}", val).as_bytes());
+            }
+        }
+
+        format!("{}", hasher.finalize().to_hex())
+    }
+
     fn execute_instruction(&mut self, inst: &Instruction, pc: usize, backend: &mut dyn Backend) -> Result<ControlFlow> {
         if self.config.debug {
             // println!("  [{:4}] {:?}", pc, inst);
@@ -368,13 +387,26 @@ impl ExecutionContext {
             }
 
             Instruction::Barrier { name } => {
-                // In serial execution, barrier is a no-op
-                // In parallel execution (speculation), this triggers hash verification
-                if self.config.debug {
-                    if let Some(barrier_name) = name {
-                        println!("[BARRIER] '{}'", barrier_name);
-                    } else {
-                        println!("[BARRIER] (unnamed)");
+                // In speculation mode, synchronize and verify hashes at barrier
+                if let Some(coordinator) = crate::get_barrier_coordinator() {
+                    let barrier_name = name.as_ref()
+                        .map(|s| s.as_str())
+                        .unwrap_or("unnamed");
+
+                    // Compute current state hash (hash all registers)
+                    let state_hash = self.compute_state_hash();
+
+                    // Wait at barrier and verify consensus
+                    let agent_id = crate::get_agent_id().unwrap_or(0);
+                    coordinator.wait_at_barrier(barrier_name, agent_id, state_hash)?;
+                } else {
+                    // Serial execution: barrier is a no-op
+                    if self.config.debug {
+                        if let Some(barrier_name) = name {
+                            println!("[BARRIER] '{}'", barrier_name);
+                        } else {
+                            println!("[BARRIER] (unnamed)");
+                        }
                     }
                 }
                 return Ok(ControlFlow::Continue);
@@ -2602,6 +2634,101 @@ impl ExecutionContext {
                     Value::Integer(i) => Ok(Value::Float((*i as f64).log10())),
                     v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
                 }
+            }
+            "gpu_dispatch" => {
+                if args.len() != 6 {
+                    return Err(HlxError::ValidationFail {
+                        message: "gpu_dispatch(shader_path, buffers, push_constants, x, y, z) takes 6 args".to_string(),
+                    });
+                }
+                
+                // 1. Load Shader
+                let shader_path = match self.get_reg(args[0])? {
+                    Value::String(s) => s.clone(),
+                    v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }),
+                };
+                let shader_bytes = std::fs::read(&shader_path).map_err(|e| HlxError::BackendError { 
+                    message: format!("Failed to read shader {}: {}", shader_path, e) 
+                })?;
+
+                // 2. Extract Handles
+                let buffers_val = self.get_reg(args[1])?;
+                let bindings = match buffers_val {
+                    Value::Array(arr) => {
+                        let mut handles = Vec::new();
+                        for v in arr.iter() {
+                            match v {
+                                Value::Handle(h) => {
+                                    let id = h.parse::<u64>().map_err(|_| HlxError::ValidationFail { message: "Invalid handle format".to_string() })?;
+                                    handles.push(crate::backend::TensorHandle(id));
+                                }
+                                _ => return Err(HlxError::TypeError { expected: "handle".to_string(), got: v.type_name().to_string() }),
+                            }
+                        }
+                        handles
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "array of handles".to_string(), got: buffers_val.type_name().to_string() }),
+                };
+
+                // 3. Push Constants
+                let push_val = self.get_reg(args[2])?;
+                let push_constants = match push_val {
+                    Value::Array(arr) => {
+                        let mut bytes = Vec::new();
+                        for v in arr.iter() {
+                            match v {
+                                Value::Integer(i) => bytes.push(*i as u8),
+                                _ => return Err(HlxError::TypeError { expected: "integer (byte)".to_string(), got: v.type_name().to_string() }),
+                            }
+                        }
+                        bytes
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "array of bytes".to_string(), got: push_val.type_name().to_string() }),
+                };
+
+                // 4. Workgroup Counts
+                let x = match self.get_reg(args[3])? { Value::Integer(i) => *i as u32, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let y = match self.get_reg(args[4])? { Value::Integer(i) => *i as u32, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let z = match self.get_reg(args[5])? { Value::Integer(i) => *i as u32, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+
+                backend.dispatch_compute(&shader_bytes, &bindings, &push_constants, [x, y, z])?;
+                Ok(Value::Boolean(true))
+            }
+            "alloc_tensor" => {
+                if args.len() != 2 {
+                     return Err(HlxError::ValidationFail { message: "alloc_tensor(shape, dtype) takes 2 args".to_string() }); 
+                }
+                
+                let shape_val = self.get_reg(args[0])?;
+                let shape = match shape_val {
+                    Value::Array(arr) => {
+                        let mut s = Vec::new();
+                        for v in arr.iter() {
+                             match v {
+                                Value::Integer(i) => s.push(*i as usize),
+                                _ => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }),
+                             }
+                        }
+                        s
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "array".to_string(), got: shape_val.type_name().to_string() }),
+                };
+                
+                let dtype_val = self.get_reg(args[1])?;
+                let dtype = match dtype_val {
+                    Value::String(s) => match s.as_str() {
+                        "f32" => crate::backend::DType::F32,
+                        "f64" => crate::backend::DType::F64,
+                        "i32" | "int" => crate::backend::DType::I32,
+                        "i64" => crate::backend::DType::I64,
+                        "bool" => crate::backend::DType::Bool,
+                        _ => return Err(HlxError::ValidationFail { message: format!("Unknown dtype: {}", s) }),
+                    },
+                    _ => return Err(HlxError::TypeError { expected: "string".to_string(), got: dtype_val.type_name().to_string() }),
+                };
+                
+                let handle = backend.alloc_tensor(&shape, dtype)?;
+                Ok(Value::Handle(handle.0.to_string()))
             }
             _ => Err(HlxError::ValidationFail {
                 message: format!("Unknown function: {}", func),

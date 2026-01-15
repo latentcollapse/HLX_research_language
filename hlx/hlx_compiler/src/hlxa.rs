@@ -576,10 +576,10 @@ fn statement<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Statement
     ))(input)
 }
 
-/// Parse attributes like #[no_mangle], #[entry], @substrate(cpu), @swarm(size=1000)
+/// Parse attributes like #[no_mangle], #[entry], @substrate(cpu), @scale(size=1000)
 fn parse_attributes(input: &str) -> ParseResult<'_, Vec<String>> {
     many0(alt((
-        // HLX-Scale pragmas: @substrate(...) or @swarm(...)
+        // HLX-Scale pragmas: @substrate(...) or @scale(...)
         |i| {
             let (i, _) = preceded(ws, char('@'))(i)?;
             let (i, pragma_name) = preceded(ws, ident)(i)?;

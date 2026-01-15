@@ -19,5 +19,5 @@ pub use emitter::Emitter;
 pub use lower::lower_to_crate;
 pub use lift::lift_from_crate;
 pub use module_resolver::ModuleResolver;
-pub use substrate::{Substrate, SwarmConfig, SwarmSize, SubstrateInfo, OperationHints};
+pub use substrate::{Substrate, ScaleConfig, ScaleSize, SubstrateInfo, OperationHints};
 pub use substrate_inference::SubstrateInference;

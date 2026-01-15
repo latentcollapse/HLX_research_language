@@ -69,9 +69,9 @@ impl Default for Substrate {
 
 /// Swarm configuration for parallel execution
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SwarmConfig {
+pub struct ScaleConfig {
     /// Number of parallel agents/tasks
-    pub size: SwarmSize,
+    pub size: ScaleSize,
     /// Optional substrate override
     pub substrate: Option<Substrate>,
     /// Optional memory limit per agent
@@ -84,14 +84,14 @@ pub struct SwarmConfig {
 
 /// Swarm size specification
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum SwarmSize {
+pub enum ScaleSize {
     /// Fixed number (e.g., 1000)
     Fixed(u64),
     /// Exponential (e.g., 2^50 for quantum)
     Exponential { base: u64, exponent: u64 },
 }
 
-impl SwarmSize {
+impl ScaleSize {
     /// Parse swarm size from string
     pub fn parse(s: &str) -> Option<Self> {
         if s.contains('^') {
@@ -100,19 +100,19 @@ impl SwarmSize {
             if parts.len() == 2 {
                 let base = parts[0].parse::<u64>().ok()?;
                 let exponent = parts[1].parse::<u64>().ok()?;
-                return Some(SwarmSize::Exponential { base, exponent });
+                return Some(ScaleSize::Exponential { base, exponent });
             }
         }
 
         // Parse fixed
-        s.parse::<u64>().ok().map(SwarmSize::Fixed)
+        s.parse::<u64>().ok().map(ScaleSize::Fixed)
     }
 
     /// Get the actual size (if computable)
     pub fn to_u64(&self) -> Option<u64> {
         match self {
-            SwarmSize::Fixed(n) => Some(*n),
-            SwarmSize::Exponential { base, exponent } => {
+            ScaleSize::Fixed(n) => Some(*n),
+            ScaleSize::Exponential { base, exponent } => {
                 // Only compute if result fits in u64
                 if *exponent > 63 {
                     None  // Too large
@@ -126,8 +126,8 @@ impl SwarmSize {
     /// Check if size suggests quantum execution
     pub fn suggests_quantum(&self) -> bool {
         match self {
-            SwarmSize::Exponential { .. } => true,  // Exponential sizes are quantum hints
-            SwarmSize::Fixed(n) => *n > 10_000,     // Very large swarms might benefit from quantum
+            ScaleSize::Exponential { .. } => true,  // Exponential sizes are quantum hints
+            ScaleSize::Fixed(n) => *n > 10_000,     // Very large swarms might benefit from quantum
         }
     }
 }
@@ -226,18 +226,18 @@ mod tests {
 
     #[test]
     fn test_swarm_size_parse() {
-        assert_eq!(SwarmSize::parse("1000"), Some(SwarmSize::Fixed(1000)));
+        assert_eq!(ScaleSize::parse("1000"), Some(ScaleSize::Fixed(1000)));
         assert_eq!(
-            SwarmSize::parse("2^50"),
-            Some(SwarmSize::Exponential { base: 2, exponent: 50 })
+            ScaleSize::parse("2^50"),
+            Some(ScaleSize::Exponential { base: 2, exponent: 50 })
         );
     }
 
     #[test]
     fn test_swarm_size_quantum_hint() {
-        let fixed_small = SwarmSize::Fixed(100);
-        let fixed_large = SwarmSize::Fixed(100_000);
-        let exponential = SwarmSize::Exponential { base: 2, exponent: 50 };
+        let fixed_small = ScaleSize::Fixed(100);
+        let fixed_large = ScaleSize::Fixed(100_000);
+        let exponential = ScaleSize::Exponential { base: 2, exponent: 50 };
 
         assert!(!fixed_small.suggests_quantum());
         assert!(fixed_large.suggests_quantum());

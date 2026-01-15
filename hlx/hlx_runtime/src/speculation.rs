@@ -52,6 +52,110 @@ impl SpeculationConfig {
     }
 }
 
+/// Barrier point tracking agent states at synchronization
+#[derive(Debug, Clone)]
+pub struct BarrierPoint {
+    /// Barrier name
+    pub name: String,
+    /// Agent states at this barrier
+    pub agent_states: Vec<(usize, String)>, // (agent_id, state_hash)
+    /// Whether consensus was reached
+    pub consensus: bool,
+}
+
+/// Multi-barrier coordinator for intermediate verification
+pub struct BarrierCoordinator {
+    /// Barriers encountered during execution
+    barriers: Arc<Mutex<HashMap<String, BarrierPoint>>>,
+    /// Synchronization primitive for each barrier
+    sync_barriers: Arc<Mutex<HashMap<String, Arc<SyncBarrier>>>>,
+    /// Agent count
+    agent_count: usize,
+    /// Debug logging enabled
+    debug: bool,
+}
+
+impl BarrierCoordinator {
+    pub fn new(agent_count: usize, debug: bool) -> Self {
+        Self {
+            barriers: Arc::new(Mutex::new(HashMap::new())),
+            sync_barriers: Arc::new(Mutex::new(HashMap::new())),
+            agent_count,
+            debug,
+        }
+    }
+
+    /// Register an agent at a barrier with its state hash
+    pub fn wait_at_barrier(&self, barrier_name: &str, agent_id: usize, state_hash: String) -> Result<()> {
+        let log_enabled = self.debug || std::env::var("RUST_LOG").is_ok();
+
+        // Get or create the sync barrier for this named barrier
+        let sync_barrier = {
+            let mut barriers = self.sync_barriers.lock().unwrap();
+            barriers.entry(barrier_name.to_string())
+                .or_insert_with(|| Arc::new(SyncBarrier::new(self.agent_count)))
+                .clone()
+        };
+
+        // Record this agent's state
+        {
+            let mut barriers = self.barriers.lock().unwrap();
+            let point = barriers.entry(barrier_name.to_string())
+                .or_insert_with(|| BarrierPoint {
+                    name: barrier_name.to_string(),
+                    agent_states: Vec::new(),
+                    consensus: false,
+                });
+            point.agent_states.push((agent_id, state_hash.clone()));
+
+            if log_enabled {
+                println!("[HLX-SCALE][AGENT-{}] Reached barrier '{}' with hash: {}",
+                         agent_id, barrier_name, &state_hash[..16]);
+            }
+        }
+
+        // Wait for all agents to reach this barrier
+        sync_barrier.wait();
+
+        // First agent to wake verifies consensus
+        let mut barriers = self.barriers.lock().unwrap();
+        let point = barriers.get_mut(barrier_name).unwrap();
+
+        if point.agent_states.len() == self.agent_count && !point.consensus {
+            // Verify all hashes match
+            let first_hash = &point.agent_states[0].1;
+            let all_match = point.agent_states.iter().all(|(_, h)| h == first_hash);
+
+            if all_match {
+                point.consensus = true;
+                if log_enabled {
+                    println!("[HLX-SCALE][BARRIER] '{}': All {} agents agree (hash: {})",
+                             barrier_name, self.agent_count, &first_hash[..16]);
+                }
+            } else {
+                // Divergence detected!
+                let msg = format!(
+                    "Divergence detected at barrier '{}':\n{}",
+                    barrier_name,
+                    point.agent_states.iter()
+                        .map(|(id, h)| format!("  Agent {}: {} {}", id, &h[..16],
+                            if h == first_hash { "" } else { "<- DIVERGENT" }))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                );
+                eprintln!("[HLX-SCALE][BARRIER] ERROR: {}", msg);
+                return Err(HlxError::BackendError { message: msg });
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn get_barrier_stats(&self) -> Vec<BarrierPoint> {
+        self.barriers.lock().unwrap().values().cloned().collect()
+    }
+}
+
 /// Agent state snapshot for speculation
 #[derive(Debug, Clone)]
 pub struct AgentState {
@@ -98,19 +202,23 @@ impl SpeculationCoordinator {
         krate: &HlxCrate,
     ) -> Result<Value> {
         let agent_count = self.config.agent_count.min(self.config.max_agent_count);
+        let log_enabled = self.config.debug || std::env::var("RUST_LOG").is_ok();
 
-        if self.config.debug || std::env::var("RUST_LOG").is_ok() {
+        if log_enabled {
             println!("[HLX-SCALE] Starting speculation with {} agents (max: {})",
                     agent_count, self.config.max_agent_count);
         }
 
-        // Shared barrier for synchronization
+        // Create barrier coordinator for intermediate verification
+        let barrier_coordinator = Arc::new(BarrierCoordinator::new(agent_count, self.config.debug));
+
+        // Shared barrier for final synchronization
         let barrier = Arc::new(SyncBarrier::new(agent_count));
 
         // Shared state for collecting results
         let results = Arc::new(Mutex::new(Vec::new()));
 
-        // Shared error state
+        // Shared error state (includes barrier divergence)
         let errors = Arc::new(Mutex::new(Vec::new()));
 
         // Clone krate for each agent
@@ -122,6 +230,7 @@ impl SpeculationCoordinator {
         for agent_id in 0..agent_count {
             let krate = Arc::clone(&krate);
             let barrier = Arc::clone(&barrier);
+            let barrier_coordinator = Arc::clone(&barrier_coordinator);
             let results = Arc::clone(&results);
             let errors = Arc::clone(&errors);
             let debug = self.config.debug;
@@ -130,6 +239,9 @@ impl SpeculationCoordinator {
                 // CRITICAL: Disable speculation for nested execution (prevents infinite recursion)
                 // This is thread-local and safe across all threads
                 crate::disable_speculation();
+
+                // Set barrier coordinator for this agent thread
+                crate::set_barrier_coordinator(Some(barrier_coordinator), Some(agent_id));
 
                 let log_enabled = debug || std::env::var("RUST_LOG").is_ok();
 
@@ -175,20 +287,47 @@ impl SpeculationCoordinator {
             handle.join().expect("Agent thread panicked");
         }
 
-        // Check for errors
+        // Check for errors (including barrier divergence)
         let errors = errors.lock().unwrap();
-        if !errors.is_empty() {
-            return Err(HlxError::BackendError {
-                message: format!("Speculation failed with errors:\n{}", errors.join("\n"))
-            });
+        let has_errors = !errors.is_empty();
+        let error_messages = errors.clone();
+        drop(errors);
+
+        if has_errors {
+            // Check if any error is a barrier divergence
+            let has_divergence = error_messages.iter()
+                .any(|msg| msg.contains("Divergence detected") || msg.contains("Hash mismatch"));
+
+            if has_divergence {
+                eprintln!("[HLX-SCALE] Barrier divergence detected during speculation");
+                eprintln!("[HLX-SCALE] Falling back to serial execution...");
+
+                // Fallback to serial execution
+                // Temporarily disable speculation for serial fallback
+                crate::disable_speculation();
+                let serial_result = crate::execute(krate.as_ref());
+
+                // Note: speculation is already disabled in this thread, no need to re-enable
+                return serial_result.map(|result| {
+                    if log_enabled {
+                        eprintln!("[HLX-SCALE] Serial fallback completed successfully");
+                    }
+                    result
+                });
+            } else {
+                // Non-divergence errors (execution failures)
+                return Err(HlxError::BackendError {
+                    message: format!("Speculation failed with errors:\n{}", error_messages.join("\n"))
+                });
+            }
         }
 
-        // Verify consensus
+        // Verify consensus on final results
         let results = results.lock().unwrap();
         let result = self.verify_and_merge(results.as_slice())?;
 
-        if self.config.debug {
-            println!("[SPECULATION] Execution complete with consensus result: {:?}", result);
+        if log_enabled {
+            println!("[HLX-SCALE] Speculation complete with consensus result: {:?}", result);
         }
 
         Ok(result)

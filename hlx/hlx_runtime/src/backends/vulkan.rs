@@ -2230,6 +2230,147 @@ impl VulkanBackend {
     }
     fn embedding(&mut self, _indices: TensorHandle, _weight: TensorHandle, _out: TensorHandle) -> Result<()> { Ok(()) }
     fn adam_update(&mut self, _param: TensorHandle, _grad: TensorHandle, _m: TensorHandle, _v: TensorHandle, _lr: f64, _beta1: f64, _beta2: f64, _eps: f64, _step: u64) -> Result<()> { Ok(()) }
+
+    fn dispatch_compute(
+        &mut self,
+        shader_bytes: &[u8],
+        bindings: &[TensorHandle],
+        push_constants: &[u8],
+        workgroup_count: [u32; 3],
+    ) -> Result<()> {
+        unsafe {
+            // 1. Create Descriptor Set Layout
+            let mut vk_bindings = Vec::with_capacity(bindings.len());
+            for i in 0..bindings.len() {
+                vk_bindings.push(vk::DescriptorSetLayoutBinding::builder()
+                    .binding(i as u32)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::COMPUTE)
+                    .build());
+            }
+
+            let layout_info = vk::DescriptorSetLayoutCreateInfo::builder()
+                .bindings(&vk_bindings);
+            
+            let ds_layout = self.device.create_descriptor_set_layout(&layout_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("DS layout failed: {}", e) })?;
+
+            // 2. Create Pipeline Layout
+            // Only create push constant range if needed, but PipelineLayout creation expects slice
+            let push_ranges = if !push_constants.is_empty() {
+                vec![vk::PushConstantRange::builder()
+                    .stage_flags(vk::ShaderStageFlags::COMPUTE)
+                    .offset(0)
+                    .size(push_constants.len() as u32)
+                    .build()]
+            } else {
+                vec![]
+            };
+
+            let pipeline_layout_info = vk::PipelineLayoutCreateInfo::builder()
+                .set_layouts(std::slice::from_ref(&ds_layout))
+                .push_constant_ranges(&push_ranges);
+            
+            let pipeline_layout = self.device.create_pipeline_layout(&pipeline_layout_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Pipeline layout failed: {}", e) })?;
+
+            // 3. Create Pipeline
+            let code_len = shader_bytes.len() / 4;
+            let mut code = Vec::with_capacity(code_len);
+            for i in 0..code_len {
+                let bytes = [
+                    shader_bytes[i * 4],
+                    shader_bytes[i * 4 + 1],
+                    shader_bytes[i * 4 + 2],
+                    shader_bytes[i * 4 + 3],
+                ];
+                code.push(u32::from_le_bytes(bytes));
+            }
+
+            let shader_module_info = vk::ShaderModuleCreateInfo::builder().code(&code);
+            let shader_module = self.device.create_shader_module(&shader_module_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Shader module failed: {}", e) })?;
+
+            let entry_name = CStr::from_bytes_with_nul(b"main\0").unwrap();
+            let stage_info = vk::PipelineShaderStageCreateInfo::builder()
+                .stage(vk::ShaderStageFlags::COMPUTE)
+                .module(shader_module)
+                .name(entry_name);
+
+            let pipeline_info = vk::ComputePipelineCreateInfo::builder()
+                .stage(stage_info.build())
+                .layout(pipeline_layout);
+
+            let pipeline = self.device.create_compute_pipelines(vk::PipelineCache::null(), &[pipeline_info.build()], None)
+                .map_err(|e| HlxError::BackendError { message: format!("Pipeline creation failed: {:?}", e) })?[0];
+
+            // 4. Descriptor Pool & Set
+            let pool_sizes = [vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: std::cmp::max(1, bindings.len() as u32),
+            }];
+            let pool_info = vk::DescriptorPoolCreateInfo::builder()
+                .max_sets(1)
+                .pool_sizes(&pool_sizes);
+            let descriptor_pool = self.device.create_descriptor_pool(&pool_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Pool failed: {}", e) })?;
+
+            let set_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(descriptor_pool)
+                .set_layouts(std::slice::from_ref(&ds_layout));
+            let descriptor_set = self.device.allocate_descriptor_sets(&set_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Set alloc failed: {}", e) })?[0];
+
+            // 5. Update Descriptor Sets
+            if !bindings.is_empty() {
+                let mut writes = Vec::with_capacity(bindings.len());
+                let mut buffer_infos = Vec::with_capacity(bindings.len()); 
+
+                for handle in bindings.iter() {
+                    let buf = self.buffers.get(&handle.0).ok_or(HlxError::ValidationFail { message: "Invalid handle".to_string() })?.0;
+                    buffer_infos.push(vk::DescriptorBufferInfo { buffer: buf, offset: 0, range: vk::WHOLE_SIZE });
+                }
+
+                for (i, info) in buffer_infos.iter().enumerate() {
+                    writes.push(vk::WriteDescriptorSet::builder()
+                        .dst_set(descriptor_set)
+                        .dst_binding(i as u32)
+                        .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                        .buffer_info(std::slice::from_ref(info))
+                        .build());
+                }
+                self.device.update_descriptor_sets(&writes, &[]);
+            }
+
+            // 6. Record & Dispatch
+            let begin_info = vk::CommandBufferBeginInfo::builder().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            self.device.begin_command_buffer(self.transfer_command_buffer, &begin_info).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
+
+            self.device.cmd_bind_pipeline(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, pipeline);
+            self.device.cmd_bind_descriptor_sets(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, pipeline_layout, 0, &[descriptor_set], &[]);
+            if !push_constants.is_empty() {
+                self.device.cmd_push_constants(self.transfer_command_buffer, pipeline_layout, vk::ShaderStageFlags::COMPUTE, 0, push_constants);
+            }
+            self.device.cmd_dispatch(self.transfer_command_buffer, workgroup_count[0], workgroup_count[1], workgroup_count[2]);
+
+            self.device.end_command_buffer(self.transfer_command_buffer).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
+
+            let submit_info = vk::SubmitInfo::builder().command_buffers(std::slice::from_ref(&self.transfer_command_buffer));
+            self.device.queue_submit(self.queue, &[submit_info.build()], self.transfer_fence).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
+
+            self.device.wait_for_fences(&[self.transfer_fence], true, u64::MAX).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
+            self.device.reset_fences(&[self.transfer_fence]).map_err(|e| HlxError::BackendError { message: e.to_string() })?;
+
+            // 7. Cleanup
+            self.device.destroy_descriptor_pool(descriptor_pool, None);
+            self.device.destroy_pipeline(pipeline, None);
+            self.device.destroy_shader_module(shader_module, None);
+            self.device.destroy_pipeline_layout(pipeline_layout, None);
+            self.device.destroy_descriptor_set_layout(ds_layout, None);
+        }
+        Ok(())
+    }
     
     fn sync(&mut self) -> Result<()> {
         unsafe {
