@@ -159,7 +159,7 @@ impl<'a> ConfidenceAnalyzer<'a> {
         // Check for common typos
         if line.contains("@906 {") {
             if line.contains("C:") && !line.contains("A:") && !line.contains("B:") {
-                confidence -= 30;
+                confidence -= 50;  // Strong penalty for wrong field names
                 issues.push("@906 (GEMM) uses fields 'A' and 'B', not 'C'".to_string());
             }
         }
@@ -224,6 +224,29 @@ mod tests {
 
     fn create_test_catalogue() -> ContractCatalogue {
         let mut contracts = HashMap::new();
+
+        // Add @14 (INT_LITERAL)
+        contracts.insert("14".to_string(), ContractSpec {
+            name: "INT_LITERAL".to_string(),
+            tier: "T1".to_string(),
+            signature: "@14 { @0 }".to_string(),
+            description: "Integer literal".to_string(),
+            fields: {
+                let mut f = HashMap::new();
+                f.insert("@0".to_string(), ContractField {
+                    field_type: "Int".to_string(),
+                    description: "Integer value".to_string(),
+                    required: true,
+                });
+                f
+            },
+            example: "@14 { @0: 42 }".to_string(),
+            usage: "Integer values".to_string(),
+            performance: None,
+            related: vec![],
+            status: "stable".to_string(),
+            implementation: None,
+        });
 
         // Add @906 (GEMM)
         contracts.insert("906".to_string(), ContractSpec {

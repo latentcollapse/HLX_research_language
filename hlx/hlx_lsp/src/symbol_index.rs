@@ -281,6 +281,11 @@ impl SymbolIndex {
             .push(location);
     }
 
+    /// Remove all symbols and references for a document (for cleanup on close)
+    pub fn remove_document(&self, uri: &Url) {
+        self.clear_document(uri);
+    }
+
     /// Clear all symbols for a document
     fn clear_document(&self, uri: &Url) {
         // Remove symbols from this document

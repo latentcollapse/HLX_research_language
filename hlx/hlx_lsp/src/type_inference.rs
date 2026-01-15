@@ -233,8 +233,14 @@ impl TypeInference {
                 continue;
             }
 
-            // Check compatibility
-            if !arg_type.is_compatible_with(expected_type) && !matches!(arg_type, Type::Unknown) {
+            // Allow Unknown for inference
+            if matches!(arg_type, Type::Unknown) {
+                continue;
+            }
+
+            // Strict type checking for function arguments - require exact match
+            // No implicit Int -> Float conversion (user must use to_float())
+            if arg_type != *expected_type {
                 return Err(TypeError::WrongArgType {
                     param_index: i,
                     expected: expected_type.clone(),

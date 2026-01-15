@@ -75,6 +75,20 @@ impl DataflowState {
     }
 }
 
+/// Helper function to compare two dataflow states for equality
+fn states_equal(a: &DataflowState, b: &DataflowState) -> bool {
+    if a.vars.len() != b.vars.len() {
+        return false;
+    }
+    for (var, state_a) in &a.vars {
+        match b.vars.get(var) {
+            Some(state_b) if state_a == state_b => continue,
+            _ => return false,
+        }
+    }
+    true
+}
+
 /// Dataflow analyzer
 pub struct DataflowAnalyzer {
     /// State before each node
@@ -100,15 +114,13 @@ impl DataflowAnalyzer {
         }
         self.out_states.insert(cfg.entry, entry_state);
 
-        // Worklist algorithm
+        // Worklist algorithm - iterate until fixed point
         let mut worklist: Vec<NodeId> = vec![cfg.entry];
-        let mut visited = HashSet::new();
+        let mut in_worklist = HashSet::new();
+        in_worklist.insert(cfg.entry);
 
         while let Some(node_id) = worklist.pop() {
-            if visited.contains(&node_id) && node_id != cfg.entry {
-                continue;
-            }
-            visited.insert(node_id);
+            in_worklist.remove(&node_id);
 
             let node = match cfg.nodes.get(&node_id) {
                 Some(n) => n,
@@ -132,15 +144,40 @@ impl DataflowAnalyzer {
                 merged.unwrap_or_else(DataflowState::new)
             };
 
+            // Check if in_state changed
+            let old_in_state = self.in_states.get(&node_id);
+            let in_state_changed = match old_in_state {
+                None => true,
+                Some(old) => !states_equal(old, &in_state),
+            };
+
+            if !in_state_changed && old_in_state.is_some() {
+                // State hasn't changed, no need to reprocess
+                continue;
+            }
+
             self.in_states.insert(node_id, in_state.clone());
 
             // Apply transfer function
             let out_state = self.transfer(node, in_state);
-            self.out_states.insert(node_id, out_state);
 
-            // Add successors to worklist
-            for succ_id in &node.successors {
-                worklist.push(*succ_id);
+            // Check if out_state changed
+            let old_out_state = self.out_states.get(&node_id);
+            let out_state_changed = match old_out_state {
+                None => true,
+                Some(old) => !states_equal(old, &out_state),
+            };
+
+            if out_state_changed {
+                self.out_states.insert(node_id, out_state);
+
+                // Add successors to worklist if state changed
+                for succ_id in &node.successors {
+                    if !in_worklist.contains(succ_id) {
+                        worklist.push(*succ_id);
+                        in_worklist.insert(*succ_id);
+                    }
+                }
             }
         }
     }
@@ -149,9 +186,10 @@ impl DataflowAnalyzer {
     fn transfer(&self, node: &crate::control_flow::CfgNode, mut state: DataflowState) -> DataflowState {
         match &node.kind {
             NodeKind::VarDecl { name, .. } => {
-                // Declaration with initialization: let x = value;
-                // In HLX, `let` always has an initializer, so mark as initialized
-                state.initialize(name);
+                // Declaration: let x;
+                // Note: In HLX, `let` typically has an initializer, but for analysis
+                // purposes we treat VarDecl as declaration-only and VarAssign as initialization
+                state.declare(name);
             }
             NodeKind::VarAssign { name, .. } => {
                 // Assignment: x = value;
@@ -283,7 +321,7 @@ mod tests {
     fn test_simple_uninitialized_use() {
         let mut cfg = ControlFlowGraph::new();
 
-        // let x;  (declare without init - hypothetical)
+        // let x;  (declare without init)
         let n1 = cfg.new_node(NodeKind::VarDecl {
             name: "x".to_string(),
             line: 1,
@@ -301,11 +339,10 @@ mod tests {
         let mut analyzer = DataflowAnalyzer::new();
         analyzer.analyze(&cfg);
 
-        // In HLX, `let` always initializes, so this should NOT be flagged
-        // But let's test the analyzer mechanics
+        // Should detect definitely uninitialized use
         let problems = analyzer.check_use(&cfg, "x");
-        // Since VarDecl marks as initialized, should be OK
-        assert_eq!(problems.len(), 0);
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].certainty, UseCertainty::Definitely);
     }
 
     #[test]

@@ -164,6 +164,17 @@ impl LanguageServer for Backend {
         }
     }
 
+    async fn did_close(&self, params: DidCloseTextDocumentParams) {
+        // Clean up document from map to prevent memory leak
+        self.document_map.remove(params.text_document.uri.as_str());
+
+        // Clean up symbols for this document
+        self.symbol_index.remove_document(&params.text_document.uri);
+
+        // Clear diagnostics for closed document
+        self.client.publish_diagnostics(params.text_document.uri, vec![], None).await;
+    }
+
     async fn goto_definition(&self, params: GotoDefinitionParams) -> Result<Option<GotoDefinitionResponse>> {
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
@@ -206,6 +217,12 @@ impl LanguageServer for Backend {
 
     async fn symbol(&self, params: WorkspaceSymbolParams) -> Result<Option<Vec<SymbolInformation>>> {
         let query = params.query;
+
+        // Security: Limit query length to prevent DOS
+        const MAX_QUERY_LENGTH: usize = 1000;
+        if query.len() > MAX_QUERY_LENGTH {
+            return Ok(None);
+        }
 
         let symbols = self.symbol_index.search_symbols(&query);
         if !symbols.is_empty() {
@@ -758,19 +775,19 @@ impl LanguageServer for Backend {
 
 impl Backend {
     pub fn new(client: Client) -> Self {
-        // Try to load contract catalogue
-        let catalogue_path = std::env::var("HLX_CONTRACT_CATALOGUE")
-            .unwrap_or_else(|_| "../CONTRACT_CATALOGUE.json".to_string());
+        // Try to load contract catalogue with security validation
+        let catalogue_path = Self::get_safe_catalogue_path();
 
-        let contracts = match ContractCache::new(&catalogue_path) {
-            Ok(cache) => {
-                eprintln!("✓ Loaded contract catalogue from {}", catalogue_path);
+        let contracts = match catalogue_path.and_then(|path| {
+            Self::validate_catalogue_file(&path)?;
+            ContractCache::new(&path).ok()
+        }) {
+            Some(cache) => {
+                eprintln!("✓ Loaded contract catalogue");
                 Some(cache.clone_arc())
             }
-            Err(e) => {
-                eprintln!("⚠ Failed to load contract catalogue: {}",
-
- e);
+            None => {
+                eprintln!("⚠ Failed to load contract catalogue");
                 eprintln!("  Contracts will not be available in autocomplete/hover");
                 None
             }
@@ -876,7 +893,111 @@ impl Backend {
         }
     }
 
+    /// Get safe catalogue path with security validation
+    fn get_safe_catalogue_path() -> Option<String> {
+        // Check environment variable first
+        if let Ok(env_path) = std::env::var("HLX_CONTRACT_CATALOGUE") {
+            let path = std::path::Path::new(&env_path);
+
+            // Security: Only allow absolute paths
+            if !path.is_absolute() {
+                eprintln!("⚠ HLX_CONTRACT_CATALOGUE must be an absolute path");
+                return None;
+            }
+
+            // Security: Validate path doesn't escape to parent directories
+            if env_path.contains("..") {
+                eprintln!("⚠ HLX_CONTRACT_CATALOGUE cannot contain '..'");
+                return None;
+            }
+
+            return Some(env_path);
+        }
+
+        // Default: Look in common system locations
+        let default_paths = [
+            "/etc/hlx/CONTRACT_CATALOGUE.json",
+            "/usr/local/share/hlx/CONTRACT_CATALOGUE.json",
+            "/opt/hlx/CONTRACT_CATALOGUE.json",
+        ];
+
+        for path in &default_paths {
+            if std::path::Path::new(path).exists() {
+                return Some(path.to_string());
+            }
+        }
+
+        // Fallback: Try relative to executable
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                let catalogue = exe_dir.join("CONTRACT_CATALOGUE.json");
+                if catalogue.exists() {
+                    if let Some(path_str) = catalogue.to_str() {
+                        return Some(path_str.to_string());
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Validate catalogue file before loading
+    fn validate_catalogue_file(path: &str) -> Option<()> {
+        // Check file exists
+        let path_obj = std::path::Path::new(path);
+        if !path_obj.exists() {
+            eprintln!("⚠ Contract catalogue not found: {}", path);
+            return None;
+        }
+
+        // Security: Check file size limit (10MB max)
+        if let Ok(metadata) = std::fs::metadata(path) {
+            const MAX_SIZE: u64 = 10_000_000; // 10MB
+            if metadata.len() > MAX_SIZE {
+                eprintln!("⚠ Contract catalogue too large: {} bytes (max {})",
+                         metadata.len(), MAX_SIZE);
+                return None;
+            }
+        } else {
+            return None;
+        }
+
+        // Security: Validate it's a regular file, not a symlink or device
+        if !path_obj.is_file() {
+            eprintln!("⚠ Contract catalogue must be a regular file");
+            return None;
+        }
+
+        Some(())
+    }
+
     async fn validate_document(&self, uri: Url, text: String) {
+        // Security: Enforce document size limits to prevent DOS
+        const MAX_DOCUMENT_SIZE: usize = 10_000_000; // 10MB
+        if text.len() > MAX_DOCUMENT_SIZE {
+            let diagnostic = Diagnostic {
+                range: Range {
+                    start: Position { line: 0, character: 0 },
+                    end: Position { line: 0, character: 1 },
+                },
+                severity: Some(DiagnosticSeverity::ERROR),
+                code: Some(NumberOrString::String("document-too-large".to_string())),
+                source: Some("hlx-security".to_string()),
+                message: format!(
+                    "Document too large: {} bytes (max {} bytes)\n\n\
+                    Large documents can cause performance issues.",
+                    text.len(), MAX_DOCUMENT_SIZE
+                ),
+                related_information: None,
+                tags: None,
+                code_description: None,
+                data: None,
+            };
+            self.client.publish_diagnostics(uri, vec![diagnostic], None).await;
+            return;
+        }
+
         let parser = HlxaParser::new();
         let mut diagnostics = match parser.parse_diagnostics(&text) {
             Ok(_) => vec![], // No parser errors
@@ -1021,59 +1142,61 @@ impl Backend {
                         if let Some(spec) = catalogue.get_contract(&id_str) {
                             // Extract field names until closing brace
                             let remaining = &line[brace_pos + 1..];
-                            if let Some(close_brace) = remaining.find('}') {
-                                let fields_section = &remaining[..close_brace];
+                            if let Some(close_brace_rel) = remaining.find('}') {
+                                let fields_section = &remaining[..close_brace_rel];
 
-                                // Parse field names (simple split by comma)
-                                for field_pair in fields_section.split(',') {
-                                    let field_pair = field_pair.trim();
-                                    if field_pair.is_empty() {
-                                        continue;
-                                    }
+                                // Parse fields with proper position tracking
+                                let mut collected_fields = std::collections::HashSet::new();
+                                let mut current_pos = brace_pos + 1;
 
-                                    // Extract field name (before ':')
-                                    if let Some(colon_pos) = field_pair.find(':') {
-                                        let field_name = field_pair[..colon_pos].trim();
+                                // Split by comma and track positions
+                                let mut field_start = 0;
+                                for (idx, ch) in fields_section.chars().chain(std::iter::once(',')).enumerate() {
+                                    if ch == ',' || idx == fields_section.len() {
+                                        let field_pair = &fields_section[field_start..idx];
+                                        let field_pair_trimmed = field_pair.trim();
 
-                                        // Check if this field exists in contract spec
-                                        if !spec.fields.contains_key(field_name) {
-                                            // Calculate position of field name
-                                            let field_offset = brace_pos + 1 +
-                                                fields_section[..fields_section.find(field_name).unwrap_or(0)].len();
+                                        if !field_pair_trimmed.is_empty() {
+                                            // Extract field name (before ':')
+                                            if let Some(colon_pos_rel) = field_pair_trimmed.find(':') {
+                                                let field_name = field_pair_trimmed[..colon_pos_rel].trim();
+                                                collected_fields.insert(field_name.to_string());
 
-                                            let pos = Position {
-                                                line: line_idx as u32,
-                                                character: field_offset as u32,
-                                            };
+                                                // Check if this field exists in contract spec
+                                                if !spec.fields.contains_key(field_name) {
+                                                    // Calculate absolute position
+                                                    let trimmed_offset = field_pair.find(field_name).unwrap_or(0);
+                                                    let field_offset = current_pos + field_start + trimmed_offset;
 
-                                            let end_pos = Position {
-                                                line: line_idx as u32,
-                                                character: (field_offset + field_name.len()) as u32,
-                                            };
+                                                    let pos = Position {
+                                                        line: line_idx as u32,
+                                                        character: field_offset as u32,
+                                                    };
 
-                                            // Use AI-optimized diagnostic
-                                            let valid_fields: Vec<String> = spec.fields.keys().cloned().collect();
-                                            let ai_diagnostic = ai_diag.unknown_field(
-                                                Range { start: pos, end: end_pos },
-                                                field_name,
-                                                &id_str,
-                                                &valid_fields
-                                            );
-                                            diagnostics.push(ai_diagnostic.to_diagnostic());
+                                                    let end_pos = Position {
+                                                        line: line_idx as u32,
+                                                        character: (field_offset + field_name.len()) as u32,
+                                                    };
+
+                                                    // Use AI-optimized diagnostic
+                                                    let valid_fields: Vec<String> = spec.fields.keys().cloned().collect();
+                                                    let ai_diagnostic = ai_diag.unknown_field(
+                                                        Range { start: pos, end: end_pos },
+                                                        field_name,
+                                                        &id_str,
+                                                        &valid_fields
+                                                    );
+                                                    diagnostics.push(ai_diagnostic.to_diagnostic());
+                                                }
+                                            }
                                         }
+                                        field_start = idx + 1;
                                     }
                                 }
 
                                 // Check for missing required fields
-                                let provided_fields: std::collections::HashSet<String> =
-                                    fields_section.split(',')
-                                        .filter_map(|pair| {
-                                            pair.trim().split(':').next().map(|s| s.trim().to_string())
-                                        })
-                                        .collect();
-
                                 for (field_name, field_spec) in &spec.fields {
-                                    if field_spec.required && !provided_fields.contains(field_name) {
+                                    if field_spec.required && !collected_fields.contains(field_name) {
                                         let pos = Position {
                                             line: line_idx as u32,
                                             character: i as u32,
@@ -1081,7 +1204,7 @@ impl Backend {
 
                                         let end_pos = Position {
                                             line: line_idx as u32,
-                                            character: (brace_pos + close_brace + 2) as u32,
+                                            character: (brace_pos + close_brace_rel + 2) as u32,
                                         };
 
                                         // Use AI-optimized diagnostic
@@ -1307,7 +1430,13 @@ impl Backend {
         // Regex to match function calls: identifier(args)
         // This is a simple heuristic - doesn't handle all edge cases
         use regex::Regex;
-        let func_call_pattern = Regex::new(r"(\w+)\s*\(").unwrap();
+        use std::sync::OnceLock;
+
+        // Pre-compile regex pattern for performance and DOS prevention
+        static FUNC_CALL_PATTERN: OnceLock<Regex> = OnceLock::new();
+        let func_call_pattern = FUNC_CALL_PATTERN.get_or_init(|| {
+            Regex::new(r"(\w+)\s*\(").unwrap()
+        });
 
         for (line_idx, line) in text.lines().enumerate() {
             for cap in func_call_pattern.captures_iter(line) {
@@ -1578,6 +1707,12 @@ impl Backend {
     /// Extract natural language query from comment
     /// Detects patterns like: "// split string" or "// need: matrix multiply"
     fn extract_comment_query(&self, text: &str, position: Position) -> Option<String> {
+        // Security: Limit text size to prevent DOS on large inputs
+        const MAX_TEXT_SIZE: usize = 10_000_000; // 10MB
+        if text.len() > MAX_TEXT_SIZE {
+            return None;
+        }
+
         let lines: Vec<&str> = text.lines().collect();
         if position.line as usize >= lines.len() {
             return None;

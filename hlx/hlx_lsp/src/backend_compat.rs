@@ -134,16 +134,17 @@ mod tests {
     fn test_detect_incompatible_builtin() {
         let checker = BackendCompatChecker::new();
 
+        // Use a builtin that's actually not in LLVM yet (like random())
         let code = r#"
             fn main() {
-                let x = sin(1.57);  // This will fail in LLVM!
+                let x = random();  // This will fail in LLVM!
                 print(x);
             }
         "#;
 
         let diagnostics = checker.check_document(code, "llvm");
-        assert!(!diagnostics.is_empty(), "Should detect sin() incompatibility");
-        assert!(diagnostics[0].message.contains("sin"));
+        assert!(!diagnostics.is_empty(), "Should detect random() incompatibility");
+        assert!(diagnostics[0].message.contains("random"));
         assert!(diagnostics[0].message.contains("LLVM"));
     }
 
@@ -179,9 +180,12 @@ mod tests {
     fn test_llvm_missing_math() {
         let checker = BackendCompatChecker::new();
 
-        // LLVM should NOT have math functions yet (no libc linking)
-        assert!(!checker.llvm_builtins.contains(&"sin".to_string()));
-        assert!(!checker.llvm_builtins.contains(&"cos".to_string()));
-        assert!(!checker.llvm_builtins.contains(&"tan".to_string()));
+        // LLVM now HAS math functions via external linkage to libm
+        assert!(checker.llvm_builtins.contains(&"sin".to_string()));
+        assert!(checker.llvm_builtins.contains(&"cos".to_string()));
+        assert!(checker.llvm_builtins.contains(&"tan".to_string()));
+
+        // But LLVM should NOT have random() yet
+        assert!(!checker.llvm_builtins.contains(&"random".to_string()));
     }
 }

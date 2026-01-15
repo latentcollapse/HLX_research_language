@@ -130,6 +130,8 @@ impl ContractSuggestionEngine {
             "all", "both", "each", "few", "more", "most", "other", "some",
             "such", "no", "nor", "not", "only", "own", "same", "so", "than",
             "too", "very", "this", "that", "these", "those",
+            // Number words
+            "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
         ];
 
         text.split(|c: char| !c.is_alphanumeric())
