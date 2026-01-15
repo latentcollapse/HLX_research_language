@@ -38,23 +38,28 @@ pub struct HlxCrate {
 pub struct CrateMetadata {
     /// Source file name (if known)
     pub source_file: Option<String>,
-    
+
     /// Compilation timestamp (ISO 8601)
     pub compiled_at: Option<String>,
-    
+
     /// Compiler version
     pub compiler_version: Option<String>,
-    
+
     /// Register count (for VM allocation)
     pub register_count: Option<u32>,
 
     /// Function signatures: name -> [param_types]
     #[serde(default)]
     pub function_signatures: HashMap<String, Vec<DType>>,
-    
+
     /// Debug symbols (instruction index -> source location)
     #[serde(default)]
     pub debug_symbols: Vec<DebugSymbol>,
+
+    /// HLX-Scale substrate information: function name -> substrate config
+    /// Used by runtime to route @swarm functions to speculation coordinator
+    #[serde(default)]
+    pub hlx_scale_substrates: HashMap<String, HlxScaleInfo>,
 }
 
 /// Debug symbol mapping instruction to source
@@ -66,6 +71,19 @@ pub struct DebugSymbol {
     pub line: u32,
     /// Source column
     pub col: u32,
+}
+
+/// HLX-Scale configuration for a function (embedded in crate metadata)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HlxScaleInfo {
+    /// Enable speculation for this function
+    pub enable_speculation: bool,
+    /// Number of agents to spawn (if speculation enabled)
+    pub agent_count: usize,
+    /// Substrate type (for diagnostics)
+    pub substrate: String,
+    /// Number of barriers in function body
+    pub barrier_count: usize,
 }
 
 impl HlxCrate {

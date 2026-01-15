@@ -1,8 +1,9 @@
 //! Lowering Pass: AST → Instructions → Crate
 
 use crate::ast::*;
+use crate::substrate_inference::SubstrateInference;
 use hlx_core::{
-    hlx_crate::{HlxCrate, CrateMetadata},
+    hlx_crate::{HlxCrate, CrateMetadata, HlxScaleInfo},
     instruction::{Instruction, Register},
     value::Value,
     Result, HlxError,
@@ -83,6 +84,24 @@ pub fn lower_to_crate(program: &Program) -> Result<HlxCrate> {
         })
         .collect();
 
+    // Run HLX-Scale substrate inference
+    let mut inference = SubstrateInference::new();
+    let substrate_results = inference.infer_program(program);
+
+    // Convert substrate info to runtime format
+    let mut hlx_scale_substrates = HashMap::new();
+    for (func_name, info) in substrate_results {
+        // Only add substrate info if it suggests parallel execution
+        if let Some(agent_count) = info.agent_count {
+            hlx_scale_substrates.insert(func_name.clone(), HlxScaleInfo {
+                enable_speculation: agent_count > 1,
+                agent_count: agent_count as usize,
+                substrate: info.substrate.to_str().to_string(),
+                barrier_count: info.barrier_count,
+            });
+        }
+    }
+
     // Build crate with metadata
     let metadata = CrateMetadata {
         source_file: Some(format!("{}.hlxl", program.name)),
@@ -90,6 +109,7 @@ pub fn lower_to_crate(program: &Program) -> Result<HlxCrate> {
         register_count: Some(ctx.next_reg),
         function_signatures: signatures,
         debug_symbols,
+        hlx_scale_substrates,
         ..Default::default()
     };
 
@@ -295,6 +315,9 @@ impl LoweringContext {
             Statement::Expr(e) => { self.lower_expr(&e.node)?; }
             Statement::Break => { self.emit_with_span(Instruction::Break, span); }
             Statement::Continue => { self.emit_with_span(Instruction::Continue, span); }
+            Statement::Barrier { name, .. } => {
+                self.emit_with_span(Instruction::Barrier { name: name.clone() }, span);
+            }
             Statement::Asm { template, outputs, inputs, clobbers } => {
                 // Build constraints string from outputs, inputs, and clobbers
                 let mut constraints_parts = Vec::new();

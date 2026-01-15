@@ -7,6 +7,7 @@ use hlx_core::{HlxCrate, Instruction, Value, Result, HlxError};
 use crate::config::RuntimeConfig;
 use crate::backend::{Backend, create_backend, TensorHandle};
 use crate::value_store::ValueStore;
+use crate::speculation::{SpeculationCoordinator, SpeculationConfig};
 use std::collections::HashMap;
 use im::{Vector, OrdMap};
 use std::process::{Child, Command, Stdio};
@@ -32,6 +33,35 @@ impl Executor {
     
     /// Run a crate and return its result
     pub fn run(&mut self, krate: &HlxCrate) -> Result<Value> {
+        // Check if crate has HLX-Scale metadata suggesting speculation
+        if let Some(metadata) = &krate.metadata {
+            if !metadata.hlx_scale_substrates.is_empty() {
+                // Find the maximum agent count requested
+                let max_agent_count = metadata.hlx_scale_substrates.values()
+                    .filter(|info| info.enable_speculation)
+                    .map(|info| info.agent_count)
+                    .max()
+                    .unwrap_or(1);
+
+                if max_agent_count > 1 {
+                    if self.config.debug {
+                        println!("[HLX-SCALE] Crate has @swarm functions, enabling speculation with {} agents", max_agent_count);
+                    }
+
+                    // Route to speculation coordinator
+                    let spec_config = SpeculationConfig {
+                        agent_count: max_agent_count,
+                        debug: self.config.debug,
+                        strict_verification: true,
+                    };
+
+                    let mut coordinator = SpeculationCoordinator::new(spec_config);
+                    return coordinator.execute_speculative(krate);
+                }
+            }
+        }
+
+        // No speculation needed, run normally
         // Create execution context
         let mut ctx = ExecutionContext::new(&self.config);
 
@@ -328,6 +358,19 @@ impl ExecutionContext {
                 } else {
                     return Err(HlxError::ValidationFail { message: "Continue instruction outside of loop".to_string() });
                 }
+            }
+
+            Instruction::Barrier { name } => {
+                // In serial execution, barrier is a no-op
+                // In parallel execution (speculation), this triggers hash verification
+                if self.config.debug {
+                    if let Some(barrier_name) = name {
+                        println!("[BARRIER] '{}'", barrier_name);
+                    } else {
+                        println!("[BARRIER] (unnamed)");
+                    }
+                }
+                return Ok(ControlFlow::Continue);
             }
 
             // === Memory Operations ===
