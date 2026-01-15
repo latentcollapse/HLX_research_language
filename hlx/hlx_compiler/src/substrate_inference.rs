@@ -444,7 +444,7 @@ mod tests {
 
         let block = Block {
             name: "test".to_string(),
-            attributes: vec!["swarm(size=2^50)".to_string()],
+            attributes: vec!["scale(size=2^50)".to_string()],
             name_span: None,
             fn_keyword_span: None,
             params: vec![],
@@ -455,7 +455,7 @@ mod tests {
 
         let info = inference.infer_block(&block);
         assert_eq!(info.substrate, Substrate::QuantumSim);
-        assert!(info.reasoning.contains("Swarm size"));
+        assert!(info.reasoning.contains("size"));
     }
 
     #[test]

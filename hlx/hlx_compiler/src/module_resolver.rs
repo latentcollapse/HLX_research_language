@@ -248,7 +248,7 @@ mod tests {
     fn test_resolve_stdlib() {
         let mut resolver = ModuleResolver::new();
         let program = resolver.resolve("std.math").unwrap();
-        assert_eq!(program.name, "");
+        assert_eq!(program.name, "math");
         assert!(!program.modules.is_empty());
     }
 }

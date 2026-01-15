@@ -431,6 +431,7 @@ mod tests {
     fn test_speculation_coordinator_consensus() {
         let config = SpeculationConfig {
             agent_count: 4,
+            max_agent_count: 1024,
             debug: true,
             strict_verification: true,
         };
@@ -454,6 +455,7 @@ mod tests {
     fn test_speculation_coordinator_mismatch() {
         let config = SpeculationConfig {
             agent_count: 4,
+            max_agent_count: 1024,
             debug: false,
             strict_verification: true,
         };
@@ -470,7 +472,7 @@ mod tests {
 
         let result = coordinator.verify_and_merge(&agents);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Hash mismatch"));
+        assert!(result.unwrap_err().to_string().contains("Swarm mismatch"));
     }
 
     #[test]
@@ -485,6 +487,7 @@ mod tests {
 
         let config = SpeculationConfig {
             agent_count: 4,
+            max_agent_count: 1024,
             debug: true,
             strict_verification: true,
         };

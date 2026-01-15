@@ -51,6 +51,9 @@ impl Executor {
     
     /// Run a crate and return its result
     pub fn run(&mut self, krate: &HlxCrate) -> Result<Value> {
+        // Validate crate integrity before execution
+        krate.validate()?;
+
         // Check if speculation is disabled (set by speculation coordinator to prevent recursion)
         let speculation_disabled = crate::is_speculation_disabled();
 
