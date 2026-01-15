@@ -136,6 +136,24 @@ enum Commands {
     /// Run smoke tests
     Test,
 
+    /// Benchmark execution performance
+    Bench {
+        /// Input file (crate or source)
+        input: PathBuf,
+
+        /// Enable HLX-Scale speculation
+        #[arg(long)]
+        hlx_s: bool,
+
+        /// Number of iterations
+        #[arg(short = 'n', long, default_value = "10")]
+        iterations: usize,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Compile to native code using LLVM backend
     CompileNative {
         /// Input source file
@@ -161,11 +179,12 @@ enum Commands {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    
-    // Setup logging
-    if cli.verbose {
+
+    // Setup logging - initialize if --verbose or RUST_LOG is set
+    if cli.verbose || std::env::var("RUST_LOG").is_ok() {
         tracing_subscriber::fmt()
             .with_max_level(tracing::Level::DEBUG)
+            .with_target(false)
             .init();
     }
     
@@ -196,6 +215,9 @@ fn main() -> Result<()> {
         }
         Commands::Test => {
             run_tests()?;
+        }
+        Commands::Bench { input, hlx_s, iterations, json } => {
+            bench(&input, hlx_s, iterations, json)?;
         }
         Commands::CompileNative { input, output, target, asm, print_ir } => {
             compile_native(&input, output, target.as_deref(), asm, print_ir)?;
@@ -564,7 +586,112 @@ fn run_tests() -> Result<()> {
     println!("✓ PASS");
     
     println!("\nAll tests passed!");
-    
+
+    Ok(())
+}
+
+/// Benchmark execution performance
+fn bench(input: &PathBuf, hlx_s: bool, iterations: usize, json: bool) -> Result<()> {
+    use std::time::{Duration, Instant};
+    use serde_json::json;
+
+    // Load the crate
+    let krate = if input.extension().and_then(|s| s.to_str()) == Some("lcc") {
+        // Load compiled crate
+        let bytes = fs::read(input)
+            .with_context(|| format!("Failed to read crate: {}", input.display()))?;
+        bincode::deserialize(&bytes).context("Failed to deserialize crate")?
+    } else {
+        // Compile source file
+        let source = fs::read_to_string(input)
+            .with_context(|| format!("Failed to read source: {}", input.display()))?;
+        let parser = HlxaParser::new();
+        let ast = parser.parse(&source).context("Parse error")?;
+        lower::lower_to_crate(&ast).context("Lowering failed")?
+    };
+
+    if !json {
+        println!("Benchmarking: {}", input.display());
+        println!("Iterations: {}", iterations);
+        if hlx_s {
+            println!("Mode: HLX-Scale speculation");
+        } else {
+            println!("Mode: Serial execution");
+        }
+        println!();
+    }
+
+    // Warmup run
+    let _ = execute(&krate)?;
+
+    // Benchmark runs
+    let mut durations = Vec::with_capacity(iterations);
+
+    for i in 0..iterations {
+        let start = Instant::now();
+        let result = execute(&krate)?;
+        let elapsed = start.elapsed();
+        durations.push(elapsed);
+
+        if !json && iterations <= 20 {
+            println!("  Run {}: {:?} -> {:?}", i + 1, elapsed, result);
+        }
+    }
+
+    // Compute statistics
+    let total: Duration = durations.iter().sum();
+    let mean = total / iterations as u32;
+    let min = durations.iter().min().unwrap();
+    let max = durations.iter().max().unwrap();
+
+    // Compute median
+    let mut sorted = durations.clone();
+    sorted.sort();
+    let median = if sorted.len() % 2 == 0 {
+        (sorted[sorted.len() / 2 - 1] + sorted[sorted.len() / 2]) / 2
+    } else {
+        sorted[sorted.len() / 2]
+    };
+
+    // Compute standard deviation
+    let variance: f64 = durations.iter()
+        .map(|d| {
+            let diff = d.as_secs_f64() - mean.as_secs_f64();
+            diff * diff
+        })
+        .sum::<f64>() / iterations as f64;
+    let std_dev = variance.sqrt();
+
+    if json {
+        let output = json!({
+            "file": input.display().to_string(),
+            "mode": if hlx_s { "speculation" } else { "serial" },
+            "iterations": iterations,
+            "mean_ms": mean.as_secs_f64() * 1000.0,
+            "median_ms": median.as_secs_f64() * 1000.0,
+            "min_ms": min.as_secs_f64() * 1000.0,
+            "max_ms": max.as_secs_f64() * 1000.0,
+            "std_dev_ms": std_dev * 1000.0,
+            "total_ms": total.as_secs_f64() * 1000.0,
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        println!();
+        println!("Results:");
+        println!("  Mean:   {:?}", mean);
+        println!("  Median: {:?}", median);
+        println!("  Min:    {:?}", min);
+        println!("  Max:    {:?}", max);
+        println!("  StdDev: {:.3}ms", std_dev * 1000.0);
+        println!("  Total:  {:?}", total);
+
+        if hlx_s {
+            println!();
+            println!("Tip: Compare with serial execution:");
+            println!("  hlx bench {} -n {}", input.display(), iterations);
+        }
+    }
+
     Ok(())
 }
 

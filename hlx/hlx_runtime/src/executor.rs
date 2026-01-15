@@ -13,6 +13,7 @@ use im::{Vector, OrdMap};
 use std::process::{Child, Command, Stdio};
 use std::io::Write;
 use xcap::Monitor;
+use tracing::{info, debug};
 
 /// The executor runs LC-B crates
 pub struct Executor {
@@ -44,9 +45,9 @@ impl Executor {
                     let log_enabled = self.config.debug || std::env::var("RUST_LOG").is_ok();
 
                     if log_enabled {
-                        println!("[HLX-SCALE] main() has @scale(size={}), enabling speculation",
+                        info!(size = main_info.agent_count, "HLX-SCALE: main() has @scale(size={}), enabling speculation",
                                 main_info.agent_count);
-                        println!("[HLX-SCALE] Substrate: {}, Barriers: {}",
+                        info!(substrate = %main_info.substrate, barriers = main_info.barrier_count, "HLX-SCALE: Substrate: {}, Barriers: {}",
                                 main_info.substrate, main_info.barrier_count);
                     }
 
@@ -403,9 +404,9 @@ impl ExecutionContext {
                     // Serial execution: barrier is a no-op
                     if self.config.debug {
                         if let Some(barrier_name) = name {
-                            println!("[BARRIER] '{}'", barrier_name);
+                            debug!("BARRIER:  '{}'", barrier_name);
                         } else {
-                            println!("[BARRIER] (unnamed)");
+                            debug!("BARRIER:  (unnamed)");
                         }
                     }
                 }
@@ -1052,7 +1053,7 @@ impl ExecutionContext {
                     _ => Err(HlxError::TypeError { expected: "numeric or string".to_string(), got: v.type_name().to_string() }),
                 }
             }
-            "to_string" => {
+            "to_string" | "str" => {
                 if args.len() != 1 {
                     return Err(HlxError::ValidationFail { message: "to_string() takes exactly 1 argument".to_string() });
                 }

@@ -8,6 +8,7 @@ use blake3::Hasher;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Barrier as SyncBarrier};
 use std::thread;
+use tracing::{info, warn, error, debug};
 
 /// Configuration for speculation execution
 #[derive(Debug, Clone)]
@@ -38,7 +39,7 @@ impl SpeculationConfig {
     pub fn with_agent_count(mut self, count: usize) -> Self {
         self.agent_count = count.min(self.max_agent_count);
         if count > self.max_agent_count {
-            eprintln!("[HLX-SCALE] Warning: Requested {} agents, capped at max {}",
+            warn!("HLX-SCALE:  Requested {} agents, capped at max {}",
                      count, self.max_agent_count);
         }
         self
@@ -109,7 +110,7 @@ impl BarrierCoordinator {
             point.agent_states.push((agent_id, state_hash.clone()));
 
             if log_enabled {
-                println!("[HLX-SCALE][AGENT-{}] Reached barrier '{}' with hash: {}",
+                info!("HLX-SCALE: [AGENT-{}] Reached barrier '{}' with hash: {}",
                          agent_id, barrier_name, &state_hash[..16]);
             }
         }
@@ -129,7 +130,7 @@ impl BarrierCoordinator {
             if all_match {
                 point.consensus = true;
                 if log_enabled {
-                    println!("[HLX-SCALE][BARRIER] '{}': All {} agents agree (hash: {})",
+                    info!("HLX-SCALE: [BARRIER] '{}': All {} agents agree (hash: {})",
                              barrier_name, self.agent_count, &first_hash[..16]);
                 }
             } else {
@@ -143,7 +144,7 @@ impl BarrierCoordinator {
                         .collect::<Vec<_>>()
                         .join("\n")
                 );
-                eprintln!("[HLX-SCALE][BARRIER] ERROR: {}", msg);
+                error!("HLX-SCALE/BARRIER:  {}", msg);
                 return Err(HlxError::BackendError { message: msg });
             }
         }
@@ -205,7 +206,7 @@ impl SpeculationCoordinator {
         let log_enabled = self.config.debug || std::env::var("RUST_LOG").is_ok();
 
         if log_enabled {
-            println!("[HLX-SCALE] Starting speculation with {} agents (max: {})",
+            info!("HLX-SCALE:  Starting speculation with {} agents (max: {})",
                     agent_count, self.config.max_agent_count);
         }
 
@@ -246,7 +247,7 @@ impl SpeculationCoordinator {
                 let log_enabled = debug || std::env::var("RUST_LOG").is_ok();
 
                 if log_enabled {
-                    println!("[HLX-SCALE][AGENT-{}] Forked and starting execution", agent_id);
+                    info!("HLX-SCALE: [AGENT-{}] Forked and starting execution", agent_id);
                 }
 
                 // Execute the crate using the standard runtime executor
@@ -255,7 +256,7 @@ impl SpeculationCoordinator {
                     Err(e) => {
                         let err_msg = format!("Agent {}: Execution failed: {}", agent_id, e);
                         if log_enabled {
-                            eprintln!("[HLX-SCALE][AGENT-{}] ERROR: {}", agent_id, e);
+                            error!(agent_id, error = %e, "HLX-SCALE/AGENT: Execution failed");
                         }
                         errors.lock().unwrap().push(err_msg);
                         return;
@@ -263,7 +264,7 @@ impl SpeculationCoordinator {
                 };
 
                 if log_enabled {
-                    println!("[HLX-SCALE][AGENT-{}] Completed with result: {:?}", agent_id, result);
+                    info!("HLX-SCALE: [AGENT-{}] Completed with result: {:?}", agent_id, result);
                 }
 
                 // Store result
@@ -299,8 +300,8 @@ impl SpeculationCoordinator {
                 .any(|msg| msg.contains("Divergence detected") || msg.contains("Hash mismatch"));
 
             if has_divergence {
-                eprintln!("[HLX-SCALE] Barrier divergence detected during speculation");
-                eprintln!("[HLX-SCALE] Falling back to serial execution...");
+                warn!("HLX-SCALE:  Barrier divergence detected during speculation");
+                warn!("HLX-SCALE:  Falling back to serial execution...");
 
                 // Fallback to serial execution
                 // Temporarily disable speculation for serial fallback
@@ -310,7 +311,7 @@ impl SpeculationCoordinator {
                 // Note: speculation is already disabled in this thread, no need to re-enable
                 return serial_result.map(|result| {
                     if log_enabled {
-                        eprintln!("[HLX-SCALE] Serial fallback completed successfully");
+                        warn!("HLX-SCALE:  Serial fallback completed successfully");
                     }
                     result
                 });
@@ -327,7 +328,7 @@ impl SpeculationCoordinator {
         let result = self.verify_and_merge(results.as_slice())?;
 
         if log_enabled {
-            println!("[HLX-SCALE] Speculation complete with consensus result: {:?}", result);
+            info!("HLX-SCALE:  Speculation complete with consensus result: {:?}", result);
         }
 
         Ok(result)
@@ -346,7 +347,7 @@ impl SpeculationCoordinator {
             .map(|agent| {
                 let hash = agent.compute_hash();
                 if log_enabled {
-                    println!("[HLX-SCALE][AGENT-{}] State hash: {}", agent.id, hash);
+                    info!("HLX-SCALE: [AGENT-{}] State hash: {}", agent.id, hash);
                 }
                 hash
             })
@@ -367,15 +368,15 @@ impl SpeculationCoordinator {
             );
 
             if self.config.strict_verification {
-                eprintln!("[HLX-SCALE] ERROR: {}", msg);
-                eprintln!("[HLX-SCALE] Falling back to serial execution would be implemented here.");
+                error!("HLX-SCALE:  {}", msg);
+                warn!("HLX-SCALE:  Falling back to serial execution would be implemented here.");
                 return Err(HlxError::BackendError { message: msg });
             } else {
-                eprintln!("[HLX-SCALE] WARNING: {}", msg);
-                eprintln!("[HLX-SCALE] WARNING: Continuing with first agent result (strict_verification=false)");
+                warn!("HLX-SCALE:  {}", msg);
+                warn!("HLX-SCALE:  Continuing with first agent result (strict_verification=false)");
             }
         } else if log_enabled {
-            println!("[HLX-SCALE][CONSENSUS] All {} agents agree (hash: {})", agents.len(), first_hash);
+            info!("HLX-SCALE: [CONSENSUS] All {} agents agree (hash: {})", agents.len(), first_hash);
         }
 
         // Return first agent's result (all should be identical due to determinism)
@@ -389,7 +390,7 @@ impl SpeculationCoordinator {
         *count += 1;
 
         if self.config.debug {
-            println!("[BARRIER] '{}' hit {} times", barrier_name, count);
+            debug!("BARRIER:  '{}' hit {} times", barrier_name, count);
         }
     }
 }
