@@ -1469,7 +1469,7 @@ impl<'ctx> CodeGen<'ctx> {
                 }
 
                 if func == "len" {
-                    let (val, val_type) = self.load_reg(args[0])?;
+                    let (val, _val_type) = self.load_reg(args[0])?;
                     let ptr = if val.is_pointer_value() {
                         val.into_pointer_value()
                     } else {

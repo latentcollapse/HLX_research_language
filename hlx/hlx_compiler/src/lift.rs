@@ -18,8 +18,8 @@
 //! - Preserve SSA property by appending versions: x_0, x_1, x_2
 
 use crate::ast::*;
-use hlx_core::{HlxCrate, Result as HlxResult, HlxError};
-use hlx_core::instruction::{Instruction, Register, DType};
+use hlx_core::{HlxCrate, Result as HlxResult};
+use hlx_core::instruction::{Instruction, Register};
 use hlx_core::value::Value;
 use std::collections::HashMap;
 

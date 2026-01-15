@@ -236,7 +236,7 @@ impl ContractSuggestionEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{ContractSpec, ContractField};
+    use crate::contracts::ContractSpec;
     use std::collections::HashMap;
 
     fn create_test_catalogue() -> ContractCatalogue {

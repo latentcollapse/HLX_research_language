@@ -540,7 +540,7 @@ mod tests {
 
     #[test]
     fn test_token_encoding_single() {
-        let mut walker = ASTWalker {
+        let walker = ASTWalker {
             tokens: vec![
                 TokenInfo {
                     line: 0,
@@ -566,7 +566,7 @@ mod tests {
 
     #[test]
     fn test_token_encoding_multiple_lines() {
-        let mut walker = ASTWalker {
+        let walker = ASTWalker {
             tokens: vec![
                 TokenInfo { line: 0, start_char: 0, length: 2, token_type: 15, token_modifiers: 0 },
                 TokenInfo { line: 1, start_char: 4, length: 3, token_type: 15, token_modifiers: 0 },

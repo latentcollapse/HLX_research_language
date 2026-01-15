@@ -1232,7 +1232,7 @@ impl Backend {
 
                                 // Parse fields with proper position tracking
                                 let mut collected_fields = std::collections::HashSet::new();
-                                let mut current_pos = brace_pos + 1;
+                                let current_pos = brace_pos + 1;
 
                                 // Split by comma and track positions
                                 let mut field_start = 0;

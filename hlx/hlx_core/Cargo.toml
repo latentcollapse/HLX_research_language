@@ -18,3 +18,10 @@ chrono = "0.4"
 
 [dev-dependencies]
 criterion.workspace = true
+
+[features]
+default = ["cpu"]
+cpu = []
+vulkan = []
+cuda = []
+metal = []

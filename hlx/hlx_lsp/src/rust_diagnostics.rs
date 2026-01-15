@@ -331,6 +331,6 @@ mod tests {
         let diagnostics = analyzer.check_temporary_lifetimes(code);
         // This is a best-effort heuristic - we accept that it may not catch all cases
         // The important thing is it catches the common pattern when it appears clearly
-        assert!(diagnostics.len() >= 0, "Heuristic check completed");
+        // Test completes if no panic occurs
     }
 }

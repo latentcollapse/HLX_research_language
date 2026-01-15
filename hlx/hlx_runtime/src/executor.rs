@@ -2296,7 +2296,7 @@ impl ExecutionContext {
                 Ok(Value::Integer(now.as_micros() as i64))
             }
             "format_timestamp" => {
-                use chrono::{DateTime, Utc, TimeZone};
+                use chrono::{Utc, TimeZone};
                 if args.len() != 2 { return Err(HlxError::ValidationFail { message: "format_timestamp(timestamp, format) takes 2 args".to_string() }); }
                 let timestamp = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
                 let format = match self.get_reg(args[1])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
@@ -2315,7 +2315,7 @@ impl ExecutionContext {
                 Ok(Value::Integer(dt.timestamp_millis()))
             }
             "year" => {
-                use chrono::{DateTime, Utc, TimeZone, Datelike};
+                use chrono::{Utc, TimeZone, Datelike};
                 if args.len() != 1 { return Err(HlxError::ValidationFail { message: "year() takes 1 arg".to_string() }); }
                 let timestamp = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
                 let dt = Utc.timestamp_millis_opt(timestamp).single()
@@ -2323,7 +2323,7 @@ impl ExecutionContext {
                 Ok(Value::Integer(dt.year() as i64))
             }
             "month" => {
-                use chrono::{DateTime, Utc, TimeZone, Datelike};
+                use chrono::{Utc, TimeZone, Datelike};
                 if args.len() != 1 { return Err(HlxError::ValidationFail { message: "month() takes 1 arg".to_string() }); }
                 let timestamp = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
                 let dt = Utc.timestamp_millis_opt(timestamp).single()
@@ -2331,7 +2331,7 @@ impl ExecutionContext {
                 Ok(Value::Integer(dt.month() as i64))
             }
             "day" => {
-                use chrono::{DateTime, Utc, TimeZone, Datelike};
+                use chrono::{Utc, TimeZone, Datelike};
                 if args.len() != 1 { return Err(HlxError::ValidationFail { message: "day() takes 1 arg".to_string() }); }
                 let timestamp = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
                 let dt = Utc.timestamp_millis_opt(timestamp).single()
@@ -2339,7 +2339,7 @@ impl ExecutionContext {
                 Ok(Value::Integer(dt.day() as i64))
             }
             "hour" => {
-                use chrono::{DateTime, Utc, TimeZone, Timelike};
+                use chrono::{Utc, TimeZone, Timelike};
                 if args.len() != 1 { return Err(HlxError::ValidationFail { message: "hour() takes 1 arg".to_string() }); }
                 let timestamp = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
                 let dt = Utc.timestamp_millis_opt(timestamp).single()
@@ -2347,7 +2347,7 @@ impl ExecutionContext {
                 Ok(Value::Integer(dt.hour() as i64))
             }
             "minute" => {
-                use chrono::{DateTime, Utc, TimeZone, Timelike};
+                use chrono::{Utc, TimeZone, Timelike};
                 if args.len() != 1 { return Err(HlxError::ValidationFail { message: "minute() takes 1 arg".to_string() }); }
                 let timestamp = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
                 let dt = Utc.timestamp_millis_opt(timestamp).single()
@@ -2355,7 +2355,7 @@ impl ExecutionContext {
                 Ok(Value::Integer(dt.minute() as i64))
             }
             "second" => {
-                use chrono::{DateTime, Utc, TimeZone, Timelike};
+                use chrono::{Utc, TimeZone, Timelike};
                 if args.len() != 1 { return Err(HlxError::ValidationFail { message: "second() takes 1 arg".to_string() }); }
                 let timestamp = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
                 let dt = Utc.timestamp_millis_opt(timestamp).single()

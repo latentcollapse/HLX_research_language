@@ -3,7 +3,7 @@
 //! Handles module discovery, loading, and dependency resolution.
 //! Supports both file-based and embedded stdlib modules.
 
-use crate::ast::{Program, Import, Module};
+use crate::ast::Program;
 use crate::parser::Parser;
 use crate::hlxa::HlxaParser;
 use hlx_core::{Result, HlxError};

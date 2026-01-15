@@ -29,3 +29,10 @@ bincode.workspace = true
 inferno = "0.11"  # Flamegraph generation
 pprof = { version = "0.13", features = ["flamegraph", "criterion"] }
 chrono = "0.4"  # Timestamps for flamegraph labels
+
+[features]
+default = ["cpu"]
+cpu = ["hlx_core/cpu"]
+vulkan = ["hlx_core/vulkan"]
+cuda = ["hlx_core/cuda"]
+metal = ["hlx_core/metal"]
