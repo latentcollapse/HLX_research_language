@@ -1655,9 +1655,903 @@ impl ExecutionContext {
                         got: v.type_name().to_string(),
                     }),
                 };
-                
+
                 let tokens = native_tokenize(&source)?;
                 Ok(tokens)
+            }
+            "split" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "split(string, delimiter) takes 2 args".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let delimiter = match self.get_reg(args[1])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let parts: im::Vector<Value> = s.split(delimiter).map(|p| Value::String(p.to_string())).collect();
+                Ok(Value::Array(parts))
+            }
+            "join" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "join(array, delimiter) takes 2 args".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let delimiter = match self.get_reg(args[1])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let strings: Vec<String> = arr.iter().map(|v| v.to_string()).collect();
+                Ok(Value::String(strings.join(delimiter)))
+            }
+            "replace" => {
+                if args.len() != 3 { return Err(HlxError::ValidationFail { message: "replace(string, from, to) takes 3 args".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let from = match self.get_reg(args[1])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let to = match self.get_reg(args[2])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::String(s.replace(from, to)))
+            }
+            "replace_first" => {
+                if args.len() != 3 { return Err(HlxError::ValidationFail { message: "replace_first(string, from, to) takes 3 args".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let from = match self.get_reg(args[1])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let to = match self.get_reg(args[2])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::String(s.replacen(from, to, 1)))
+            }
+            "pad_left" => {
+                if args.len() != 3 { return Err(HlxError::ValidationFail { message: "pad_left(string, width, pad_char) takes 3 args".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let width = match self.get_reg(args[1])? { Value::Integer(i) => *i as usize, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let pad = match self.get_reg(args[2])? { Value::String(s) => s.chars().next().unwrap_or(' '), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                if s.len() >= width {
+                    Ok(Value::String(s.to_string()))
+                } else {
+                    Ok(Value::String(format!("{:>width$}", s, width = width).replace(' ', &pad.to_string())))
+                }
+            }
+            "pad_right" => {
+                if args.len() != 3 { return Err(HlxError::ValidationFail { message: "pad_right(string, width, pad_char) takes 3 args".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let width = match self.get_reg(args[1])? { Value::Integer(i) => *i as usize, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let pad = match self.get_reg(args[2])? { Value::String(s) => s.chars().next().unwrap_or(' '), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                if s.len() >= width {
+                    Ok(Value::String(s.to_string()))
+                } else {
+                    Ok(Value::String(format!("{:<width$}", s, width = width).replace(' ', &pad.to_string())))
+                }
+            }
+            "repeat" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "repeat(string, count) takes 2 args".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let count = match self.get_reg(args[1])? { Value::Integer(i) => *i as usize, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::String(s.repeat(count)))
+            }
+            "reverse_str" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "reverse_str() takes 1 arg".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::String(s.chars().rev().collect()))
+            }
+            "char_at" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "char_at(string, index) takes 2 args".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let index = match self.get_reg(args[1])? { Value::Integer(i) => *i as usize, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                match s.chars().nth(index) {
+                    Some(c) => Ok(Value::String(c.to_string())),
+                    None => Err(HlxError::ValidationFail { message: format!("Index {} out of bounds for string of length {}", index, s.len()) }),
+                }
+            }
+            "contains" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "contains(haystack, needle) takes 2 args".to_string() }); }
+                let haystack = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let needle = match self.get_reg(args[1])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Boolean(haystack.contains(needle)))
+            }
+            "is_alpha" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "is_alpha() takes 1 arg".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Boolean(!s.is_empty() && s.chars().all(|c| c.is_alphabetic())))
+            }
+            "is_numeric" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "is_numeric() takes 1 arg".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Boolean(!s.is_empty() && s.chars().all(|c| c.is_numeric())))
+            }
+            "is_alphanumeric" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "is_alphanumeric() takes 1 arg".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Boolean(!s.is_empty() && s.chars().all(|c| c.is_alphanumeric())))
+            }
+            "format" => {
+                // Simple format implementation - takes format string and variadic args
+                if args.is_empty() { return Err(HlxError::ValidationFail { message: "format() requires at least 1 argument".to_string() }); }
+                let fmt = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let mut result = fmt.to_string();
+                for (i, arg_reg) in args.iter().skip(1).enumerate() {
+                    let val = self.get_reg(*arg_reg)?;
+                    result = result.replace(&format!("{{{}}}", i), &val.to_string());
+                }
+                Ok(Value::String(result))
+            }
+            "match_regex" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "match_regex(string, pattern) takes 2 args".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let pattern = match self.get_reg(args[1])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                match regex::Regex::new(pattern) {
+                    Ok(re) => Ok(Value::Boolean(re.is_match(s))),
+                    Err(e) => Err(HlxError::ValidationFail { message: format!("Invalid regex pattern: {}", e) }),
+                }
+            }
+            "find_regex" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "find_regex(string, pattern) takes 2 args".to_string() }); }
+                let s = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let pattern = match self.get_reg(args[1])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                match regex::Regex::new(pattern) {
+                    Ok(re) => {
+                        let matches: im::Vector<Value> = re.find_iter(s)
+                            .map(|m| Value::String(m.as_str().to_string()))
+                            .collect();
+                        Ok(Value::Array(matches))
+                    }
+                    Err(e) => Err(HlxError::ValidationFail { message: format!("Invalid regex pattern: {}", e) }),
+                }
+            }
+            "sort" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "sort() takes 1 arg".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a.clone(), v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let mut vec: Vec<Value> = arr.iter().cloned().collect();
+                vec.sort_by(|a, b| {
+                    match (a, b) {
+                        (Value::Integer(x), Value::Integer(y)) => x.cmp(y),
+                        (Value::Float(x), Value::Float(y)) => x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal),
+                        (Value::String(x), Value::String(y)) => x.cmp(y),
+                        (Value::Boolean(x), Value::Boolean(y)) => x.cmp(y),
+                        (Value::Integer(x), Value::Float(y)) => (*x as f64).partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal),
+                        (Value::Float(x), Value::Integer(y)) => x.partial_cmp(&(*y as f64)).unwrap_or(std::cmp::Ordering::Equal),
+                        _ => std::cmp::Ordering::Equal,
+                    }
+                });
+                Ok(Value::Array(vec.into_iter().collect()))
+            }
+            "reverse" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "reverse() takes 1 arg".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let reversed: im::Vector<Value> = arr.iter().rev().cloned().collect();
+                Ok(Value::Array(reversed))
+            }
+            "flatten" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "flatten() takes 1 arg".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let mut result = im::Vector::new();
+                for item in arr.iter() {
+                    if let Value::Array(inner) = item {
+                        result.append(inner.clone());
+                    } else {
+                        result.push_back(item.clone());
+                    }
+                }
+                Ok(Value::Array(result))
+            }
+            "flatten_deep" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "flatten_deep() takes 1 arg".to_string() }); }
+                fn flatten_recursive(arr: &im::Vector<Value>) -> im::Vector<Value> {
+                    let mut result = im::Vector::new();
+                    for item in arr.iter() {
+                        if let Value::Array(inner) = item {
+                            result.append(flatten_recursive(inner));
+                        } else {
+                            result.push_back(item.clone());
+                        }
+                    }
+                    result
+                }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Array(flatten_recursive(arr)))
+            }
+            "unique" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "unique() takes 1 arg".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let mut seen = std::collections::HashSet::new();
+                let mut result = im::Vector::new();
+                for item in arr.iter() {
+                    let key = format!("{:?}", item);
+                    if seen.insert(key) {
+                        result.push_back(item.clone());
+                    }
+                }
+                Ok(Value::Array(result))
+            }
+            "zip" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "zip(arr1, arr2) takes 2 args".to_string() }); }
+                let arr1 = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let arr2 = match self.get_reg(args[1])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let result: im::Vector<Value> = arr1.iter().zip(arr2.iter())
+                    .map(|(a, b)| Value::Array(vec![a.clone(), b.clone()].into_iter().collect()))
+                    .collect();
+                Ok(Value::Array(result))
+            }
+            "unzip" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "unzip() takes 1 arg".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let mut left = im::Vector::new();
+                let mut right = im::Vector::new();
+                for item in arr.iter() {
+                    if let Value::Array(pair) = item {
+                        if pair.len() >= 2 {
+                            left.push_back(pair[0].clone());
+                            right.push_back(pair[1].clone());
+                        }
+                    }
+                }
+                Ok(Value::Array(vec![Value::Array(left), Value::Array(right)].into_iter().collect()))
+            }
+            "chunk" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "chunk(array, size) takes 2 args".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let size = match self.get_reg(args[1])? { Value::Integer(i) => *i as usize, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                if size == 0 { return Err(HlxError::ValidationFail { message: "chunk size must be > 0".to_string() }); }
+                let mut result = im::Vector::new();
+                let mut chunk = im::Vector::new();
+                for (i, item) in arr.iter().enumerate() {
+                    chunk.push_back(item.clone());
+                    if (i + 1) % size == 0 {
+                        result.push_back(Value::Array(chunk.clone()));
+                        chunk.clear();
+                    }
+                }
+                if !chunk.is_empty() {
+                    result.push_back(Value::Array(chunk));
+                }
+                Ok(Value::Array(result))
+            }
+            "take" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "take(array, n) takes 2 args".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let n = match self.get_reg(args[1])? { Value::Integer(i) => *i as usize, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let result: im::Vector<Value> = arr.iter().take(n).cloned().collect();
+                Ok(Value::Array(result))
+            }
+            "drop" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "drop(array, n) takes 2 args".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let n = match self.get_reg(args[1])? { Value::Integer(i) => *i as usize, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let result: im::Vector<Value> = arr.iter().skip(n).cloned().collect();
+                Ok(Value::Array(result))
+            }
+            "sum" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "sum() takes 1 arg".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let mut total = 0.0;
+                for item in arr.iter() {
+                    match item {
+                        Value::Integer(i) => total += *i as f64,
+                        Value::Float(f) => total += *f,
+                        _ => return Err(HlxError::TypeError { expected: "numeric array".to_string(), got: "mixed types".to_string() }),
+                    }
+                }
+                Ok(Value::Float(total))
+            }
+            "product" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "product() takes 1 arg".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let mut result = 1.0;
+                for item in arr.iter() {
+                    match item {
+                        Value::Integer(i) => result *= *i as f64,
+                        Value::Float(f) => result *= *f,
+                        _ => return Err(HlxError::TypeError { expected: "numeric array".to_string(), got: "mixed types".to_string() }),
+                    }
+                }
+                Ok(Value::Float(result))
+            }
+            "mean" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "mean() takes 1 arg".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                if arr.is_empty() { return Ok(Value::Float(0.0)); }
+                let mut total = 0.0;
+                for item in arr.iter() {
+                    match item {
+                        Value::Integer(i) => total += *i as f64,
+                        Value::Float(f) => total += *f,
+                        _ => return Err(HlxError::TypeError { expected: "numeric array".to_string(), got: "mixed types".to_string() }),
+                    }
+                }
+                Ok(Value::Float(total / arr.len() as f64))
+            }
+            "median" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "median() takes 1 arg".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                if arr.is_empty() { return Ok(Value::Float(0.0)); }
+                let mut nums: Vec<f64> = Vec::new();
+                for item in arr.iter() {
+                    match item {
+                        Value::Integer(i) => nums.push(*i as f64),
+                        Value::Float(f) => nums.push(*f),
+                        _ => return Err(HlxError::TypeError { expected: "numeric array".to_string(), got: "mixed types".to_string() }),
+                    }
+                }
+                nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                let mid = nums.len() / 2;
+                let median = if nums.len() % 2 == 0 {
+                    (nums[mid - 1] + nums[mid]) / 2.0
+                } else {
+                    nums[mid]
+                };
+                Ok(Value::Float(median))
+            }
+            "mode" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "mode() takes 1 arg".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                if arr.is_empty() { return Ok(Value::Null); }
+                let mut counts: std::collections::HashMap<String, (usize, Value)> = std::collections::HashMap::new();
+                for item in arr.iter() {
+                    let key = format!("{:?}", item);
+                    let entry = counts.entry(key).or_insert((0, item.clone()));
+                    entry.0 += 1;
+                }
+                let max_count = counts.values().map(|(c, _)| *c).max().unwrap_or(0);
+                for (_, (count, val)) in counts {
+                    if count == max_count {
+                        return Ok(val);
+                    }
+                }
+                Ok(Value::Null)
+            }
+            "range" => {
+                let (start, end, step) = match args.len() {
+                    1 => {
+                        let end = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                        (0, end, 1)
+                    }
+                    2 => {
+                        let start = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                        let end = match self.get_reg(args[1])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                        (start, end, 1)
+                    }
+                    3 => {
+                        let start = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                        let end = match self.get_reg(args[1])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                        let step = match self.get_reg(args[2])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                        (start, end, step)
+                    }
+                    _ => return Err(HlxError::ValidationFail { message: "range() takes 1, 2, or 3 args".to_string() }),
+                };
+                if step == 0 { return Err(HlxError::ValidationFail { message: "range step cannot be 0".to_string() }); }
+                let mut result = im::Vector::new();
+                if step > 0 {
+                    let mut i = start;
+                    while i < end {
+                        result.push_back(Value::Integer(i));
+                        i += step;
+                    }
+                } else {
+                    let mut i = start;
+                    while i > end {
+                        result.push_back(Value::Integer(i));
+                        i += step;
+                    }
+                }
+                Ok(Value::Array(result))
+            }
+            "keys" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "keys() takes 1 arg".to_string() }); }
+                let obj = match self.get_reg(args[0])? { Value::Object(o) => o, v => return Err(HlxError::TypeError { expected: "object".to_string(), got: v.type_name().to_string() }) };
+                let keys: im::Vector<Value> = obj.keys().map(|k| Value::String(k.clone())).collect();
+                Ok(Value::Array(keys))
+            }
+            "values" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "values() takes 1 arg".to_string() }); }
+                let obj = match self.get_reg(args[0])? { Value::Object(o) => o, v => return Err(HlxError::TypeError { expected: "object".to_string(), got: v.type_name().to_string() }) };
+                let values: im::Vector<Value> = obj.values().cloned().collect();
+                Ok(Value::Array(values))
+            }
+            "entries" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "entries() takes 1 arg".to_string() }); }
+                let obj = match self.get_reg(args[0])? { Value::Object(o) => o, v => return Err(HlxError::TypeError { expected: "object".to_string(), got: v.type_name().to_string() }) };
+                let entries: im::Vector<Value> = obj.iter()
+                    .map(|(k, v)| Value::Array(vec![Value::String(k.clone()), v.clone()].into_iter().collect()))
+                    .collect();
+                Ok(Value::Array(entries))
+            }
+            "merge" => {
+                if args.len() < 2 { return Err(HlxError::ValidationFail { message: "merge() requires at least 2 objects".to_string() }); }
+                let mut result = im::OrdMap::new();
+                for arg_reg in args {
+                    let obj = match self.get_reg(*arg_reg)? { Value::Object(o) => o, v => return Err(HlxError::TypeError { expected: "object".to_string(), got: v.type_name().to_string() }) };
+                    for (k, v) in obj {
+                        result.insert(k.clone(), v.clone());
+                    }
+                }
+                Ok(Value::Object(result))
+            }
+            "omit" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "omit(object, keys) takes 2 args".to_string() }); }
+                let obj = match self.get_reg(args[0])? { Value::Object(o) => o, v => return Err(HlxError::TypeError { expected: "object".to_string(), got: v.type_name().to_string() }) };
+                let keys_arr = match self.get_reg(args[1])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let keys_to_omit: std::collections::HashSet<String> = keys_arr.iter()
+                    .filter_map(|v| if let Value::String(s) = v { Some(s.clone()) } else { None })
+                    .collect();
+                let mut result = im::OrdMap::new();
+                for (k, v) in obj {
+                    if !keys_to_omit.contains(k) {
+                        result.insert(k.clone(), v.clone());
+                    }
+                }
+                Ok(Value::Object(result))
+            }
+            "pick" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "pick(object, keys) takes 2 args".to_string() }); }
+                let obj = match self.get_reg(args[0])? { Value::Object(o) => o, v => return Err(HlxError::TypeError { expected: "object".to_string(), got: v.type_name().to_string() }) };
+                let keys_arr = match self.get_reg(args[1])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let mut result = im::OrdMap::new();
+                for key_val in keys_arr.iter() {
+                    if let Value::String(key) = key_val {
+                        if let Some(val) = obj.get(key) {
+                            result.insert(key.clone(), val.clone());
+                        }
+                    }
+                }
+                Ok(Value::Object(result))
+            }
+            "from_entries" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "from_entries() takes 1 arg".to_string() }); }
+                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
+                let mut result = im::OrdMap::new();
+                for entry in arr.iter() {
+                    if let Value::Array(pair) = entry {
+                        if pair.len() >= 2 {
+                            if let Value::String(key) = &pair[0] {
+                                result.insert(key.clone(), pair[1].clone());
+                            }
+                        }
+                    }
+                }
+                Ok(Value::Object(result))
+            }
+            "sha256" => {
+                use sha2::{Sha256, Digest};
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "sha256() takes 1 arg".to_string() }); }
+                let data = match self.get_reg(args[0])? { Value::String(s) => s.as_bytes(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let mut hasher = Sha256::new();
+                hasher.update(data);
+                let result = hasher.finalize();
+                Ok(Value::String(hex::encode(result)))
+            }
+            "sha512" => {
+                use sha2::{Sha512, Digest};
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "sha512() takes 1 arg".to_string() }); }
+                let data = match self.get_reg(args[0])? { Value::String(s) => s.as_bytes(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let mut hasher = Sha512::new();
+                hasher.update(data);
+                let result = hasher.finalize();
+                Ok(Value::String(hex::encode(result)))
+            }
+            "blake3" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "blake3() takes 1 arg".to_string() }); }
+                let data = match self.get_reg(args[0])? { Value::String(s) => s.as_bytes(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let hash = blake3::hash(data);
+                Ok(Value::String(hash.to_hex().to_string()))
+            }
+            "md5" => {
+                use md5::{Md5, Digest};
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "md5() takes 1 arg".to_string() }); }
+                let data = match self.get_reg(args[0])? { Value::String(s) => s.as_bytes(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let mut hasher = Md5::new();
+                hasher.update(data);
+                let result = hasher.finalize();
+                Ok(Value::String(hex::encode(result)))
+            }
+            "hmac_sha256" => {
+                use hmac::{Hmac, Mac};
+                use sha2::Sha256;
+                type HmacSha256 = Hmac<Sha256>;
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "hmac_sha256(key, message) takes 2 args".to_string() }); }
+                let key = match self.get_reg(args[0])? { Value::String(s) => s.as_bytes(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let message = match self.get_reg(args[1])? { Value::String(s) => s.as_bytes(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let mut mac = HmacSha256::new_from_slice(key).map_err(|e| HlxError::BackendError { message: format!("HMAC error: {}", e) })?;
+                mac.update(message);
+                let result = mac.finalize();
+                Ok(Value::String(hex::encode(result.into_bytes())))
+            }
+            "base64_encode" => {
+                use base64::{Engine as _, engine::general_purpose};
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "base64_encode() takes 1 arg".to_string() }); }
+                let data = match self.get_reg(args[0])? { Value::String(s) => s.as_bytes(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::String(general_purpose::STANDARD.encode(data)))
+            }
+            "base64_decode" => {
+                use base64::{Engine as _, engine::general_purpose};
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "base64_decode() takes 1 arg".to_string() }); }
+                let encoded = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let decoded = general_purpose::STANDARD.decode(encoded).map_err(|e| HlxError::ValidationFail { message: format!("Base64 decode error: {}", e) })?;
+                let result = String::from_utf8(decoded).map_err(|e| HlxError::ValidationFail { message: format!("Invalid UTF-8 in decoded data: {}", e) })?;
+                Ok(Value::String(result))
+            }
+            "hex_encode" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "hex_encode() takes 1 arg".to_string() }); }
+                let data = match self.get_reg(args[0])? { Value::String(s) => s.as_bytes(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::String(hex::encode(data)))
+            }
+            "hex_decode" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "hex_decode() takes 1 arg".to_string() }); }
+                let encoded = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let decoded = hex::decode(encoded).map_err(|e| HlxError::ValidationFail { message: format!("Hex decode error: {}", e) })?;
+                let result = String::from_utf8(decoded).map_err(|e| HlxError::ValidationFail { message: format!("Invalid UTF-8 in decoded data: {}", e) })?;
+                Ok(Value::String(result))
+            }
+            "url_encode" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "url_encode() takes 1 arg".to_string() }); }
+                let data = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::String(urlencoding::encode(data).into_owned()))
+            }
+            "url_decode" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "url_decode() takes 1 arg".to_string() }); }
+                let encoded = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let decoded = urlencoding::decode(encoded).map_err(|e| HlxError::ValidationFail { message: format!("URL decode error: {}", e) })?;
+                Ok(Value::String(decoded.into_owned()))
+            }
+            "now" => {
+                if args.len() != 0 { return Err(HlxError::ValidationFail { message: "now() takes no arguments".to_string() }); }
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_err(|e| HlxError::BackendError { message: format!("Time error: {}", e) })?;
+                Ok(Value::Integer(now.as_millis() as i64))
+            }
+            "now_micros" => {
+                if args.len() != 0 { return Err(HlxError::ValidationFail { message: "now_micros() takes no arguments".to_string() }); }
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_err(|e| HlxError::BackendError { message: format!("Time error: {}", e) })?;
+                Ok(Value::Integer(now.as_micros() as i64))
+            }
+            "format_timestamp" => {
+                use chrono::{DateTime, Utc, TimeZone};
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "format_timestamp(timestamp, format) takes 2 args".to_string() }); }
+                let timestamp = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let format = match self.get_reg(args[1])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let dt = Utc.timestamp_millis_opt(timestamp).single()
+                    .ok_or_else(|| HlxError::ValidationFail { message: "Invalid timestamp".to_string() })?;
+                Ok(Value::String(dt.format(format).to_string()))
+            }
+            "parse_timestamp" => {
+                use chrono::{DateTime, Utc, NaiveDateTime};
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "parse_timestamp(date_string, format) takes 2 args".to_string() }); }
+                let date_str = match self.get_reg(args[0])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let format = match self.get_reg(args[1])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                let naive = NaiveDateTime::parse_from_str(date_str, format)
+                    .map_err(|e| HlxError::ValidationFail { message: format!("Failed to parse timestamp: {}", e) })?;
+                let dt: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive, Utc);
+                Ok(Value::Integer(dt.timestamp_millis()))
+            }
+            "year" => {
+                use chrono::{DateTime, Utc, TimeZone, Datelike};
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "year() takes 1 arg".to_string() }); }
+                let timestamp = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let dt = Utc.timestamp_millis_opt(timestamp).single()
+                    .ok_or_else(|| HlxError::ValidationFail { message: "Invalid timestamp".to_string() })?;
+                Ok(Value::Integer(dt.year() as i64))
+            }
+            "month" => {
+                use chrono::{DateTime, Utc, TimeZone, Datelike};
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "month() takes 1 arg".to_string() }); }
+                let timestamp = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let dt = Utc.timestamp_millis_opt(timestamp).single()
+                    .ok_or_else(|| HlxError::ValidationFail { message: "Invalid timestamp".to_string() })?;
+                Ok(Value::Integer(dt.month() as i64))
+            }
+            "day" => {
+                use chrono::{DateTime, Utc, TimeZone, Datelike};
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "day() takes 1 arg".to_string() }); }
+                let timestamp = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let dt = Utc.timestamp_millis_opt(timestamp).single()
+                    .ok_or_else(|| HlxError::ValidationFail { message: "Invalid timestamp".to_string() })?;
+                Ok(Value::Integer(dt.day() as i64))
+            }
+            "hour" => {
+                use chrono::{DateTime, Utc, TimeZone, Timelike};
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "hour() takes 1 arg".to_string() }); }
+                let timestamp = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let dt = Utc.timestamp_millis_opt(timestamp).single()
+                    .ok_or_else(|| HlxError::ValidationFail { message: "Invalid timestamp".to_string() })?;
+                Ok(Value::Integer(dt.hour() as i64))
+            }
+            "minute" => {
+                use chrono::{DateTime, Utc, TimeZone, Timelike};
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "minute() takes 1 arg".to_string() }); }
+                let timestamp = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let dt = Utc.timestamp_millis_opt(timestamp).single()
+                    .ok_or_else(|| HlxError::ValidationFail { message: "Invalid timestamp".to_string() })?;
+                Ok(Value::Integer(dt.minute() as i64))
+            }
+            "second" => {
+                use chrono::{DateTime, Utc, TimeZone, Timelike};
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "second() takes 1 arg".to_string() }); }
+                let timestamp = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let dt = Utc.timestamp_millis_opt(timestamp).single()
+                    .ok_or_else(|| HlxError::ValidationFail { message: "Invalid timestamp".to_string() })?;
+                Ok(Value::Integer(dt.second() as i64))
+            }
+            "bit_and" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "bit_and(a, b) takes 2 args".to_string() }); }
+                let a = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let b = match self.get_reg(args[1])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Integer(a & b))
+            }
+            "bit_or" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "bit_or(a, b) takes 2 args".to_string() }); }
+                let a = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let b = match self.get_reg(args[1])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Integer(a | b))
+            }
+            "bit_xor" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "bit_xor(a, b) takes 2 args".to_string() }); }
+                let a = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let b = match self.get_reg(args[1])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Integer(a ^ b))
+            }
+            "bit_not" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "bit_not() takes 1 arg".to_string() }); }
+                let a = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Integer(!a))
+            }
+            "bit_shl" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "bit_shl(value, shift) takes 2 args".to_string() }); }
+                let value = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let shift = match self.get_reg(args[1])? { Value::Integer(i) => *i as u32, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Integer(value << shift))
+            }
+            "bit_shr" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "bit_shr(value, shift) takes 2 args".to_string() }); }
+                let value = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let shift = match self.get_reg(args[1])? { Value::Integer(i) => *i as u32, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Integer(value >> shift))
+            }
+            "bit_count" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "bit_count() takes 1 arg".to_string() }); }
+                let value = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Integer(value.count_ones() as i64))
+            }
+            "bit_reverse" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "bit_reverse() takes 1 arg".to_string() }); }
+                let value = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Integer(value.reverse_bits()))
+            }
+            "sign" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "sign() takes 1 arg".to_string() }); }
+                let num = match self.get_reg(args[0])? {
+                    Value::Integer(i) => *i as f64,
+                    Value::Float(f) => *f,
+                    v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                };
+                let sign = if num > 0.0 { 1 } else if num < 0.0 { -1 } else { 0 };
+                Ok(Value::Integer(sign))
+            }
+            "clamp" => {
+                if args.len() != 3 { return Err(HlxError::ValidationFail { message: "clamp(value, min, max) takes 3 args".to_string() }); }
+                let value = match self.get_reg(args[0])? { Value::Float(f) => *f, Value::Integer(i) => *i as f64, v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }) };
+                let min = match self.get_reg(args[1])? { Value::Float(f) => *f, Value::Integer(i) => *i as f64, v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }) };
+                let max = match self.get_reg(args[2])? { Value::Float(f) => *f, Value::Integer(i) => *i as f64, v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Float(value.max(min).min(max)))
+            }
+            "lerp" => {
+                if args.len() != 3 { return Err(HlxError::ValidationFail { message: "lerp(a, b, t) takes 3 args".to_string() }); }
+                let a = match self.get_reg(args[0])? { Value::Float(f) => *f, Value::Integer(i) => *i as f64, v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }) };
+                let b = match self.get_reg(args[1])? { Value::Float(f) => *f, Value::Integer(i) => *i as f64, v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }) };
+                let t = match self.get_reg(args[2])? { Value::Float(f) => *f, Value::Integer(i) => *i as f64, v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Float(a + (b - a) * t))
+            }
+            "degrees" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "degrees() takes 1 arg".to_string() }); }
+                let radians = match self.get_reg(args[0])? { Value::Float(f) => *f, Value::Integer(i) => *i as f64, v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Float(radians.to_degrees()))
+            }
+            "radians" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "radians() takes 1 arg".to_string() }); }
+                let degrees = match self.get_reg(args[0])? { Value::Float(f) => *f, Value::Integer(i) => *i as f64, v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Float(degrees.to_radians()))
+            }
+            "gcd" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "gcd(a, b) takes 2 args".to_string() }); }
+                let mut a = match self.get_reg(args[0])? { Value::Integer(i) => i.abs(), v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let mut b = match self.get_reg(args[1])? { Value::Integer(i) => i.abs(), v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                while b != 0 {
+                    let temp = b;
+                    b = a % b;
+                    a = temp;
+                }
+                Ok(Value::Integer(a))
+            }
+            "lcm" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "lcm(a, b) takes 2 args".to_string() }); }
+                let a = match self.get_reg(args[0])? { Value::Integer(i) => i.abs(), v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                let b = match self.get_reg(args[1])? { Value::Integer(i) => i.abs(), v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                if a == 0 || b == 0 { return Ok(Value::Integer(0)); }
+                // Use gcd to compute lcm: lcm(a,b) = |a*b| / gcd(a,b)
+                let mut gcd_a = a;
+                let mut gcd_b = b;
+                while gcd_b != 0 {
+                    let temp = gcd_b;
+                    gcd_b = gcd_a % gcd_b;
+                    gcd_a = temp;
+                }
+                Ok(Value::Integer((a * b) / gcd_a))
+            }
+            "factorial" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "factorial() takes 1 arg".to_string() }); }
+                let n = match self.get_reg(args[0])? { Value::Integer(i) => *i, v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }) };
+                if n < 0 { return Err(HlxError::ValidationFail { message: "factorial requires non-negative integer".to_string() }); }
+                let mut result: i64 = 1;
+                for i in 2..=n {
+                    result = result.checked_mul(i).ok_or_else(|| HlxError::ValidationFail { message: "factorial overflow".to_string() })?;
+                }
+                Ok(Value::Integer(result))
+            }
+            "is_nan" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "is_nan() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Boolean(f.is_nan())),
+                    Value::Integer(_) => Ok(Value::Boolean(false)),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "is_inf" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "is_inf() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Boolean(f.is_infinite())),
+                    Value::Integer(_) => Ok(Value::Boolean(false)),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "hypot" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "hypot(x, y) takes 2 args".to_string() }); }
+                let x = match self.get_reg(args[0])? { Value::Float(f) => *f, Value::Integer(i) => *i as f64, v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }) };
+                let y = match self.get_reg(args[1])? { Value::Float(f) => *f, Value::Integer(i) => *i as f64, v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }) };
+                Ok(Value::Float(x.hypot(y)))
+            }
+            "trunc" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "trunc() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.trunc())),
+                    Value::Integer(i) => Ok(Value::Float(*i as f64)),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "assert" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "assert(condition, message) takes 2 args".to_string() }); }
+                let condition = match self.get_reg(args[0])? { Value::Boolean(b) => *b, v => return Err(HlxError::TypeError { expected: "boolean".to_string(), got: v.type_name().to_string() }) };
+                let message = match self.get_reg(args[1])? { Value::String(s) => s.as_str(), v => return Err(HlxError::TypeError { expected: "string".to_string(), got: v.type_name().to_string() }) };
+                if !condition {
+                    return Err(HlxError::ValidationFail { message: format!("Assertion failed: {}", message) });
+                }
+                Ok(Value::Null)
+            }
+            "debug" => {
+                // Variadic debug print
+                for arg_reg in args {
+                    let val = self.get_reg(*arg_reg)?;
+                    eprintln!("[DEBUG] {}", val);
+                }
+                Ok(Value::Null)
+            }
+            "asin" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "asin() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.asin())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).asin())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "acos" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "acos() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.acos())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).acos())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "atan" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "atan() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.atan())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).atan())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "atan2" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "atan2(y, x) takes 2 args".to_string() }); }
+                let y = match self.get_reg(args[0])? {
+                    Value::Float(f) => *f,
+                    Value::Integer(i) => *i as f64,
+                    v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                };
+                let x = match self.get_reg(args[1])? {
+                    Value::Float(f) => *f,
+                    Value::Integer(i) => *i as f64,
+                    v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                };
+                Ok(Value::Float(y.atan2(x)))
+            }
+            "sinh" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "sinh() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.sinh())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).sinh())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "cosh" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "cosh() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.cosh())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).cosh())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "tanh" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "tanh() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.tanh())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).tanh())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "asinh" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "asinh() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.asinh())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).asinh())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "acosh" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "acosh() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.acosh())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).acosh())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "atanh" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "atanh() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.atanh())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).atanh())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "cbrt" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "cbrt() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.cbrt())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).cbrt())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "pow" => {
+                if args.len() != 2 { return Err(HlxError::ValidationFail { message: "pow(base, exponent) takes 2 args".to_string() }); }
+                let base = match self.get_reg(args[0])? {
+                    Value::Float(f) => *f,
+                    Value::Integer(i) => *i as f64,
+                    v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                };
+                let exponent = match self.get_reg(args[1])? {
+                    Value::Float(f) => *f,
+                    Value::Integer(i) => *i as f64,
+                    v => return Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                };
+                Ok(Value::Float(base.powf(exponent)))
+            }
+            "exp2" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "exp2() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.exp2())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).exp2())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "log2" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "log2() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.log2())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).log2())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
+            }
+            "log10" => {
+                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "log10() takes 1 arg".to_string() }); }
+                match self.get_reg(args[0])? {
+                    Value::Float(f) => Ok(Value::Float(f.log10())),
+                    Value::Integer(i) => Ok(Value::Float((*i as f64).log10())),
+                    v => Err(HlxError::TypeError { expected: "numeric".to_string(), got: v.type_name().to_string() }),
+                }
             }
             _ => Err(HlxError::ValidationFail {
                 message: format!("Unknown function: {}", func),

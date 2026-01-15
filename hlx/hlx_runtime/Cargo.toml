@@ -19,6 +19,12 @@ serde.workspace = true
 blake3.workspace = true
 tracing.workspace = true
 hex = "0.4"
+sha2 = "0.10"
+md-5 = "0.10"
+hmac = "0.12"
+base64 = "0.22"
+urlencoding = "2.1"
+chrono = "0.4"
 bytemuck = "1.14"
 im = { version = "15.1", features = ["serde"] }
 serde_json = { workspace = true }
@@ -26,6 +32,7 @@ reqwest = { workspace = true }
 xcap = { workspace = true }
 image = { workspace = true }
 sdl2 = "0.37"
+regex = "1.10"
 
 # CPU backend
 ndarray = { workspace = true, optional = true }
