@@ -866,6 +866,135 @@ impl BuiltinRegistry {
             ),
         );
 
+        // === Additional Math Functions ===
+        builtins.insert("asin", BuiltinSignature::fixed("asin", vec![ParamType::Float], ReturnType::Float, "Arcsine", BackendImpl::LLVMIntrinsic));
+        builtins.insert("acos", BuiltinSignature::fixed("acos", vec![ParamType::Float], ReturnType::Float, "Arccosine", BackendImpl::LLVMIntrinsic));
+        builtins.insert("atan", BuiltinSignature::fixed("atan", vec![ParamType::Float], ReturnType::Float, "Arctangent", BackendImpl::LLVMIntrinsic));
+        builtins.insert("atan2", BuiltinSignature::fixed("atan2", vec![ParamType::Float, ParamType::Float], ReturnType::Float, "Two-argument arctangent", BackendImpl::LLVMIntrinsic));
+        builtins.insert("sinh", BuiltinSignature::fixed("sinh", vec![ParamType::Float], ReturnType::Float, "Hyperbolic sine", BackendImpl::LLVMIntrinsic));
+        builtins.insert("cosh", BuiltinSignature::fixed("cosh", vec![ParamType::Float], ReturnType::Float, "Hyperbolic cosine", BackendImpl::LLVMIntrinsic));
+        builtins.insert("tanh", BuiltinSignature::fixed("tanh", vec![ParamType::Float], ReturnType::Float, "Hyperbolic tangent", BackendImpl::LLVMIntrinsic));
+        builtins.insert("log2", BuiltinSignature::fixed("log2", vec![ParamType::Float], ReturnType::Float, "Base-2 logarithm", BackendImpl::LLVMIntrinsic));
+        builtins.insert("log10", BuiltinSignature::fixed("log10", vec![ParamType::Float], ReturnType::Float, "Base-10 logarithm", BackendImpl::LLVMIntrinsic));
+        builtins.insert("cbrt", BuiltinSignature::fixed("cbrt", vec![ParamType::Float], ReturnType::Float, "Cube root", BackendImpl::LLVMIntrinsic));
+        builtins.insert("hypot", BuiltinSignature::fixed("hypot", vec![ParamType::Float, ParamType::Float], ReturnType::Float, "Euclidean distance (sqrt(x²+y²))", BackendImpl::LLVMIntrinsic));
+        builtins.insert("trunc", BuiltinSignature::fixed("trunc", vec![ParamType::Float], ReturnType::Float, "Truncate to integer value", BackendImpl::LLVMIntrinsic));
+        builtins.insert("sign", BuiltinSignature::fixed("sign", vec![ParamType::Float], ReturnType::Int, "Sign of number (-1, 0, or 1)", BackendImpl::Math));
+        builtins.insert("clamp", BuiltinSignature::fixed("clamp", vec![ParamType::Float, ParamType::Float, ParamType::Float], ReturnType::Float, "Clamp value between min and max", BackendImpl::Math));
+        builtins.insert("lerp", BuiltinSignature::fixed("lerp", vec![ParamType::Float, ParamType::Float, ParamType::Float], ReturnType::Float, "Linear interpolation", BackendImpl::Math));
+        builtins.insert("degrees", BuiltinSignature::fixed("degrees", vec![ParamType::Float], ReturnType::Float, "Radians to degrees", BackendImpl::Math));
+        builtins.insert("radians", BuiltinSignature::fixed("radians", vec![ParamType::Float], ReturnType::Float, "Degrees to radians", BackendImpl::Math));
+        builtins.insert("gcd", BuiltinSignature::fixed("gcd", vec![ParamType::Int, ParamType::Int], ReturnType::Int, "Greatest common divisor", BackendImpl::Math));
+        builtins.insert("lcm", BuiltinSignature::fixed("lcm", vec![ParamType::Int, ParamType::Int], ReturnType::Int, "Least common multiple", BackendImpl::Math));
+        builtins.insert("factorial", BuiltinSignature::fixed("factorial", vec![ParamType::Int], ReturnType::Int, "Factorial (n!)", BackendImpl::Math));
+        builtins.insert("is_nan", BuiltinSignature::fixed("is_nan", vec![ParamType::Float], ReturnType::Bool, "Check if value is NaN", BackendImpl::Math));
+        builtins.insert("is_inf", BuiltinSignature::fixed("is_inf", vec![ParamType::Float], ReturnType::Bool, "Check if value is infinite", BackendImpl::Math));
+
+        // === String Functions (Extended) ===
+        builtins.insert("split", BuiltinSignature::fixed("split", vec![ParamType::String, ParamType::String], ReturnType::Array, "Split string by delimiter", BackendImpl::RuntimeCall));
+        builtins.insert("join", BuiltinSignature::fixed("join", vec![ParamType::Array, ParamType::String], ReturnType::String, "Join array elements with delimiter", BackendImpl::RuntimeCall));
+        builtins.insert("replace", BuiltinSignature::fixed("replace", vec![ParamType::String, ParamType::String, ParamType::String], ReturnType::String, "Replace all occurrences", BackendImpl::RuntimeCall));
+        builtins.insert("replace_first", BuiltinSignature::fixed("replace_first", vec![ParamType::String, ParamType::String, ParamType::String], ReturnType::String, "Replace first occurrence", BackendImpl::RuntimeCall));
+        builtins.insert("pad_left", BuiltinSignature::fixed("pad_left", vec![ParamType::String, ParamType::Int, ParamType::String], ReturnType::String, "Pad string on left", BackendImpl::RuntimeCall));
+        builtins.insert("pad_right", BuiltinSignature::fixed("pad_right", vec![ParamType::String, ParamType::Int, ParamType::String], ReturnType::String, "Pad string on right", BackendImpl::RuntimeCall));
+        builtins.insert("repeat", BuiltinSignature::fixed("repeat", vec![ParamType::String, ParamType::Int], ReturnType::String, "Repeat string n times", BackendImpl::RuntimeCall));
+        builtins.insert("reverse_str", BuiltinSignature::fixed("reverse_str", vec![ParamType::String], ReturnType::String, "Reverse string", BackendImpl::RuntimeCall));
+        builtins.insert("contains", BuiltinSignature::fixed("contains", vec![ParamType::String, ParamType::String], ReturnType::Bool, "Check if string contains substring", BackendImpl::RuntimeCall));
+        builtins.insert("char_at", BuiltinSignature::fixed("char_at", vec![ParamType::String, ParamType::Int], ReturnType::String, "Get character at index", BackendImpl::RuntimeCall));
+        builtins.insert("is_alpha", BuiltinSignature::fixed("is_alpha", vec![ParamType::String], ReturnType::Bool, "Check if string is alphabetic", BackendImpl::RuntimeCall));
+        builtins.insert("is_numeric", BuiltinSignature::fixed("is_numeric", vec![ParamType::String], ReturnType::Bool, "Check if string is numeric", BackendImpl::RuntimeCall));
+        builtins.insert("is_alphanumeric", BuiltinSignature::fixed("is_alphanumeric", vec![ParamType::String], ReturnType::Bool, "Check if string is alphanumeric", BackendImpl::RuntimeCall));
+        builtins.insert("format", BuiltinSignature::variadic("format", 1, ReturnType::String, "Format string with arguments", BackendImpl::RuntimeCall));
+        builtins.insert("match_regex", BuiltinSignature::fixed("match_regex", vec![ParamType::String, ParamType::String], ReturnType::Bool, "Match string against regex", BackendImpl::RuntimeCall));
+        builtins.insert("find_regex", BuiltinSignature::fixed("find_regex", vec![ParamType::String, ParamType::String], ReturnType::Array, "Find all regex matches", BackendImpl::RuntimeCall));
+
+        // === Array Functions (Extended) ===
+        builtins.insert("map", BuiltinSignature::fixed("map", vec![ParamType::Array, ParamType::String], ReturnType::Array, "Map function over array", BackendImpl::CompilerSpecial));
+        builtins.insert("filter", BuiltinSignature::fixed("filter", vec![ParamType::Array, ParamType::String], ReturnType::Array, "Filter array by predicate", BackendImpl::CompilerSpecial));
+        builtins.insert("reduce", BuiltinSignature::fixed("reduce", vec![ParamType::Array, ParamType::String, ParamType::Any], ReturnType::Any, "Reduce array to single value", BackendImpl::CompilerSpecial));
+        builtins.insert("sort", BuiltinSignature::fixed("sort", vec![ParamType::Array], ReturnType::Array, "Sort array", BackendImpl::RuntimeCall));
+        builtins.insert("sort_by", BuiltinSignature::fixed("sort_by", vec![ParamType::Array, ParamType::String], ReturnType::Array, "Sort array by key function", BackendImpl::CompilerSpecial));
+        builtins.insert("reverse", BuiltinSignature::fixed("reverse", vec![ParamType::Array], ReturnType::Array, "Reverse array", BackendImpl::RuntimeCall));
+        builtins.insert("find", BuiltinSignature::fixed("find", vec![ParamType::Array, ParamType::String], ReturnType::Any, "Find first matching element", BackendImpl::CompilerSpecial));
+        builtins.insert("find_index", BuiltinSignature::fixed("find_index", vec![ParamType::Array, ParamType::String], ReturnType::Int, "Find index of first match", BackendImpl::CompilerSpecial));
+        builtins.insert("every", BuiltinSignature::fixed("every", vec![ParamType::Array, ParamType::String], ReturnType::Bool, "Check if all elements match", BackendImpl::CompilerSpecial));
+        builtins.insert("some", BuiltinSignature::fixed("some", vec![ParamType::Array, ParamType::String], ReturnType::Bool, "Check if any element matches", BackendImpl::CompilerSpecial));
+        builtins.insert("flatten", BuiltinSignature::fixed("flatten", vec![ParamType::Array], ReturnType::Array, "Flatten nested array one level", BackendImpl::RuntimeCall));
+        builtins.insert("flatten_deep", BuiltinSignature::fixed("flatten_deep", vec![ParamType::Array], ReturnType::Array, "Flatten nested array recursively", BackendImpl::RuntimeCall));
+        builtins.insert("unique", BuiltinSignature::fixed("unique", vec![ParamType::Array], ReturnType::Array, "Remove duplicates", BackendImpl::RuntimeCall));
+        builtins.insert("zip", BuiltinSignature::fixed("zip", vec![ParamType::Array, ParamType::Array], ReturnType::Array, "Zip two arrays into pairs", BackendImpl::RuntimeCall));
+        builtins.insert("unzip", BuiltinSignature::fixed("unzip", vec![ParamType::Array], ReturnType::Array, "Unzip array of pairs", BackendImpl::RuntimeCall));
+        builtins.insert("partition", BuiltinSignature::fixed("partition", vec![ParamType::Array, ParamType::String], ReturnType::Array, "Partition array by predicate", BackendImpl::CompilerSpecial));
+        builtins.insert("chunk", BuiltinSignature::fixed("chunk", vec![ParamType::Array, ParamType::Int], ReturnType::Array, "Split array into chunks of size n", BackendImpl::RuntimeCall));
+        builtins.insert("take", BuiltinSignature::fixed("take", vec![ParamType::Array, ParamType::Int], ReturnType::Array, "Take first n elements", BackendImpl::RuntimeCall));
+        builtins.insert("drop", BuiltinSignature::fixed("drop", vec![ParamType::Array, ParamType::Int], ReturnType::Array, "Drop first n elements", BackendImpl::RuntimeCall));
+        builtins.insert("take_while", BuiltinSignature::fixed("take_while", vec![ParamType::Array, ParamType::String], ReturnType::Array, "Take elements while predicate is true", BackendImpl::CompilerSpecial));
+        builtins.insert("drop_while", BuiltinSignature::fixed("drop_while", vec![ParamType::Array, ParamType::String], ReturnType::Array, "Drop elements while predicate is true", BackendImpl::CompilerSpecial));
+        builtins.insert("sum", BuiltinSignature::fixed("sum", vec![ParamType::Array], ReturnType::Float, "Sum array elements", BackendImpl::RuntimeCall));
+        builtins.insert("product", BuiltinSignature::fixed("product", vec![ParamType::Array], ReturnType::Float, "Product of array elements", BackendImpl::RuntimeCall));
+        builtins.insert("mean", BuiltinSignature::fixed("mean", vec![ParamType::Array], ReturnType::Float, "Mean of array elements", BackendImpl::RuntimeCall));
+        builtins.insert("median", BuiltinSignature::fixed("median", vec![ParamType::Array], ReturnType::Float, "Median of array elements", BackendImpl::RuntimeCall));
+        builtins.insert("mode", BuiltinSignature::fixed("mode", vec![ParamType::Array], ReturnType::Any, "Mode of array elements", BackendImpl::RuntimeCall));
+        builtins.insert("range", BuiltinSignature::range("range", vec![ParamType::Int, ParamType::Int, ParamType::Int], 1, 3, ReturnType::Array, "Generate range of integers", BackendImpl::RuntimeCall));
+
+        // === Object/Map Functions ===
+        builtins.insert("keys", BuiltinSignature::fixed("keys", vec![ParamType::Object], ReturnType::Array, "Get object keys", BackendImpl::RuntimeCall));
+        builtins.insert("values", BuiltinSignature::fixed("values", vec![ParamType::Object], ReturnType::Array, "Get object values", BackendImpl::RuntimeCall));
+        builtins.insert("entries", BuiltinSignature::fixed("entries", vec![ParamType::Object], ReturnType::Array, "Get object entries as [key, value] pairs", BackendImpl::RuntimeCall));
+        builtins.insert("merge", BuiltinSignature::variadic("merge", 2, ReturnType::Object, "Merge objects (rightmost wins)", BackendImpl::RuntimeCall));
+        builtins.insert("omit", BuiltinSignature::fixed("omit", vec![ParamType::Object, ParamType::Array], ReturnType::Object, "Omit keys from object", BackendImpl::RuntimeCall));
+        builtins.insert("pick", BuiltinSignature::fixed("pick", vec![ParamType::Object, ParamType::Array], ReturnType::Object, "Pick keys from object", BackendImpl::RuntimeCall));
+        builtins.insert("map_values", BuiltinSignature::fixed("map_values", vec![ParamType::Object, ParamType::String], ReturnType::Object, "Map function over object values", BackendImpl::CompilerSpecial));
+        builtins.insert("map_keys", BuiltinSignature::fixed("map_keys", vec![ParamType::Object, ParamType::String], ReturnType::Object, "Map function over object keys", BackendImpl::CompilerSpecial));
+        builtins.insert("from_entries", BuiltinSignature::fixed("from_entries", vec![ParamType::Array], ReturnType::Object, "Create object from [key, value] pairs", BackendImpl::RuntimeCall));
+
+        // === Date/Time Functions ===
+        builtins.insert("now", BuiltinSignature::fixed("now", vec![], ReturnType::Int, "Current Unix timestamp (milliseconds)", BackendImpl::RuntimeCall));
+        builtins.insert("now_micros", BuiltinSignature::fixed("now_micros", vec![], ReturnType::Int, "Current Unix timestamp (microseconds)", BackendImpl::RuntimeCall));
+        builtins.insert("format_timestamp", BuiltinSignature::fixed("format_timestamp", vec![ParamType::Int, ParamType::String], ReturnType::String, "Format Unix timestamp", BackendImpl::RuntimeCall));
+        builtins.insert("parse_timestamp", BuiltinSignature::fixed("parse_timestamp", vec![ParamType::String, ParamType::String], ReturnType::Int, "Parse timestamp string", BackendImpl::RuntimeCall));
+        builtins.insert("year", BuiltinSignature::fixed("year", vec![ParamType::Int], ReturnType::Int, "Extract year from timestamp", BackendImpl::RuntimeCall));
+        builtins.insert("month", BuiltinSignature::fixed("month", vec![ParamType::Int], ReturnType::Int, "Extract month from timestamp", BackendImpl::RuntimeCall));
+        builtins.insert("day", BuiltinSignature::fixed("day", vec![ParamType::Int], ReturnType::Int, "Extract day from timestamp", BackendImpl::RuntimeCall));
+        builtins.insert("hour", BuiltinSignature::fixed("hour", vec![ParamType::Int], ReturnType::Int, "Extract hour from timestamp", BackendImpl::RuntimeCall));
+        builtins.insert("minute", BuiltinSignature::fixed("minute", vec![ParamType::Int], ReturnType::Int, "Extract minute from timestamp", BackendImpl::RuntimeCall));
+        builtins.insert("second", BuiltinSignature::fixed("second", vec![ParamType::Int], ReturnType::Int, "Extract second from timestamp", BackendImpl::RuntimeCall));
+
+        // === Encoding/Decoding ===
+        builtins.insert("base64_encode", BuiltinSignature::fixed("base64_encode", vec![ParamType::String], ReturnType::String, "Base64 encode", BackendImpl::RuntimeCall));
+        builtins.insert("base64_decode", BuiltinSignature::fixed("base64_decode", vec![ParamType::String], ReturnType::String, "Base64 decode", BackendImpl::RuntimeCall));
+        builtins.insert("hex_encode", BuiltinSignature::fixed("hex_encode", vec![ParamType::String], ReturnType::String, "Hex encode", BackendImpl::RuntimeCall));
+        builtins.insert("hex_decode", BuiltinSignature::fixed("hex_decode", vec![ParamType::String], ReturnType::String, "Hex decode", BackendImpl::RuntimeCall));
+        builtins.insert("url_encode", BuiltinSignature::fixed("url_encode", vec![ParamType::String], ReturnType::String, "URL encode", BackendImpl::RuntimeCall));
+        builtins.insert("url_decode", BuiltinSignature::fixed("url_decode", vec![ParamType::String], ReturnType::String, "URL decode", BackendImpl::RuntimeCall));
+
+        // === Cryptography/Hashing ===
+        builtins.insert("sha256", BuiltinSignature::fixed("sha256", vec![ParamType::String], ReturnType::String, "SHA-256 hash", BackendImpl::RuntimeCall));
+        builtins.insert("sha512", BuiltinSignature::fixed("sha512", vec![ParamType::String], ReturnType::String, "SHA-512 hash", BackendImpl::RuntimeCall));
+        builtins.insert("blake3", BuiltinSignature::fixed("blake3", vec![ParamType::String], ReturnType::String, "BLAKE3 hash", BackendImpl::RuntimeCall));
+        builtins.insert("md5", BuiltinSignature::fixed("md5", vec![ParamType::String], ReturnType::String, "MD5 hash (insecure, for compatibility)", BackendImpl::RuntimeCall));
+        builtins.insert("hmac_sha256", BuiltinSignature::fixed("hmac_sha256", vec![ParamType::String, ParamType::String], ReturnType::String, "HMAC-SHA256", BackendImpl::RuntimeCall));
+
+        // === Bit Operations ===
+        builtins.insert("bit_and", BuiltinSignature::fixed("bit_and", vec![ParamType::Int, ParamType::Int], ReturnType::Int, "Bitwise AND", BackendImpl::Math));
+        builtins.insert("bit_or", BuiltinSignature::fixed("bit_or", vec![ParamType::Int, ParamType::Int], ReturnType::Int, "Bitwise OR", BackendImpl::Math));
+        builtins.insert("bit_xor", BuiltinSignature::fixed("bit_xor", vec![ParamType::Int, ParamType::Int], ReturnType::Int, "Bitwise XOR", BackendImpl::Math));
+        builtins.insert("bit_not", BuiltinSignature::fixed("bit_not", vec![ParamType::Int], ReturnType::Int, "Bitwise NOT", BackendImpl::Math));
+        builtins.insert("bit_shl", BuiltinSignature::fixed("bit_shl", vec![ParamType::Int, ParamType::Int], ReturnType::Int, "Bit shift left", BackendImpl::Math));
+        builtins.insert("bit_shr", BuiltinSignature::fixed("bit_shr", vec![ParamType::Int, ParamType::Int], ReturnType::Int, "Bit shift right", BackendImpl::Math));
+        builtins.insert("bit_count", BuiltinSignature::fixed("bit_count", vec![ParamType::Int], ReturnType::Int, "Count set bits (popcount)", BackendImpl::Math));
+        builtins.insert("bit_reverse", BuiltinSignature::fixed("bit_reverse", vec![ParamType::Int], ReturnType::Int, "Reverse bits", BackendImpl::Math));
+
+        // === Utility Functions ===
+        builtins.insert("identity", BuiltinSignature::fixed("identity", vec![ParamType::Any], ReturnType::Any, "Return input unchanged", BackendImpl::CompilerSpecial));
+        builtins.insert("const", BuiltinSignature::fixed("const", vec![ParamType::Any, ParamType::Any], ReturnType::Any, "Return first argument, ignore second", BackendImpl::CompilerSpecial));
+        builtins.insert("noop", BuiltinSignature::fixed("noop", vec![], ReturnType::Null, "No operation", BackendImpl::CompilerSpecial));
+        builtins.insert("assert", BuiltinSignature::fixed("assert", vec![ParamType::Bool, ParamType::String], ReturnType::Null, "Assert condition or panic", BackendImpl::RuntimeCall));
+        builtins.insert("panic", BuiltinSignature::fixed("panic", vec![ParamType::String], ReturnType::Null, "Panic with message", BackendImpl::RuntimeCall));
+        builtins.insert("debug", BuiltinSignature::variadic("debug", 1, ReturnType::Null, "Debug print with location", BackendImpl::RuntimeCall));
+        builtins.insert("measure_time", BuiltinSignature::fixed("measure_time", vec![ParamType::String], ReturnType::Int, "Measure function execution time (microseconds)", BackendImpl::CompilerSpecial));
+        builtins.insert("typeof_detailed", BuiltinSignature::fixed("typeof_detailed", vec![ParamType::Any], ReturnType::String, "Get detailed type information", BackendImpl::CompilerSpecial));
+
         Self { builtins }
     }
 
