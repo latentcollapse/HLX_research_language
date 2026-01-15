@@ -14,6 +14,8 @@ use std::thread;
 pub struct SpeculationConfig {
     /// Number of parallel agents to spawn
     pub agent_count: usize,
+    /// Maximum allowed agent count (safety limit)
+    pub max_agent_count: usize,
     /// Enable debug logging
     pub debug: bool,
     /// Enable strict hash verification (fail on mismatch)
@@ -24,9 +26,29 @@ impl Default for SpeculationConfig {
     fn default() -> Self {
         Self {
             agent_count: 2,
+            max_agent_count: 1024,  // Default max (Grok feedback: Q3)
             debug: false,
             strict_verification: true,
         }
+    }
+}
+
+impl SpeculationConfig {
+    /// Create config with clamped agent count
+    pub fn with_agent_count(mut self, count: usize) -> Self {
+        self.agent_count = count.min(self.max_agent_count);
+        if count > self.max_agent_count {
+            eprintln!("[HLX-SCALE] Warning: Requested {} agents, capped at max {}",
+                     count, self.max_agent_count);
+        }
+        self
+    }
+
+    /// Set maximum agent count
+    pub fn with_max(mut self, max: usize) -> Self {
+        self.max_agent_count = max;
+        self.agent_count = self.agent_count.min(max);
+        self
     }
 }
 
@@ -75,10 +97,11 @@ impl SpeculationCoordinator {
         &mut self,
         krate: &HlxCrate,
     ) -> Result<Value> {
-        let agent_count = self.config.agent_count;
+        let agent_count = self.config.agent_count.min(self.config.max_agent_count);
 
-        if self.config.debug {
-            println!("[SPECULATION] Starting execution with {} agents", agent_count);
+        if self.config.debug || std::env::var("RUST_LOG").is_ok() {
+            println!("[HLX-SCALE] Starting speculation with {} agents (max: {})",
+                    agent_count, self.config.max_agent_count);
         }
 
         // Shared barrier for synchronization
@@ -104,21 +127,31 @@ impl SpeculationCoordinator {
             let debug = self.config.debug;
 
             let handle = thread::spawn(move || {
-                if debug {
-                    println!("[AGENT-{}] Starting execution", agent_id);
+                let log_enabled = debug || std::env::var("RUST_LOG").is_ok();
+
+                if log_enabled {
+                    println!("[HLX-SCALE][AGENT-{}] Forked and starting execution", agent_id);
                 }
+
+                // CRITICAL: Disable speculation for nested execution
+                // Set env var to prevent infinite recursion
+                std::env::set_var("HLX_SCALE_DISABLE", "1");
 
                 // Execute the crate using the standard runtime executor
                 let result = match crate::execute(&krate) {
                     Ok(val) => val,
                     Err(e) => {
-                        errors.lock().unwrap().push(format!("Agent {}: Execution failed: {}", agent_id, e));
+                        let err_msg = format!("Agent {}: Execution failed: {}", agent_id, e);
+                        if log_enabled {
+                            eprintln!("[HLX-SCALE][AGENT-{}] ERROR: {}", agent_id, e);
+                        }
+                        errors.lock().unwrap().push(err_msg);
                         return;
                     }
                 };
 
-                if debug {
-                    println!("[AGENT-{}] Completed with result: {:?}", agent_id, result);
+                if log_enabled {
+                    println!("[HLX-SCALE][AGENT-{}] Completed with result: {:?}", agent_id, result);
                 }
 
                 // Store result
@@ -167,12 +200,14 @@ impl SpeculationCoordinator {
             return Err(HlxError::validation("No agents completed execution"));
         }
 
+        let log_enabled = self.config.debug || std::env::var("RUST_LOG").is_ok();
+
         // Compute hashes for all agents
         let hashes: Vec<String> = agents.iter()
             .map(|agent| {
                 let hash = agent.compute_hash();
-                if self.config.debug {
-                    println!("[AGENT-{}] State hash: {}", agent.id, hash);
+                if log_enabled {
+                    println!("[HLX-SCALE][AGENT-{}] State hash: {}", agent.id, hash);
                 }
                 hash
             })
@@ -184,21 +219,24 @@ impl SpeculationCoordinator {
 
         if !consensus {
             let msg = format!(
-                "Hash mismatch detected!\n{}",
+                "Swarm mismatch detected! Expected all agents to agree.\n{}",
                 hashes.iter().enumerate()
-                    .map(|(i, h)| format!("  Agent {}: {}", i, h))
+                    .map(|(i, h)| format!("  Agent {}: {} {}", i, h,
+                        if h == first_hash { "" } else { "<- DIVERGENT" }))
                     .collect::<Vec<_>>()
                     .join("\n")
             );
 
             if self.config.strict_verification {
+                eprintln!("[HLX-SCALE] ERROR: {}", msg);
+                eprintln!("[HLX-SCALE] Falling back to serial execution would be implemented here.");
                 return Err(HlxError::BackendError { message: msg });
             } else {
-                eprintln!("[WARNING] {}", msg);
-                eprintln!("[WARNING] Continuing with first agent result (strict_verification=false)");
+                eprintln!("[HLX-SCALE] WARNING: {}", msg);
+                eprintln!("[HLX-SCALE] WARNING: Continuing with first agent result (strict_verification=false)");
             }
-        } else if self.config.debug {
-            println!("[CONSENSUS] All agents agree (hash: {})", first_hash);
+        } else if log_enabled {
+            println!("[HLX-SCALE][CONSENSUS] All {} agents agree (hash: {})", agents.len(), first_hash);
         }
 
         // Return first agent's result (all should be identical due to determinism)

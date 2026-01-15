@@ -33,35 +33,42 @@ impl Executor {
     
     /// Run a crate and return its result
     pub fn run(&mut self, krate: &HlxCrate) -> Result<Value> {
-        // Check if crate has HLX-Scale metadata suggesting speculation
-        if let Some(metadata) = &krate.metadata {
-            if !metadata.hlx_scale_substrates.is_empty() {
-                // Find the maximum agent count requested
-                let max_agent_count = metadata.hlx_scale_substrates.values()
-                    .filter(|info| info.enable_speculation)
-                    .map(|info| info.agent_count)
-                    .max()
-                    .unwrap_or(1);
+        // Check if speculation is disabled (set by speculation coordinator to prevent recursion)
+        let speculation_disabled = std::env::var("HLX_SCALE_DISABLE").is_ok();
 
-                if max_agent_count > 1 {
-                    if self.config.debug {
-                        println!("[HLX-SCALE] Crate has @swarm functions, enabling speculation with {} agents", max_agent_count);
+        // Check if main() has @swarm pragma (Phase 1B: main-only speculation)
+        if !speculation_disabled {
+            if let Some(metadata) = &krate.metadata {
+                if let Some(main_info) = metadata.hlx_scale_substrates.get("main") {
+                    if main_info.enable_speculation && main_info.agent_count > 1 {
+                    let log_enabled = self.config.debug || std::env::var("RUST_LOG").is_ok();
+
+                    if log_enabled {
+                        println!("[HLX-SCALE] main() has @swarm(size={}), enabling speculation",
+                                main_info.agent_count);
+                        println!("[HLX-SCALE] Substrate: {}, Barriers: {}",
+                                main_info.substrate, main_info.barrier_count);
                     }
 
                     // Route to speculation coordinator
+                    let spec_config = SpeculationConfig::default()
+                        .with_agent_count(main_info.agent_count)
+                        .with_max(1024);  // Default max from Grok feedback
+
                     let spec_config = SpeculationConfig {
-                        agent_count: max_agent_count,
                         debug: self.config.debug,
                         strict_verification: true,
+                        ..spec_config
                     };
 
-                    let mut coordinator = SpeculationCoordinator::new(spec_config);
-                    return coordinator.execute_speculative(krate);
+                        let mut coordinator = SpeculationCoordinator::new(spec_config);
+                        return coordinator.execute_speculative(krate);
+                    }
                 }
             }
         }
 
-        // No speculation needed, run normally
+        // No speculation needed, run normally (serial execution)
         // Create execution context
         let mut ctx = ExecutionContext::new(&self.config);
 

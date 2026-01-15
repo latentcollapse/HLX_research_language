@@ -88,17 +88,41 @@ pub fn lower_to_crate(program: &Program) -> Result<HlxCrate> {
     let mut inference = SubstrateInference::new();
     let substrate_results = inference.infer_program(program);
 
-    // Convert substrate info to runtime format
+    // Validate @swarm usage: only main() can have it (MVP restriction)
+    let swarm_functions: Vec<_> = substrate_results.iter()
+        .filter(|(_, info)| info.agent_count.is_some() && info.agent_count.unwrap() > 1)
+        .map(|(name, _)| name.clone())
+        .collect();
+
+    if swarm_functions.len() > 1 {
+        return Err(HlxError::validation(format!(
+            "Multiple @swarm functions not supported in MVP: {}. Only main() can use @swarm.",
+            swarm_functions.join(", ")
+        )));
+    }
+
+    if swarm_functions.len() == 1 && swarm_functions[0] != "main" {
+        return Err(HlxError::validation(format!(
+            "@swarm on '{}' not supported. Only main() can use @swarm in MVP (flat execution model).",
+            swarm_functions[0]
+        )));
+    }
+
+    // Convert substrate info to runtime format (only for main if @swarm present)
     let mut hlx_scale_substrates = HashMap::new();
     for (func_name, info) in substrate_results {
-        // Only add substrate info if it suggests parallel execution
-        if let Some(agent_count) = info.agent_count {
-            hlx_scale_substrates.insert(func_name.clone(), HlxScaleInfo {
-                enable_speculation: agent_count > 1,
-                agent_count: agent_count as usize,
-                substrate: info.substrate.to_str().to_string(),
-                barrier_count: info.barrier_count,
-            });
+        // Only add substrate info if it suggests parallel execution AND it's main()
+        if func_name == "main" {
+            if let Some(agent_count) = info.agent_count {
+                if agent_count > 1 {
+                    hlx_scale_substrates.insert(func_name.clone(), HlxScaleInfo {
+                        enable_speculation: true,
+                        agent_count: agent_count as usize,
+                        substrate: info.substrate.to_str().to_string(),
+                        barrier_count: info.barrier_count,
+                    });
+                }
+            }
         }
     }
 

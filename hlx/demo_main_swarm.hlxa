@@ -1,0 +1,13 @@
+program demo_main_swarm {
+
+@swarm(size=8)
+fn main() -> Int {
+    let step1 = 10 * 5;
+    barrier("phase1");
+    let step2 = step1 + 12;
+    barrier("phase2");
+    let result = step2 - 2;
+    return result;
+}
+
+}

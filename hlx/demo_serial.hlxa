@@ -1,0 +1,10 @@
+program demo_serial {
+
+fn main() -> Int {
+    let step1 = 10 * 5;
+    let step2 = step1 + 12;
+    let result = step2 - 2;
+    return result;
+}
+
+}
