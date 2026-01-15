@@ -34,6 +34,7 @@ mod type_system;
 mod type_inference;
 mod quick_fixes;
 mod semantic_tokens;
+mod module_support;
 
 use contracts::{ContractCache, ContractCatalogue};
 use ai_diagnostics::AIDiagnosticBuilder;
@@ -58,6 +59,8 @@ use rust_diagnostics::RustDiagnostics;
 use builtins::BuiltinRegistry;
 use backend_compat::BackendCompatChecker;
 use semantic_tokens::SemanticTokensProvider;
+use module_support::ModuleSupport;
+use tokio::sync::Mutex;
 
 pub struct Backend {
     client: Client,
@@ -81,6 +84,7 @@ pub struct Backend {
     backend_compat: Arc<BackendCompatChecker>,
     quick_fix_generator: Arc<QuickFixGenerator>,
     semantic_tokens_provider: Arc<SemanticTokensProvider>,
+    module_support: Arc<Mutex<ModuleSupport>>,
 }
 
 #[tower_lsp::async_trait]
@@ -181,8 +185,21 @@ impl LanguageServer for Backend {
 
         let doc_ref = self.document_map.get(uri.as_str());
         if let Some(doc) = doc_ref {
+            // Try symbol index first (local symbols)
             if let Some(location) = self.symbol_index.find_definition(&position, &uri, &doc) {
                 return Ok(Some(GotoDefinitionResponse::Scalar(location)));
+            }
+
+            // Try cross-module definitions (imported symbols)
+            let word = self.get_word_at_position(&doc, position);
+            if let Some(symbol) = word {
+                // Find which module this symbol was imported from
+                if let Some(module_path) = self.find_import_for_symbol(&doc, &symbol) {
+                    let mut module_support = self.module_support.lock().await;
+                    if let Some(location) = module_support.find_import_definition(&symbol, &module_path) {
+                        return Ok(Some(GotoDefinitionResponse::Scalar(location)));
+                    }
+                }
             }
         }
 
@@ -308,6 +325,23 @@ impl LanguageServer for Backend {
         // Check if we're typing a contract (@ID)
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
+
+        // Check for import completions
+        if let Some(doc_ref) = self.document_map.get(uri.as_str()) {
+            let doc = doc_ref.value();
+
+            // Check if we're typing an import path: import "std.|"
+            if let Some(partial_path) = self.extract_partial_import_path(doc, position) {
+                let support = self.module_support.lock().await;
+                items.extend(support.get_import_path_completions(&partial_path));
+            }
+
+            // Check if we're typing import symbols: import "std.math" { p| }
+            if let Some(module_path) = self.extract_import_module_for_symbols(doc, position) {
+                let support = self.module_support.lock().await;
+                items.extend(support.get_import_symbol_completions(&module_path));
+            }
+        }
 
         let is_contract_context = if let Some(doc_ref) = self.document_map.get(uri.as_str()) {
             self.is_typing_contract(&doc_ref, position)
@@ -457,8 +491,8 @@ impl LanguageServer for Backend {
         let position = params.text_document_position_params.position;
 
         let doc_ref = self.document_map.get(uri.as_str());
-        if let Some(doc) = doc_ref {
-            let word = self.get_word_at_position(&doc, position);
+        if let Some(ref doc) = doc_ref {
+            let word = self.get_word_at_position(doc, position);
             if let Some(word) = word {
                 // Check if it's a contract (@ID)
                 if word.starts_with('@') {
@@ -473,6 +507,14 @@ impl LanguageServer for Backend {
                                 range: None,
                             }));
                         }
+                    }
+                }
+
+                // Check for module/import hover
+                if let Some(ref doc_str) = doc_ref {
+                    let mut module_support = self.module_support.lock().await;
+                    if let Some(hover) = module_support.get_import_hover(&word, position, doc_str) {
+                        return Ok(Some(hover));
                     }
                 }
 
@@ -868,6 +910,10 @@ impl Backend {
         let semantic_tokens_provider = Arc::new(SemanticTokensProvider::new());
         eprintln!("✓ Semantic tokens provider ready");
 
+        // Create module support
+        let module_support = Arc::new(Mutex::new(ModuleSupport::new()));
+        eprintln!("✓ Module support ready");
+
         Self {
             client,
             document_map: DashMap::new(),
@@ -890,6 +936,7 @@ impl Backend {
             backend_compat,
             quick_fix_generator,
             semantic_tokens_provider,
+            module_support,
         }
     }
 
@@ -1094,6 +1141,12 @@ impl Backend {
         // This catches Int vs Float errors, wrong argument types, etc.
         let type_diags = self.check_types(&text);
         diagnostics.extend(type_diags);
+
+        // Add import/module diagnostics
+        // Catches missing modules, unused imports, etc.
+        let mut module_support = self.module_support.lock().await;
+        let module_diags = module_support.validate_imports(&text, &uri);
+        diagnostics.extend(module_diags);
 
         self.client.publish_diagnostics(uri, diagnostics, None).await;
     }
@@ -1737,6 +1790,81 @@ impl Backend {
                 // Only return if it looks like a query (has spaces or specific keywords)
                 if query.contains(' ') || query.len() > 5 {
                     return Some(query.to_string());
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Extract partial import path for completions
+    /// Matches: import "std.|"
+    fn extract_partial_import_path(&self, doc: &str, position: Position) -> Option<String> {
+        let line = doc.lines().nth(position.line as usize)?;
+
+        // Check if we're in an import statement
+        if !line.contains("import") {
+            return None;
+        }
+
+        // Find the string being typed
+        if let Some(quote_start) = line.rfind('"') {
+            if quote_start < position.character as usize {
+                // We're inside the string
+                let partial = &line[quote_start + 1..position.character as usize];
+                return Some(partial.to_string());
+            }
+        }
+
+        None
+    }
+
+    /// Extract module path when typing import symbols
+    /// Matches: import "std.math" { p| }
+    fn extract_import_module_for_symbols(&self, doc: &str, position: Position) -> Option<String> {
+        let line = doc.lines().nth(position.line as usize)?;
+
+        // Check if we're in an import statement with braces
+        if !line.contains("import") || !line.contains("{") {
+            return None;
+        }
+
+        // Extract the module path from the string
+        if let Some(first_quote) = line.find('"') {
+            if let Some(second_quote) = line[first_quote + 1..].find('"') {
+                let module_path = &line[first_quote + 1..first_quote + 1 + second_quote];
+
+                // Check if we're after the opening brace
+                if let Some(brace_pos) = line.find('{') {
+                    if position.character as usize > brace_pos {
+                        return Some(module_path.to_string());
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Find which module a symbol was imported from
+    /// Searches through import statements to find the source module
+    fn find_import_for_symbol(&self, doc: &str, symbol: &str) -> Option<String> {
+        // Parse imports from document
+        let parser = HlxaParser::new();
+        if let Ok(program) = parser.parse_diagnostics(doc) {
+            for import in &program.imports {
+                // Check if this import includes our symbol
+                if let Some(items) = &import.items {
+                    for item in items {
+                        if item.name == symbol {
+                            return Some(import.path.clone());
+                        }
+                    }
+                } else {
+                    // Wildcard import - this symbol could be from here
+                    // We'd need to resolve the module to check
+                    // For now, just return this as a candidate
+                    return Some(import.path.clone());
                 }
             }
         }
