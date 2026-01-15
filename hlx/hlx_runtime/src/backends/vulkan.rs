@@ -8,6 +8,7 @@ use gpu_allocator::vulkan::*;
 use gpu_allocator::MemoryLocation;
 use std::sync::{Arc, Mutex};
 use std::ffi::CStr;
+use std::mem::ManuallyDrop;
 use bytemuck;
 
 use crate::backend::{Backend, TensorHandle, DType, TensorMeta};
@@ -22,7 +23,7 @@ pub struct VulkanBackend {
     queue: vk::Queue,
     #[allow(dead_code)]
     queue_family_index: u32,
-    allocator: Arc<Mutex<Allocator>>,
+    allocator: ManuallyDrop<Arc<Mutex<Allocator>>>,
     #[allow(dead_code)]
     tuning: Box<dyn BackendTuning>,
 
@@ -206,7 +207,7 @@ impl VulkanBackend {
                 device,
                 queue,
                 queue_family_index,
-                allocator: Arc::new(Mutex::new(allocator)),
+                allocator: ManuallyDrop::new(Arc::new(Mutex::new(allocator))),
                 tuning,
                 command_pool,
                 transfer_command_buffer,
@@ -1597,12 +1598,13 @@ impl Drop for VulkanBackend {
             let _ = self.device.device_wait_idle();
 
             // Free all GPU buffers and their allocations
-            let mut allocator = self.allocator.lock().unwrap();
-            for (_handle, (buffer, allocation)) in self.buffers.drain() {
-                self.device.destroy_buffer(buffer, None);
-                let _ = allocator.free(allocation);
-            }
-            drop(allocator); // Drop the MutexGuard before destroying device
+            {
+                let mut allocator = self.allocator.lock().unwrap();
+                for (_handle, (buffer, allocation)) in self.buffers.drain() {
+                    self.device.destroy_buffer(buffer, None);
+                    let _ = allocator.free(allocation);
+                }
+            } // Drop MutexGuard here
 
             // Destroy compute pipelines
             for (_name, pipeline) in self.pipelines.drain() {
@@ -1619,13 +1621,17 @@ impl Drop for VulkanBackend {
             // Destroy command pool (this also frees command buffers)
             self.device.destroy_command_pool(self.command_pool, None);
 
-            // Destroy device and instance
-            // Note: Vulkan spec allows destroying device while child resources exist
-            // (they are implicitly destroyed), but explicit cleanup is better practice
-            self.device.destroy_device(None);
-            self.instance.destroy_instance(None);
+            // CRITICAL FIX FOR SEGFAULT:
+            // Drop the allocator Arc BEFORE destroying the device.
+            // gpu-allocator's Allocator internally holds a reference to the Vulkan device.
+            // Rust's automatic field drop order (struct declaration order) would drop
+            // device BEFORE allocator, causing use-after-free segfault on shutdown.
+            // We wrap allocator in ManuallyDrop and explicitly drop it here.
+            ManuallyDrop::drop(&mut self.allocator);
 
-            // Arc<Mutex<Allocator>> will be automatically dropped after this
+            // NOW safe to destroy device and instance
+            self.device.destroy_device(None);
+            self.instance.destroy_instance(None)
         }
     }
 }
