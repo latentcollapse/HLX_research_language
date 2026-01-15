@@ -213,17 +213,29 @@ impl RunicEmitter {
             Statement::Expr(e) => {
                 self.emit_expr(&e.node, out)?;
             }
-            
+
             Statement::Asm { template, .. } => {
                 out.push_str("asm(\"");
                 out.push_str(template);
                 out.push_str("\");");
             }
+
+            Statement::Barrier { name, .. } => {
+                out.push_str("barrier");
+                if let Some(barrier_name) = name {
+                    out.push('(');
+                    out.push('"');
+                    out.push_str(barrier_name);
+                    out.push('"');
+                    out.push(')');
+                }
+                out.push(';');
+            }
         }
-        
+
         Ok(())
     }
-    
+
     fn emit_expr(&self, expr: &Expr, out: &mut String) -> Result<()> {
         match expr {
             Expr::Literal(lit) => self.emit_literal(lit, out),
@@ -580,17 +592,29 @@ impl HlxlEmitter {
                 self.emit_expr(&e.node, out)?;
                 out.push(';');
             }
-            
+
             Statement::Asm { template, .. } => {
                 out.push_str("asm(\"");
                 out.push_str(template);
                 out.push_str("\");");
             }
+
+            Statement::Barrier { name, .. } => {
+                out.push_str("barrier");
+                if let Some(barrier_name) = name {
+                    out.push('(');
+                    out.push('"');
+                    out.push_str(barrier_name);
+                    out.push('"');
+                    out.push(')');
+                }
+                out.push(';');
+            }
         }
-        
+
         Ok(())
     }
-    
+
     fn emit_expr(&self, expr: &Expr, out: &mut String) -> Result<()> {
         match expr {
             Expr::Literal(lit) => self.emit_literal(lit, out),

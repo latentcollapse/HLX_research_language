@@ -284,6 +284,15 @@ pub enum Statement {
         inputs: Vec<(String, Spanned<Expr>)>,  // (constraint, expression)
         clobbers: Vec<String>,
     },
+    /// Barrier synchronization for HLX-Scale parallel execution
+    /// Syntax: barrier or barrier("name")
+    Barrier {
+        /// Optional barrier name for named synchronization points
+        name: Option<String>,
+        /// Span of "barrier" keyword
+        #[serde(skip_serializing_if = "Option::is_none")]
+        keyword_span: Option<Span>,
+    },
 }
 
 /// Expressions

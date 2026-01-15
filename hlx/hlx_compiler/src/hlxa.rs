@@ -484,6 +484,27 @@ fn statement<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Statement
             }
         ),
 
+        // barrier; or barrier("name");
+        context("barrier statement",
+            |i| {
+                let (i, barrier_kw_span) = keyword_with_span(original, "barrier", i)?;
+                // Parse optional barrier name
+                let (i, name) = opt(preceded(
+                    preceded(ws, char('(')),
+                    |i2| {
+                        let (i2, s) = preceded(ws, parse_string_literal)(i2)?;
+                        let (i2, _) = cut(context("')' after barrier name", preceded(ws, char(')'))))(i2)?;
+                        Ok((i2, s))
+                    }
+                ))(i)?;
+                let (i, _) = cut(context("';' after barrier", preceded(ws, char(';'))))(i)?;
+                Ok((i, Statement::Barrier {
+                    name,
+                    keyword_span: Some(barrier_kw_span),
+                }))
+            }
+        ),
+
         // assignment: lhs = value;
         context("assignment",
             |i| {
@@ -555,15 +576,29 @@ fn statement<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Statement
     ))(input)
 }
 
-/// Parse attributes like #[no_mangle], #[entry], etc.
+/// Parse attributes like #[no_mangle], #[entry], @substrate(cpu), @swarm(size=1000)
 fn parse_attributes(input: &str) -> ParseResult<'_, Vec<String>> {
-    many0(|i| {
-        let (i, _) = preceded(ws, char('#'))(i)?;
-        let (i, _) = preceded(ws, char('['))(i)?;
-        let (i, attr_name) = preceded(ws, ident)(i)?;
-        let (i, _) = preceded(ws, char(']'))(i)?;
-        Ok((i, attr_name))
-    })(input)
+    many0(alt((
+        // HLX-Scale pragmas: @substrate(...) or @swarm(...)
+        |i| {
+            let (i, _) = preceded(ws, char('@'))(i)?;
+            let (i, pragma_name) = preceded(ws, ident)(i)?;
+            let (i, _) = preceded(ws, char('('))(i)?;
+            // Parse the content inside parentheses (everything until ')')
+            let (i, content) = take_while(|c| c != ')')(i)?;
+            let (i, _) = char(')')(i)?;
+            // Return as "name(content)" format
+            Ok((i, format!("{}({})", pragma_name, content)))
+        },
+        // Traditional attributes: #[name]
+        |i| {
+            let (i, _) = preceded(ws, char('#'))(i)?;
+            let (i, _) = preceded(ws, char('['))(i)?;
+            let (i, attr_name) = preceded(ws, ident)(i)?;
+            let (i, _) = preceded(ws, char(']'))(i)?;
+            Ok((i, attr_name))
+        }
+    )))(input)
 }
 
 fn block<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Block> {

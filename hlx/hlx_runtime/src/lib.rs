@@ -41,6 +41,7 @@ pub mod backend;
 pub mod executor;
 pub mod value_store;
 pub mod tuning;
+pub mod speculation;
 
 #[cfg(feature = "cpu")]
 pub mod backends;
@@ -49,6 +50,7 @@ pub use config::RuntimeConfig;
 pub use backend::Backend;
 pub use executor::Executor;
 pub use value_store::ValueStore;
+pub use speculation::{SpeculationCoordinator, SpeculationConfig, AgentState};
 
 use hlx_core::{HlxCrate, Value, Result};
 

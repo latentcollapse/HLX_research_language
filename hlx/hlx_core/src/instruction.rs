@@ -411,6 +411,14 @@ pub enum Instruction {
     /// Continue to next iteration of current loop
     Continue,
 
+    /// Barrier synchronization for HLX-Scale parallel execution
+    /// All agents must reach this point before any can continue
+    /// Runtime performs hash verification of agent states at this point
+    Barrier {
+        /// Optional barrier name for debugging and profiling
+        name: Option<String>,
+    },
+
     // === Memory Operations ===
     
     /// Get length of array or string
@@ -567,6 +575,7 @@ impl Instruction {
             Instruction::Return { .. } => None,
             Instruction::Break => None,
             Instruction::Continue => None,
+            Instruction::Barrier { .. } => None,
             Instruction::Store { .. } => None,
             Instruction::Print { .. } => None,
             Instruction::PrintStr { .. } => None,
@@ -627,6 +636,7 @@ impl Instruction {
             Instruction::Return { val } => vec![*val],
             Instruction::Break => vec![],
             Instruction::Continue => vec![],
+            Instruction::Barrier { .. } => vec![],
             Instruction::ArrayLen { array, .. } => vec![*array],
             Instruction::Index { container, index, .. } => vec![*container, *index],
             Instruction::ArrayCreate { elements, .. } => elements.clone(),
@@ -664,6 +674,7 @@ impl Instruction {
             Instruction::Return { .. } |
             Instruction::Break |
             Instruction::Continue |
+            Instruction::Barrier { .. } |
             Instruction::If { .. } |
             Instruction::Loop { .. } |
             Instruction::Jump { .. }
