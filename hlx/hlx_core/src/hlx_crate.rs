@@ -60,6 +60,11 @@ pub struct CrateMetadata {
     /// Used by runtime to route @scale functions to speculation coordinator
     #[serde(default)]
     pub hlx_scale_substrates: HashMap<String, HlxScaleInfo>,
+
+    /// FFI export information: function name -> export config
+    /// Used by LLVM backend to generate C-compatible symbols and headers
+    #[serde(default)]
+    pub ffi_exports: HashMap<String, FfiExportInfo>,
 }
 
 /// Debug symbol mapping instruction to source
@@ -84,6 +89,19 @@ pub struct HlxScaleInfo {
     pub substrate: String,
     /// Number of barriers in function body
     pub barrier_count: usize,
+}
+
+/// FFI export configuration for a function
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FfiExportInfo {
+    /// Disable name mangling (#[no_mangle])
+    pub no_mangle: bool,
+    /// Export symbol for C linkage (#[export])
+    pub export: bool,
+    /// Function parameter types (for header generation)
+    pub param_types: Vec<DType>,
+    /// Function return type (for header generation)
+    pub return_type: DType,
 }
 
 impl HlxCrate {

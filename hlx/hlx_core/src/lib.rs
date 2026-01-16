@@ -22,6 +22,7 @@ pub mod error;
 pub mod builtins;
 pub mod capabilities;
 pub mod handle;
+pub mod ffi;
 
 pub use value::{Value, Contract, FieldIndex};
 pub use instruction::{Instruction, TensorShape, Register};

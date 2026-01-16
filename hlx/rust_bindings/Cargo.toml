@@ -1,0 +1,18 @@
+[package]
+name = "test_ffi_lib"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+# This makes the package standalone, not part of the parent workspace
+
+[lib]
+name = "test_ffi_lib"
+path = "src/lib.rs"
+
+[build-dependencies]
+# If you want to use build.rs for custom linking
+
+# To link the HLX shared library, add the library directory to your path:
+# export LIBRARY_PATH=/path/to/hlx/lib:$LIBRARY_PATH
+# or use: cargo rustc -- -L /path/to/hlx_test_ffi

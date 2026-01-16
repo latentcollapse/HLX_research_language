@@ -244,6 +244,8 @@ pub struct CodeGen<'ctx> {
     array_element_types: HashMap<Register, hlx_core::instruction::DType>,
     /// Global function signatures from crate metadata
     function_signatures: HashMap<String, Vec<hlx_core::instruction::DType>>,
+    /// FFI export information from crate metadata
+    ffi_exports: HashMap<String, hlx_core::hlx_crate::FfiExportInfo>,
     /// Debug info builder
     debug_builder: Option<DebugInfoBuilder<'ctx>>,
     /// Debug compile unit
@@ -459,6 +461,7 @@ impl<'ctx> CodeGen<'ctx> {
             block_map: HashMap::new(),
             array_element_types: HashMap::new(),
             function_signatures: HashMap::new(),
+            ffi_exports: HashMap::new(),
             debug_builder: Some(debug_builder),
             debug_compile_unit: Some(debug_compile_unit),
             debug_file: Some(debug_file),
@@ -649,10 +652,15 @@ impl<'ctx> CodeGen<'ctx> {
     }
     
     pub fn compile_crate(&mut self, krate: &HlxCrate) -> Result<()> {
-        // 1. Build global signature map and debug symbols from metadata
+        // 1. Build global signature map, FFI exports, and debug symbols from metadata
         if let Some(meta) = &krate.metadata {
             for (name, sig) in &meta.function_signatures {
                 self.function_signatures.insert(name.clone(), sig.clone());
+            }
+
+            // Extract FFI export information
+            for (name, info) in &meta.ffi_exports {
+                self.ffi_exports.insert(name.clone(), info.clone());
             }
 
             // Extract debug symbols (instruction_idx → (line, col))
@@ -700,7 +708,15 @@ impl<'ctx> CodeGen<'ctx> {
                 }
 
                 let fn_type = i64_type.fn_type(&param_types, false);
-                let func = self.module.add_function(name, fn_type, None);
+
+                // Check if this function should be exported with C linkage
+                let linkage = if self.ffi_exports.contains_key(name) {
+                    Some(Linkage::External)
+                } else {
+                    None
+                };
+
+                let func = self.module.add_function(name, fn_type, linkage);
                 self.functions.insert(name.clone(), func);
             }
         }
@@ -2232,5 +2248,50 @@ impl<'ctx> CodeGen<'ctx> {
             "ceil".to_string(),
             "round".to_string(),
         ]
+    }
+
+    /// Emit shared library (.so on Linux, .dylib on macOS, .dll on Windows)
+    pub fn emit_shared(&self, output_path: &std::path::Path) -> Result<()> {
+        use std::process::Command;
+
+        // First, emit an object file to a temporary location
+        let obj_path = output_path.with_extension("o");
+        self.emit_object(&obj_path)?;
+
+        // Determine the linker command based on OS
+        let os = std::env::consts::OS;
+        let (linker, args, extension) = match os {
+            "linux" => ("gcc", vec!["-shared", "-fPIC"], "so"),
+            "macos" => ("clang", vec!["-dynamiclib", "-fPIC"], "dylib"),
+            "windows" => ("link.exe", vec!["/DLL"], "dll"),
+            _ => return Err(anyhow!("Unsupported platform for shared library: {}", os)),
+        };
+
+        // Build final output path with correct extension
+        let final_output = if output_path.extension().is_some() {
+            output_path.to_path_buf()
+        } else {
+            output_path.with_extension(extension)
+        };
+
+        // Invoke the linker
+        let mut cmd = Command::new(linker);
+        cmd.args(&args);
+        cmd.arg(&obj_path);
+        cmd.arg("-o");
+        cmd.arg(&final_output);
+
+        let output = cmd.output()
+            .map_err(|e| anyhow!("Failed to invoke linker '{}': {}", linker, e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!("Linker failed:\n{}", stderr));
+        }
+
+        // Clean up temporary object file
+        let _ = std::fs::remove_file(&obj_path);
+
+        Ok(())
     }
 }

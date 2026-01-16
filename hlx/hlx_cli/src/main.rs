@@ -167,7 +167,7 @@ enum Commands {
         /// Input source file
         input: PathBuf,
 
-        /// Output file (.o object file or .s assembly)
+        /// Output file (.o object file, .s assembly, or .so/.dll shared library)
         #[arg(short, long)]
         output: Option<PathBuf>,
 
@@ -178,6 +178,10 @@ enum Commands {
         /// Emit assembly instead of object file
         #[arg(long)]
         asm: bool,
+
+        /// Emit shared library (.so/.dll/.dylib)
+        #[arg(long)]
+        shared: bool,
 
         /// Print LLVM IR to stderr
         #[arg(long)]
@@ -193,6 +197,48 @@ enum Commands {
         /// Output format (json or toml)
         #[arg(long, default_value = "json")]
         format: String,
+    },
+
+    /// Generate C header file from FFI exports
+    GenerateHeader {
+        /// Input crate file
+        input: PathBuf,
+
+        /// Output header file (stdout if not specified)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+
+    /// Generate Python wrapper from FFI exports
+    GeneratePython {
+        /// Input crate file
+        input: PathBuf,
+
+        /// Output Python file (stdout if not specified)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Library name (defaults to crate name without extension)
+        #[arg(long)]
+        lib_name: Option<String>,
+    },
+
+    /// Generate Rust wrapper from FFI exports
+    GenerateRust {
+        /// Input crate file
+        input: PathBuf,
+
+        /// Output Rust file (stdout if not specified)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Library name (defaults to crate name without extension)
+        #[arg(long)]
+        lib_name: Option<String>,
+
+        /// Also generate Cargo.toml
+        #[arg(long)]
+        cargo_toml: bool,
     },
 }
 
@@ -238,11 +284,23 @@ fn main() -> Result<()> {
         Commands::Bench { input, hlx_s, iterations, json, flamegraph, frequency } => {
             bench(&input, hlx_s, iterations, json, flamegraph, frequency)?;
         }
-        Commands::CompileNative { input, output, target, asm, print_ir } => {
-            compile_native(&input, output, target.as_deref(), asm, print_ir)?;
+        Commands::CompileNative { input, output, target, asm, shared, print_ir } => {
+            compile_native(&input, output, target.as_deref(), asm, shared, print_ir)?;
         }
         Commands::Capabilities { output, format } => {
             emit_capabilities(output, &format)?;
+        }
+
+        Commands::GenerateHeader { input, output } => {
+            generate_header(&input, output.as_ref())?;
+        }
+
+        Commands::GeneratePython { input, output, lib_name } => {
+            generate_python(&input, output.as_ref(), lib_name.as_deref())?;
+        }
+
+        Commands::GenerateRust { input, output, lib_name, cargo_toml } => {
+            generate_rust(&input, output.as_ref(), lib_name.as_deref(), cargo_toml)?;
         }
     }
 
@@ -408,6 +466,19 @@ fn inspect(input: &PathBuf, json: bool) -> Result<()> {
             }
             if !meta.debug_symbols.is_empty() {
                 println!("  Debug symbols: {} entries", meta.debug_symbols.len());
+            }
+            if !meta.ffi_exports.is_empty() {
+                println!("  FFI Exports:");
+                for (name, info) in &meta.ffi_exports {
+                    let attrs = if info.no_mangle && info.export {
+                        "#[no_mangle] #[export]"
+                    } else if info.no_mangle {
+                        "#[no_mangle]"
+                    } else {
+                        "#[export]"
+                    };
+                    println!("    {} {} -> {:?}", attrs, name, info.return_type);
+                }
             }
         }
 
@@ -988,6 +1059,7 @@ fn compile_native(
     output: Option<PathBuf>,
     target: Option<&str>,
     emit_asm: bool,
+    emit_shared: bool,
     print_ir: bool,
 ) -> Result<()> {
     use hlx_backend_llvm::CodeGen;
@@ -1031,6 +1103,15 @@ fn compile_native(
         let mut p = input.clone();
         if emit_asm {
             p.set_extension("s");
+        } else if emit_shared {
+            // Use platform-specific extension
+            let ext = match std::env::consts::OS {
+                "linux" => "so",
+                "macos" => "dylib",
+                "windows" => "dll",
+                _ => "so", // Default to .so
+            };
+            p.set_extension(ext);
         } else {
             p.set_extension("o");
         }
@@ -1042,6 +1123,10 @@ fn compile_native(
         codegen.emit_assembly(&output_path)
             .context("Failed to emit assembly")?;
         println!("Assembly written to: {}", output_path.display());
+    } else if emit_shared {
+        codegen.emit_shared(&output_path)
+            .context("Failed to emit shared library")?;
+        println!("Shared library written to: {}", output_path.display());
     } else {
         codegen.emit_object(&output_path)
             .context("Failed to emit object file")?;
@@ -1253,6 +1338,116 @@ fn emit_capabilities(output: Option<PathBuf>, format: &str) -> Result<()> {
         eprintln!("Capabilities written to: {}", path.display());
     } else {
         println!("{}", output_str);
+    }
+
+    Ok(())
+}
+
+fn generate_header(input: &PathBuf, output: Option<&PathBuf>) -> Result<()> {
+    use hlx_core::ffi;
+
+    // Read and deserialize crate
+    let bytes = fs::read(input)
+        .with_context(|| format!("Failed to read crate: {}", input.display()))?;
+    let krate: HlxCrate = bincode::deserialize(&bytes)
+        .context("Failed to deserialize crate")?;
+
+    // Extract module name from input filename
+    let module_name = input
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("hlx_module");
+
+    // Generate header
+    let header = ffi::generate_header(&krate, module_name)
+        .context("No FFI exports found - use #[export] or #[no_mangle] attributes")?;
+
+    // Write to output or stdout
+    if let Some(path) = output {
+        fs::write(path, &header)
+            .with_context(|| format!("Failed to write header to {}", path.display()))?;
+        eprintln!("Header generated: {}", path.display());
+    } else {
+        print!("{}", header);
+    }
+
+    Ok(())
+}
+
+fn generate_python(input: &PathBuf, output: Option<&PathBuf>, lib_name: Option<&str>) -> Result<()> {
+    use hlx_core::ffi;
+
+    // Read and deserialize crate
+    let bytes = fs::read(input)
+        .with_context(|| format!("Failed to read crate: {}", input.display()))?;
+    let krate: HlxCrate = bincode::deserialize(&bytes)
+        .context("Failed to deserialize crate")?;
+
+    // Extract module name from input filename
+    let module_name = input
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("hlx_module");
+
+    // Determine library name (for loading .so/.dll/.dylib)
+    let lib = lib_name.unwrap_or(module_name);
+
+    // Generate Python wrapper
+    let wrapper = ffi::generate_python_wrapper(&krate, module_name, lib)
+        .context("No FFI exports found - use #[export] or #[no_mangle] attributes")?;
+
+    // Write to output or stdout
+    if let Some(path) = output {
+        fs::write(path, &wrapper)
+            .with_context(|| format!("Failed to write Python wrapper to {}", path.display()))?;
+        eprintln!("Python wrapper generated: {}", path.display());
+    } else {
+        print!("{}", wrapper);
+    }
+
+    Ok(())
+}
+
+fn generate_rust(input: &PathBuf, output: Option<&PathBuf>, lib_name: Option<&str>, gen_cargo_toml: bool) -> Result<()> {
+    use hlx_core::ffi;
+
+    // Read and deserialize crate
+    let bytes = fs::read(input)
+        .with_context(|| format!("Failed to read crate: {}", input.display()))?;
+    let krate: HlxCrate = bincode::deserialize(&bytes)
+        .context("Failed to deserialize crate")?;
+
+    // Extract module name from input filename
+    let module_name = input
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("hlx_module");
+
+    // Determine library name (for linking .so/.dll/.dylib)
+    let lib = lib_name.unwrap_or(module_name);
+
+    // Generate Rust wrapper
+    let wrapper = ffi::generate_rust_wrapper(&krate, module_name, lib)
+        .context("No FFI exports found - use #[export] or #[no_mangle] attributes")?;
+
+    // Write to output or stdout
+    if let Some(path) = output {
+        fs::write(path, &wrapper)
+            .with_context(|| format!("Failed to write Rust wrapper to {}", path.display()))?;
+        eprintln!("Rust wrapper generated: {}", path.display());
+
+        // Generate Cargo.toml if requested
+        if gen_cargo_toml {
+            let cargo_toml = ffi::generate_cargo_toml(module_name, lib);
+            let toml_path = path.parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join("Cargo.toml");
+            fs::write(&toml_path, cargo_toml)
+                .with_context(|| format!("Failed to write Cargo.toml to {}", toml_path.display()))?;
+            eprintln!("Cargo.toml generated: {}", toml_path.display());
+        }
+    } else {
+        print!("{}", wrapper);
     }
 
     Ok(())

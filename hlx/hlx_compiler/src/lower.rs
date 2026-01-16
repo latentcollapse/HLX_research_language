@@ -14,8 +14,9 @@ use std::collections::HashMap;
 pub fn lower_to_crate(program: &Program) -> Result<HlxCrate> {
     let mut ctx = LoweringContext::new();
     let mut signatures = HashMap::new();
-    
-    // First pass: collect signatures for blocks
+    let mut ffi_exports = HashMap::new();
+
+    // First pass: collect signatures and FFI attributes for blocks
     for block in &program.blocks {
         let mut param_dtypes = Vec::new();
         for (_, _span, typ_opt) in &block.params {
@@ -25,7 +26,56 @@ pub fn lower_to_crate(program: &Program) -> Result<HlxCrate> {
                 param_dtypes.push(hlx_core::instruction::DType::I64);
             }
         }
-        signatures.insert(block.name.clone(), param_dtypes);
+        signatures.insert(block.name.clone(), param_dtypes.clone());
+
+        // Extract FFI attributes
+        let has_no_mangle = block.attributes.iter().any(|attr| attr == "no_mangle");
+        let has_export = block.attributes.iter().any(|attr| attr == "export");
+
+        if has_no_mangle || has_export {
+            let return_dtype = block.return_type.as_ref()
+                .and_then(|t| LoweringContext::type_to_dtype(t))
+                .unwrap_or(hlx_core::instruction::DType::I64);
+
+            ffi_exports.insert(block.name.clone(), hlx_core::hlx_crate::FfiExportInfo {
+                no_mangle: has_no_mangle,
+                export: has_export,
+                param_types: param_dtypes.clone(),
+                return_type: return_dtype,
+            });
+        }
+    }
+
+    // Also collect signatures and FFI attributes for module blocks
+    for module in &program.modules {
+        for block in &module.blocks {
+            let mut param_dtypes = Vec::new();
+            for (_, _span, typ_opt) in &block.params {
+                if let Some((t, _t_span)) = typ_opt {
+                    param_dtypes.push(LoweringContext::type_to_dtype(t).unwrap_or(hlx_core::instruction::DType::I64));
+                } else {
+                    param_dtypes.push(hlx_core::instruction::DType::I64);
+                }
+            }
+            signatures.insert(block.name.clone(), param_dtypes.clone());
+
+            // Extract FFI attributes for module blocks
+            let has_no_mangle = block.attributes.iter().any(|attr| attr == "no_mangle");
+            let has_export = block.attributes.iter().any(|attr| attr == "export");
+
+            if has_no_mangle || has_export {
+                let return_dtype = block.return_type.as_ref()
+                    .and_then(|t| LoweringContext::type_to_dtype(t))
+                    .unwrap_or(hlx_core::instruction::DType::I64);
+
+                ffi_exports.insert(block.name.clone(), hlx_core::hlx_crate::FfiExportInfo {
+                    no_mangle: has_no_mangle,
+                    export: has_export,
+                    param_types: param_dtypes.clone(),
+                    return_type: return_dtype,
+                });
+            }
+        }
     }
 
     // Second pass: lower modules and their contents
@@ -134,6 +184,7 @@ pub fn lower_to_crate(program: &Program) -> Result<HlxCrate> {
         function_signatures: signatures,
         debug_symbols,
         hlx_scale_substrates,
+        ffi_exports,
         ..Default::default()
     };
 
