@@ -1700,71 +1700,189 @@ impl Backend for VulkanBackend {
 
     fn grayscale(
         &mut self,
-        _input: TensorHandle,
-        _out: TensorHandle,
+        input: TensorHandle,
+        out: TensorHandle,
     ) -> Result<()> {
-        // TODO: Implement grayscale compute shader
-        Err(HlxError::BackendError {
-            message: "grayscale not yet implemented for Vulkan backend".to_string(),
-        })
+        let meta = self.metadata.get(&input.0).ok_or(HlxError::BackendError {
+            message: "Input tensor not found".to_string()
+        })?;
+
+        // Expect shape [height, width, channels]
+        if meta.shape.len() != 3 {
+            return Err(HlxError::BackendError {
+                message: format!("Expected [H,W,C] tensor, got {:?}", meta.shape),
+            });
+        }
+
+        let height = meta.shape[0] as u32;
+        let width = meta.shape[1] as u32;
+        let channels = meta.shape[2] as u32;
+
+        unsafe {
+            // Get pipeline
+            let pipeline = self.get_or_create_pipeline("grayscale", SHADER_GRAYSCALE)?;
+
+            // Descriptor pool for 2 buffers (input, output)
+            let pool_sizes = [vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 2,
+            }];
+            let pool_info = vk::DescriptorPoolCreateInfo::builder()
+                .pool_sizes(&pool_sizes)
+                .max_sets(1);
+            let descriptor_pool = self.device.create_descriptor_pool(&pool_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Pool creation failed: {}", e) })?;
+
+            // Allocate descriptor set
+            let alloc_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(descriptor_pool)
+                .set_layouts(std::slice::from_ref(&self.descriptor_set_layout));
+            let descriptor_set = self.device.allocate_descriptor_sets(&alloc_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Descriptor set allocation failed: {}", e) })?[0];
+
+            // Get buffers
+            let buf_in = self.buffers.get(&input.0).unwrap().0;
+            let buf_out = self.buffers.get(&out.0).unwrap().0;
+
+            let info_in = vk::DescriptorBufferInfo { buffer: buf_in, offset: 0, range: vk::WHOLE_SIZE };
+            let info_out = vk::DescriptorBufferInfo { buffer: buf_out, offset: 0, range: vk::WHOLE_SIZE };
+
+            // Update descriptor sets
+            let writes = [
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set)
+                    .dst_binding(0)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(std::slice::from_ref(&info_in))
+                    .build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set)
+                    .dst_binding(1)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(std::slice::from_ref(&info_out))
+                    .build(),
+            ];
+
+            self.device.update_descriptor_sets(&writes, &[]);
+
+            // Push constants: width, height, channels
+            #[repr(C)]
+            #[derive(Copy, Clone)]
+            struct GrayscalePushConstants {
+                width: u32,
+                height: u32,
+                channels: u32,
+            }
+            unsafe impl bytemuck::Pod for GrayscalePushConstants {}
+            unsafe impl bytemuck::Zeroable for GrayscalePushConstants {}
+
+            let push_constants = GrayscalePushConstants { width, height, channels };
+            let push_bytes = bytemuck::bytes_of(&push_constants);
+
+            // Record commands
+            let begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            self.device.begin_command_buffer(self.transfer_command_buffer, &begin_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Command buffer begin failed: {}", e) })?;
+
+            self.device.cmd_bind_pipeline(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, pipeline);
+            self.device.cmd_bind_descriptor_sets(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, 0, &[descriptor_set], &[]);
+            self.device.cmd_push_constants(self.transfer_command_buffer, self.pipeline_layout, vk::ShaderStageFlags::COMPUTE, 0, push_bytes);
+
+            // Dispatch: 16x16 workgroups (matching shader local_size)
+            let group_x = (width + 15) / 16;
+            let group_y = (height + 15) / 16;
+            self.device.cmd_dispatch(self.transfer_command_buffer, group_x, group_y, 1);
+
+            self.device.end_command_buffer(self.transfer_command_buffer)
+                .map_err(|e| HlxError::BackendError { message: format!("Command buffer end failed: {}", e) })?;
+
+            // Submit and wait
+            let submit_info = vk::SubmitInfo::builder()
+                .command_buffers(std::slice::from_ref(&self.transfer_command_buffer));
+            self.device.queue_submit(self.queue, &[submit_info.build()], self.transfer_fence)
+                .map_err(|e| HlxError::BackendError { message: format!("Queue submit failed: {}", e) })?;
+
+            self.device.wait_for_fences(&[self.transfer_fence], true, u64::MAX)
+                .map_err(|e| HlxError::BackendError { message: format!("Fence wait failed: {}", e) })?;
+            self.device.reset_fences(&[self.transfer_fence])
+                .map_err(|e| HlxError::BackendError { message: format!("Fence reset failed: {}", e) })?;
+
+            // Cleanup
+            self.device.destroy_descriptor_pool(descriptor_pool, None);
+        }
+
+        Ok(())
     }
 
     fn threshold(
         &mut self,
-        _input: TensorHandle,
-        _out: TensorHandle,
-        _value: &Value,
+        input: TensorHandle,
+        out: TensorHandle,
+        value: &Value,
     ) -> Result<()> {
-        // TODO: Implement threshold compute shader
-        Err(HlxError::BackendError {
-            message: "threshold not yet implemented for Vulkan backend".to_string(),
-        })
+        let threshold_value = match value {
+            Value::Float(f) => *f as f32,
+            Value::Integer(i) => *i as f32,
+            _ => return Err(HlxError::TypeError {
+                expected: "number".to_string(),
+                got: value.type_name().to_string(),
+            }),
+        };
+
+        self.dispatch_image_shader_with_param(input, out, "threshold", SHADER_THRESHOLD, threshold_value)
     }
 
     fn brightness(
         &mut self,
-        _input: TensorHandle,
-        _out: TensorHandle,
-        _factor: &Value,
+        input: TensorHandle,
+        out: TensorHandle,
+        factor: &Value,
     ) -> Result<()> {
-        // TODO: Implement brightness compute shader
-        Err(HlxError::BackendError {
-            message: "brightness not yet implemented for Vulkan backend".to_string(),
-        })
+        let brightness_factor = match factor {
+            Value::Float(f) => *f as f32,
+            Value::Integer(i) => *i as f32,
+            _ => return Err(HlxError::TypeError {
+                expected: "number".to_string(),
+                got: factor.type_name().to_string(),
+            }),
+        };
+
+        self.dispatch_image_shader_with_param(input, out, "brightness", SHADER_BRIGHTNESS, brightness_factor)
     }
 
     fn contrast(
         &mut self,
-        _input: TensorHandle,
-        _out: TensorHandle,
-        _factor: &Value,
+        input: TensorHandle,
+        out: TensorHandle,
+        factor: &Value,
     ) -> Result<()> {
-        // TODO: Implement contrast compute shader
-        Err(HlxError::BackendError {
-            message: "contrast not yet implemented for Vulkan backend".to_string(),
-        })
+        let contrast_factor = match factor {
+            Value::Float(f) => *f as f32,
+            Value::Integer(i) => *i as f32,
+            _ => return Err(HlxError::TypeError {
+                expected: "number".to_string(),
+                got: factor.type_name().to_string(),
+            }),
+        };
+
+        self.dispatch_image_shader_with_param(input, out, "contrast", SHADER_CONTRAST, contrast_factor)
     }
 
     fn invert_colors(
         &mut self,
-        _input: TensorHandle,
-        _out: TensorHandle,
+        input: TensorHandle,
+        out: TensorHandle,
     ) -> Result<()> {
-        // TODO: Implement invert_colors compute shader
-        Err(HlxError::BackendError {
-            message: "invert_colors not yet implemented for Vulkan backend".to_string(),
-        })
+        self.dispatch_image_shader_simple(input, out, "invert_colors", SHADER_INVERT_COLORS)
     }
 
     fn sharpen(
         &mut self,
-        _input: TensorHandle,
-        _out: TensorHandle,
+        input: TensorHandle,
+        out: TensorHandle,
     ) -> Result<()> {
-        // TODO: Implement sharpen compute shader
-        Err(HlxError::BackendError {
-            message: "sharpen not yet implemented for Vulkan backend".to_string(),
-        })
+        self.dispatch_image_shader_simple(input, out, "sharpen", SHADER_SHARPEN)
     }
 
     fn sync(&mut self) -> Result<()> {
@@ -1775,7 +1893,229 @@ impl Backend for VulkanBackend {
     }
 }
 
-// VulkanBackend-specific helper methods
+// VulkanBackend-specific helper methods for image processing
+impl VulkanBackend {
+    /// Dispatch image shader with simple push constants (width, height, channels only)
+    fn dispatch_image_shader_simple(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+        name: &str,
+        shader_bytes: &[u8],
+    ) -> Result<()> {
+        let meta = self.metadata.get(&input.0).ok_or(HlxError::BackendError {
+            message: "Input tensor not found".to_string()
+        })?;
+
+        if meta.shape.len() != 3 {
+            return Err(HlxError::BackendError {
+                message: format!("Expected [H,W,C] tensor, got {:?}", meta.shape),
+            });
+        }
+
+        let height = meta.shape[0] as u32;
+        let width = meta.shape[1] as u32;
+        let channels = meta.shape[2] as u32;
+
+        unsafe {
+            let pipeline = self.get_or_create_pipeline(name, shader_bytes)?;
+
+            let pool_sizes = [vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 2,
+            }];
+            let pool_info = vk::DescriptorPoolCreateInfo::builder()
+                .pool_sizes(&pool_sizes)
+                .max_sets(1);
+            let descriptor_pool = self.device.create_descriptor_pool(&pool_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Pool creation failed: {}", e) })?;
+
+            let alloc_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(descriptor_pool)
+                .set_layouts(std::slice::from_ref(&self.descriptor_set_layout));
+            let descriptor_set = self.device.allocate_descriptor_sets(&alloc_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Descriptor set allocation failed: {}", e) })?[0];
+
+            let buf_in = self.buffers.get(&input.0).unwrap().0;
+            let buf_out = self.buffers.get(&out.0).unwrap().0;
+
+            let info_in = vk::DescriptorBufferInfo { buffer: buf_in, offset: 0, range: vk::WHOLE_SIZE };
+            let info_out = vk::DescriptorBufferInfo { buffer: buf_out, offset: 0, range: vk::WHOLE_SIZE };
+
+            let writes = [
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set)
+                    .dst_binding(0)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(std::slice::from_ref(&info_in))
+                    .build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set)
+                    .dst_binding(1)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(std::slice::from_ref(&info_out))
+                    .build(),
+            ];
+
+            self.device.update_descriptor_sets(&writes, &[]);
+
+            #[repr(C)]
+            #[derive(Copy, Clone)]
+            struct SimplePushConstants {
+                width: u32,
+                height: u32,
+                channels: u32,
+            }
+            unsafe impl bytemuck::Pod for SimplePushConstants {}
+            unsafe impl bytemuck::Zeroable for SimplePushConstants {}
+
+            let push_constants = SimplePushConstants { width, height, channels };
+            let push_bytes = bytemuck::bytes_of(&push_constants);
+
+            let begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            self.device.begin_command_buffer(self.transfer_command_buffer, &begin_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Command buffer begin failed: {}", e) })?;
+
+            self.device.cmd_bind_pipeline(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, pipeline);
+            self.device.cmd_bind_descriptor_sets(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, 0, &[descriptor_set], &[]);
+            self.device.cmd_push_constants(self.transfer_command_buffer, self.pipeline_layout, vk::ShaderStageFlags::COMPUTE, 0, push_bytes);
+
+            let group_x = (width + 15) / 16;
+            let group_y = (height + 15) / 16;
+            self.device.cmd_dispatch(self.transfer_command_buffer, group_x, group_y, 1);
+
+            self.device.end_command_buffer(self.transfer_command_buffer)
+                .map_err(|e| HlxError::BackendError { message: format!("Command buffer end failed: {}", e) })?;
+
+            let submit_info = vk::SubmitInfo::builder()
+                .command_buffers(std::slice::from_ref(&self.transfer_command_buffer));
+            self.device.queue_submit(self.queue, &[submit_info.build()], self.transfer_fence)
+                .map_err(|e| HlxError::BackendError { message: format!("Queue submit failed: {}", e) })?;
+
+            self.device.wait_for_fences(&[self.transfer_fence], true, u64::MAX)
+                .map_err(|e| HlxError::BackendError { message: format!("Fence wait failed: {}", e) })?;
+            self.device.reset_fences(&[self.transfer_fence])
+                .map_err(|e| HlxError::BackendError { message: format!("Fence reset failed: {}", e) })?;
+
+            self.device.destroy_descriptor_pool(descriptor_pool, None);
+        }
+
+        Ok(())
+    }
+
+    /// Dispatch image shader with parameter (width, height, channels, param)
+    fn dispatch_image_shader_with_param(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+        name: &str,
+        shader_bytes: &[u8],
+        param: f32,
+    ) -> Result<()> {
+        let meta = self.metadata.get(&input.0).ok_or(HlxError::BackendError {
+            message: "Input tensor not found".to_string()
+        })?;
+
+        if meta.shape.len() != 3 {
+            return Err(HlxError::BackendError {
+                message: format!("Expected [H,W,C] tensor, got {:?}", meta.shape),
+            });
+        }
+
+        let height = meta.shape[0] as u32;
+        let width = meta.shape[1] as u32;
+        let channels = meta.shape[2] as u32;
+
+        unsafe {
+            let pipeline = self.get_or_create_pipeline(name, shader_bytes)?;
+
+            let pool_sizes = [vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::STORAGE_BUFFER,
+                descriptor_count: 2,
+            }];
+            let pool_info = vk::DescriptorPoolCreateInfo::builder()
+                .pool_sizes(&pool_sizes)
+                .max_sets(1);
+            let descriptor_pool = self.device.create_descriptor_pool(&pool_info, None)
+                .map_err(|e| HlxError::BackendError { message: format!("Pool creation failed: {}", e) })?;
+
+            let alloc_info = vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(descriptor_pool)
+                .set_layouts(std::slice::from_ref(&self.descriptor_set_layout));
+            let descriptor_set = self.device.allocate_descriptor_sets(&alloc_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Descriptor set allocation failed: {}", e) })?[0];
+
+            let buf_in = self.buffers.get(&input.0).unwrap().0;
+            let buf_out = self.buffers.get(&out.0).unwrap().0;
+
+            let info_in = vk::DescriptorBufferInfo { buffer: buf_in, offset: 0, range: vk::WHOLE_SIZE };
+            let info_out = vk::DescriptorBufferInfo { buffer: buf_out, offset: 0, range: vk::WHOLE_SIZE };
+
+            let writes = [
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set)
+                    .dst_binding(0)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(std::slice::from_ref(&info_in))
+                    .build(),
+                vk::WriteDescriptorSet::builder()
+                    .dst_set(descriptor_set)
+                    .dst_binding(1)
+                    .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                    .buffer_info(std::slice::from_ref(&info_out))
+                    .build(),
+            ];
+
+            self.device.update_descriptor_sets(&writes, &[]);
+
+            #[repr(C)]
+            #[derive(Copy, Clone)]
+            struct ParamPushConstants {
+                width: u32,
+                height: u32,
+                channels: u32,
+                param: f32,
+            }
+            unsafe impl bytemuck::Pod for ParamPushConstants {}
+            unsafe impl bytemuck::Zeroable for ParamPushConstants {}
+
+            let push_constants = ParamPushConstants { width, height, channels, param };
+            let push_bytes = bytemuck::bytes_of(&push_constants);
+
+            let begin_info = vk::CommandBufferBeginInfo::builder()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            self.device.begin_command_buffer(self.transfer_command_buffer, &begin_info)
+                .map_err(|e| HlxError::BackendError { message: format!("Command buffer begin failed: {}", e) })?;
+
+            self.device.cmd_bind_pipeline(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, pipeline);
+            self.device.cmd_bind_descriptor_sets(self.transfer_command_buffer, vk::PipelineBindPoint::COMPUTE, self.pipeline_layout, 0, &[descriptor_set], &[]);
+            self.device.cmd_push_constants(self.transfer_command_buffer, self.pipeline_layout, vk::ShaderStageFlags::COMPUTE, 0, push_bytes);
+
+            let group_x = (width + 15) / 16;
+            let group_y = (height + 15) / 16;
+            self.device.cmd_dispatch(self.transfer_command_buffer, group_x, group_y, 1);
+
+            self.device.end_command_buffer(self.transfer_command_buffer)
+                .map_err(|e| HlxError::BackendError { message: format!("Command buffer end failed: {}", e) })?;
+
+            let submit_info = vk::SubmitInfo::builder()
+                .command_buffers(std::slice::from_ref(&self.transfer_command_buffer));
+            self.device.queue_submit(self.queue, &[submit_info.build()], self.transfer_fence)
+                .map_err(|e| HlxError::BackendError { message: format!("Queue submit failed: {}", e) })?;
+
+            self.device.wait_for_fences(&[self.transfer_fence], true, u64::MAX)
+                .map_err(|e| HlxError::BackendError { message: format!("Fence wait failed: {}", e) })?;
+            self.device.reset_fences(&[self.transfer_fence])
+                .map_err(|e| HlxError::BackendError { message: format!("Fence reset failed: {}", e) })?;
+
+            self.device.destroy_descriptor_pool(descriptor_pool, None);
+        }
+
+        Ok(())
+    }
+}
+
 // Cleanup
 impl Drop for VulkanBackend {
     fn drop(&mut self) {

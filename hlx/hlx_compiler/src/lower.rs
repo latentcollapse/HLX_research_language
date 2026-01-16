@@ -1134,6 +1134,13 @@ impl LoweringContext {
                     let out = self.alloc_reg();
                     self.emit(Instruction::SaveImage { out, tensor: arg_regs[0], path: arg_regs[1] });
                     Ok(out)
+
+                // Tensor creation builtin
+                } else if name == "tensor" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "tensor takes 2 arguments (data, shape)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::TensorFromData { out, data: arg_regs[0], shape: arg_regs[1] });
+                    Ok(out)
                                 } else {
                                     let out = self.alloc_reg();
                                     self.emit(Instruction::Call { out, func: name, args: arg_regs });

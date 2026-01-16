@@ -296,6 +296,13 @@ pub enum Instruction {
         fill: Option<f64>, // Optional fill value
     },
 
+    /// Create a tensor from array data with specified shape
+    TensorFromData {
+        out: Register,
+        data: Register, // Array containing the data
+        shape: Register, // Array containing shape dimensions
+    },
+
     /// Reshape tensor (must preserve total elements)
     Reshape {
         out: Register,
@@ -1018,6 +1025,7 @@ impl Instruction {
             Instruction::MatMul { out, .. } => Some(*out),
             Instruction::MatMulBias { out, .. } => Some(*out),
             Instruction::TensorCreate { out, .. } => Some(*out),
+            Instruction::TensorFromData { out, .. } => Some(*out),
             Instruction::Reshape { out, .. } => Some(*out),
             Instruction::Transpose { out, .. } => Some(*out),
             Instruction::LayerNorm { out, .. } => Some(*out),
@@ -1150,6 +1158,7 @@ impl Instruction {
             Instruction::MatMul { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::MatMulBias { lhs, rhs, bias, .. } => vec![*lhs, *rhs, *bias],
             Instruction::TensorCreate { .. } => vec![],
+            Instruction::TensorFromData { data, shape, .. } => vec![*data, *shape],
             Instruction::Reshape { src, .. } => vec![*src],
             Instruction::Transpose { src, .. } => vec![*src],
             Instruction::LayerNorm { input, gamma, beta, .. } => vec![*input, *gamma, *beta],
@@ -1258,6 +1267,7 @@ impl Instruction {
             Instruction::MatMul { .. } |
             Instruction::MatMulBias { .. } |
             Instruction::TensorCreate { .. } |
+            Instruction::TensorFromData { .. } |
             Instruction::Reshape { .. } |
             Instruction::Transpose { .. } |
             Instruction::LayerNorm { .. } |

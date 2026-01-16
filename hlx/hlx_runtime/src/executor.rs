@@ -1884,8 +1884,82 @@ impl ExecutionContext {
                 }
             }
 
+            // === Tensor Creation ===
+
+            Instruction::TensorFromData { out, data, shape } => {
+                let data_val = self.get_reg(*data)?;
+                let shape_val = self.get_reg(*shape)?;
+
+                // Extract shape dimensions from array
+                let shape_vec = match shape_val {
+                    Value::Array(arr) => {
+                        let mut dims = Vec::new();
+                        for val in arr {
+                            match val {
+                                Value::Integer(i) => dims.push(*i as usize),
+                                _ => return Err(HlxError::TypeError {
+                                    expected: "integer".to_string(),
+                                    got: val.type_name().to_string(),
+                                }),
+                            }
+                        }
+                        dims
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "array".to_string(),
+                        got: shape_val.type_name().to_string(),
+                    }),
+                };
+
+                // Flatten data array recursively
+                fn flatten_array(val: &Value, output: &mut Vec<f32>) -> Result<()> {
+                    match val {
+                        Value::Array(arr) => {
+                            for item in arr {
+                                flatten_array(item, output)?;
+                            }
+                        }
+                        Value::Float(f) => output.push(*f as f32),
+                        Value::Integer(i) => output.push(*i as f32),
+                        _ => return Err(HlxError::TypeError {
+                            expected: "number or array".to_string(),
+                            got: val.type_name().to_string(),
+                        }),
+                    }
+                    Ok(())
+                }
+
+                let mut data_flat = Vec::new();
+                flatten_array(&data_val, &mut data_flat)?;
+
+                // Verify data size matches shape
+                let expected_size: usize = shape_vec.iter().product();
+                if data_flat.len() != expected_size {
+                    return Err(HlxError::ValidationFail {
+                        message: format!(
+                            "Data size {} does not match shape {:?} (expected {})",
+                            data_flat.len(), shape_vec, expected_size
+                        ),
+                    });
+                }
+
+                // Allocate tensor in backend
+                let h_tensor = backend.alloc_tensor(&shape_vec, crate::backend::DType::F32)?;
+
+                // Convert f32 data to bytes
+                let bytes: Vec<u8> = data_flat.iter()
+                    .flat_map(|f| f.to_le_bytes())
+                    .collect();
+
+                // Write data to tensor
+                backend.write_tensor(h_tensor, &bytes)?;
+
+                // Store tensor handle
+                self.tensors.insert(*out, h_tensor);
+            }
+
             // === Function Calls handled above ===
-            
+
             // Default: unimplemented instructions
             _ => {
                 if self.config.debug {
