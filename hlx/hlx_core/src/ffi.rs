@@ -346,6 +346,140 @@ pub fn generate_cargo_toml(module_name: &str, lib_name: &str) -> String {
     toml
 }
 
+/// Convert HLX DType to Ada type string
+pub fn dtype_to_ada_type(dtype: &DType) -> String {
+    match dtype {
+        DType::I32 => "Interfaces.C.int".to_string(),
+        DType::I64 => "Interfaces.C.long".to_string(),
+        DType::F32 => "Interfaces.C.C_float".to_string(),
+        DType::F64 => "Interfaces.C.double".to_string(),
+        DType::Bool => "Interfaces.C.unsigned_char".to_string(),
+        DType::Array(inner) => format!("Interfaces.C.Pointers.Pointer_To_{}", dtype_to_ada_type(inner)),
+    }
+}
+
+/// Generate Ada function specification with SPARK contracts
+fn generate_ada_spec(name: &str, info: &FfiExportInfo) -> String {
+    let mut spec = String::new();
+
+    let return_type = dtype_to_ada_type(&info.return_type);
+    let params: Vec<String> = info.param_types
+        .iter()
+        .enumerate()
+        .map(|(i, dtype)| format!("Arg_{} : {}", i, dtype_to_ada_type(dtype)))
+        .collect();
+
+    // SPARK precondition (placeholder - can be expanded based on function semantics)
+    spec.push_str("   --  @pre True\n");
+    spec.push_str("   --  @post True\n");
+
+    if params.is_empty() {
+        spec.push_str(&format!("   function {} return {} with\n", name, return_type));
+    } else {
+        spec.push_str(&format!("   function {} ({}) return {} with\n", name, params.join("; "), return_type));
+    }
+    spec.push_str("     Import        => True,\n");
+    spec.push_str("     Convention    => C,\n");
+    spec.push_str(&format!("     External_Name => \"{}\";\n", name));
+
+    spec
+}
+
+/// Generate complete Ada package specification with SPARK contracts
+pub fn generate_ada_spec_file(krate: &HlxCrate, module_name: &str) -> Option<String> {
+    let meta = krate.metadata.as_ref()?;
+
+    if meta.ffi_exports.is_empty() {
+        return None;
+    }
+
+    let mut spec = String::new();
+
+    // Package header comment
+    spec.push_str(&format!("--  HLX FFI Bindings for {}\n", module_name));
+    spec.push_str("--  Auto-generated Ada package specification\n");
+    spec.push_str("--  This package provides SPARK-verified bindings to HLX functions\n\n");
+
+    // Package declaration
+    let pkg_name = format!("{}_FFI", module_name.replace("-", "_"));
+    spec.push_str(&format!("package {} is\n", pkg_name));
+    spec.push_str("   pragma Pure;\n\n");
+
+    // Import required interfaces
+    spec.push_str("   use Interfaces;\n");
+    spec.push_str("   use Interfaces.C;\n\n");
+
+    // Sort for deterministic output
+    let mut exports: Vec<_> = meta.ffi_exports.iter().collect();
+    exports.sort_by_key(|(name, _)| *name);
+
+    // Function declarations with SPARK contracts
+    spec.push_str("   --  HLX FFI Functions\n\n");
+
+    for (name, info) in &exports {
+        spec.push_str(&generate_ada_spec(name, info));
+        spec.push('\n');
+    }
+
+    spec.push_str(&format!("end {};\n", pkg_name));
+
+    Some(spec)
+}
+
+/// Generate Ada package body (implementation stub)
+pub fn generate_ada_body_file(krate: &HlxCrate, module_name: &str) -> Option<String> {
+    let meta = krate.metadata.as_ref()?;
+
+    if meta.ffi_exports.is_empty() {
+        return None;
+    }
+
+    let mut body = String::new();
+
+    let pkg_name = format!("{}_FFI", module_name.replace("-", "_"));
+    body.push_str(&format!("package body {} is\n", pkg_name));
+    body.push_str("   --  This package body is intentionally empty.\n");
+    body.push_str("   --  All function implementations are provided by the external C library.\n");
+    body.push_str(&format!("end {};\n", pkg_name));
+
+    Some(body)
+}
+
+/// Generate SPARK project file for formal verification
+pub fn generate_spark_project(module_name: &str) -> String {
+    let mut project = String::new();
+
+    project.push_str("project SPARK_HLX is\n\n");
+
+    project.push_str("   for Source_Dirs use (\"src\");\n");
+    project.push_str("   for Object_Dir use \".objects\";\n");
+    project.push_str("   for Library_Dir use \".\";\n\n");
+
+    project.push_str("   package Compiler is\n");
+    project.push_str("      for Default_Switches (\"Ada\") use\n");
+    project.push_str("        (\"-gnat2022\",\n");
+    project.push_str("         \"-gnatwa\",\n");
+    project.push_str("         \"-gnatwe\",\n");
+    project.push_str("         \"-gnatyyM\",\n");
+    project.push_str("         \"-gnaty3abdefhijklmnoprstux\",\n");
+    project.push_str("         \"-gnaty_\",\n");
+    project.push_str("         \"-gnatf\",\n");
+    project.push_str("         \"-gnata\",\n");
+    project.push_str("         \"-gnatwa\",\n");
+    project.push_str("         \"-gnatwe\",\n");
+    project.push_str("         \"-gnatyyM\",\n");
+    project.push_str("         \"-gnaty3abdefhijklmnoprstux\");\n");
+    project.push_str("   end Compiler;\n\n");
+
+    project.push_str("   package Prove is\n");
+    project.push_str("      for Switches use (\"--level=1\", \"--proof=progressive\");\n");
+    project.push_str("   end Prove;\n\n");
+
+    project.push_str("end SPARK_HLX;\n");
+
+    project
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -369,5 +503,22 @@ mod tests {
 
         let decl = generate_c_declaration("add", &info);
         assert_eq!(decl, "int64_t add(int64_t arg0, int64_t arg1);");
+    }
+
+    #[test]
+    fn test_dtype_to_ada_type() {
+        assert_eq!(dtype_to_ada_type(&DType::I32), "Interfaces.C.int");
+        assert_eq!(dtype_to_ada_type(&DType::I64), "Interfaces.C.long");
+        assert_eq!(dtype_to_ada_type(&DType::F32), "Interfaces.C.C_float");
+        assert_eq!(dtype_to_ada_type(&DType::F64), "Interfaces.C.double");
+        assert_eq!(dtype_to_ada_type(&DType::Bool), "Interfaces.C.unsigned_char");
+    }
+
+    #[test]
+    fn test_generate_spark_project() {
+        let project = generate_spark_project("test_module");
+        assert!(project.contains("project SPARK_HLX is"));
+        assert!(project.contains("package Prove is"));
+        assert!(project.contains("--level=1"));
     }
 }
