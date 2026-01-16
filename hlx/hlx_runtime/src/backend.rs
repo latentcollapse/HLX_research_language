@@ -416,12 +416,12 @@ pub fn create_backend(config: &RuntimeConfig) -> Result<Box<dyn Backend>> {
                     }
                 }
             }
-            
+
             #[cfg(feature = "cpu")]
             {
                 Ok(Box::new(crate::backends::cpu::CpuBackend::new(config)?))
             }
-            
+
             #[cfg(not(any(feature = "cpu", feature = "vulkan")))]
             {
                 Err(hlx_core::HlxError::ValidationFail {

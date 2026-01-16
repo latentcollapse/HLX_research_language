@@ -50,10 +50,10 @@ pub struct GpuConfig {
 pub enum BackendType {
     /// CPU backend (always available)
     Cpu,
-    
+
     /// Vulkan GPU backend
     Vulkan,
-    
+
     /// Automatic selection (prefer GPU if available)
     Auto,
 }
