@@ -1026,6 +1026,102 @@ impl LoweringContext {
                     let out = self.alloc_reg();
                     self.emit(Instruction::Sharpen { out, input: arg_regs[0] });
                     Ok(out)
+
+                // Parsing builtins
+                } else if name == "parse_int" || name == "to_int" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "parse_int takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ParseInt { out, input: arg_regs[0] });
+                    Ok(out)
+                } else if name == "parse_float" || name == "to_float" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "parse_float takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ParseFloat { out, input: arg_regs[0] });
+                    Ok(out)
+                } else if name == "json_serialize" || name == "to_json" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "json_serialize takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::JsonSerialize { out, input: arg_regs[0] });
+                    Ok(out)
+                } else if name == "csv_parse" || name == "parse_csv" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "csv_parse takes 2 arguments (string, delimiter)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::CsvParse { out, input: arg_regs[0], delimiter: arg_regs[1] });
+                    Ok(out)
+                } else if name == "format" || name == "format_string" {
+                    if arg_regs.is_empty() { return Err(HlxError::ValidationFail { message: "format takes at least 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    let format = arg_regs[0];
+                    let args = arg_regs[1..].to_vec();
+                    self.emit(Instruction::FormatString { out, format, args });
+                    Ok(out)
+                } else if name == "regex_match" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "regex_match takes 2 arguments (string, pattern)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::RegexMatch { out, input: arg_regs[0], pattern: arg_regs[1] });
+                    Ok(out)
+                } else if name == "regex_replace" {
+                    if arg_regs.len() != 3 { return Err(HlxError::ValidationFail { message: "regex_replace takes 3 arguments (string, pattern, replacement)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::RegexReplace { out, input: arg_regs[0], pattern: arg_regs[1], replacement: arg_regs[2] });
+                    Ok(out)
+
+                // File I/O builtins
+                } else if name == "read_line" || name == "readline" {
+                    if !arg_regs.is_empty() { return Err(HlxError::ValidationFail { message: "read_line takes no arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ReadLine { out });
+                    Ok(out)
+                } else if name == "append_file" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "append_file takes 2 arguments (path, content)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::AppendFile { out, path: arg_regs[0], content: arg_regs[1] });
+                    Ok(out)
+                } else if name == "file_exists" || name == "exists" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "file_exists takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::FileExists { out, path: arg_regs[0] });
+                    Ok(out)
+                } else if name == "delete_file" || name == "remove_file" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "delete_file takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::DeleteFile { out, path: arg_regs[0] });
+                    Ok(out)
+                } else if name == "list_files" || name == "list_dir" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "list_files takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ListFiles { out, path: arg_regs[0] });
+                    Ok(out)
+                } else if name == "create_dir" || name == "mkdir" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "create_dir takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::CreateDir { out, path: arg_regs[0] });
+                    Ok(out)
+                } else if name == "delete_dir" || name == "remove_dir" || name == "rmdir" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "delete_dir takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::DeleteDir { out, path: arg_regs[0] });
+                    Ok(out)
+                } else if name == "read_json" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "read_json takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ReadJson { out, path: arg_regs[0] });
+                    Ok(out)
+                } else if name == "write_json" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "write_json takes 2 arguments (path, value)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::WriteJson { out, path: arg_regs[0], value: arg_regs[1] });
+                    Ok(out)
+                } else if name == "read_csv" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "read_csv takes 2 arguments (path, delimiter)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ReadCsv { out, path: arg_regs[0], delimiter: arg_regs[1] });
+                    Ok(out)
+                } else if name == "write_csv" {
+                    if arg_regs.len() != 3 { return Err(HlxError::ValidationFail { message: "write_csv takes 3 arguments (path, data, delimiter)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::WriteCsv { out, path: arg_regs[0], data: arg_regs[1], delimiter: arg_regs[2] });
+                    Ok(out)
                                 } else {
                                     let out = self.alloc_reg();
                                     self.emit(Instruction::Call { out, func: name, args: arg_regs });

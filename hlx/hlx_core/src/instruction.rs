@@ -483,6 +483,131 @@ pub enum Instruction {
         input: Register,
     },
 
+    // === Parsing Operations ===
+
+    /// Parse string to integer
+    ParseInt {
+        out: Register,
+        input: Register,  // String to parse
+    },
+
+    /// Parse string to float
+    ParseFloat {
+        out: Register,
+        input: Register,  // String to parse
+    },
+
+    /// Serialize value to JSON string
+    JsonSerialize {
+        out: Register,
+        input: Register,  // Value to serialize
+    },
+
+    /// Parse CSV string to array of arrays
+    CsvParse {
+        out: Register,
+        input: Register,      // CSV string
+        delimiter: Register,  // Delimiter (e.g., ",")
+    },
+
+    /// Format string with arguments
+    /// Supports "{}" placeholders
+    FormatString {
+        out: Register,
+        format: Register,  // Format string
+        args: Vec<Register>,  // Arguments to interpolate
+    },
+
+    /// Match regex pattern against string
+    /// Returns array of matches or empty array
+    RegexMatch {
+        out: Register,
+        input: Register,    // String to match
+        pattern: Register,  // Regex pattern
+    },
+
+    /// Replace regex matches in string
+    RegexReplace {
+        out: Register,
+        input: Register,        // String to process
+        pattern: Register,      // Regex pattern
+        replacement: Register,  // Replacement string
+    },
+
+    // === File I/O Operations ===
+
+    /// Read line from stdin
+    ReadLine {
+        out: Register,
+    },
+
+    /// Append string to file
+    AppendFile {
+        out: Register,      // Success boolean
+        path: Register,     // File path
+        content: Register,  // Content to append
+    },
+
+    /// Check if file exists
+    FileExists {
+        out: Register,
+        path: Register,
+    },
+
+    /// Delete file
+    DeleteFile {
+        out: Register,  // Success boolean
+        path: Register,
+    },
+
+    /// List files in directory
+    /// Returns array of file names
+    ListFiles {
+        out: Register,
+        path: Register,  // Directory path
+    },
+
+    /// Create directory
+    CreateDir {
+        out: Register,  // Success boolean
+        path: Register,
+    },
+
+    /// Delete directory (must be empty)
+    DeleteDir {
+        out: Register,  // Success boolean
+        path: Register,
+    },
+
+    /// Read and parse JSON file
+    ReadJson {
+        out: Register,
+        path: Register,
+    },
+
+    /// Write value as JSON to file
+    WriteJson {
+        out: Register,    // Success boolean
+        path: Register,   // File path
+        value: Register,  // Value to serialize
+    },
+
+    /// Read CSV file
+    /// Returns array of arrays
+    ReadCsv {
+        out: Register,
+        path: Register,
+        delimiter: Register,  // Optional delimiter (defaults to ",")
+    },
+
+    /// Write CSV file
+    WriteCsv {
+        out: Register,    // Success boolean
+        path: Register,   // File path
+        data: Register,   // Array of arrays
+        delimiter: Register,  // Optional delimiter (defaults to ",")
+    },
+
     // === Control Flow ===
     
     /// Conditional branch
@@ -913,6 +1038,24 @@ impl Instruction {
             Instruction::Contrast { out, .. } => Some(*out),
             Instruction::InvertColors { out, .. } => Some(*out),
             Instruction::Sharpen { out, .. } => Some(*out),
+            Instruction::ParseInt { out, .. } => Some(*out),
+            Instruction::ParseFloat { out, .. } => Some(*out),
+            Instruction::JsonSerialize { out, .. } => Some(*out),
+            Instruction::CsvParse { out, .. } => Some(*out),
+            Instruction::FormatString { out, .. } => Some(*out),
+            Instruction::RegexMatch { out, .. } => Some(*out),
+            Instruction::RegexReplace { out, .. } => Some(*out),
+            Instruction::ReadLine { out } => Some(*out),
+            Instruction::AppendFile { out, .. } => Some(*out),
+            Instruction::FileExists { out, .. } => Some(*out),
+            Instruction::DeleteFile { out, .. } => Some(*out),
+            Instruction::ListFiles { out, .. } => Some(*out),
+            Instruction::CreateDir { out, .. } => Some(*out),
+            Instruction::DeleteDir { out, .. } => Some(*out),
+            Instruction::ReadJson { out, .. } => Some(*out),
+            Instruction::WriteJson { out, .. } => Some(*out),
+            Instruction::ReadCsv { out, .. } => Some(*out),
+            Instruction::WriteCsv { out, .. } => Some(*out),
             Instruction::Return { .. } => None,
             Instruction::Break => None,
             Instruction::Continue => None,
@@ -1012,6 +1155,28 @@ impl Instruction {
             Instruction::Contrast { input, factor, .. } => vec![*input, *factor],
             Instruction::InvertColors { input, .. } => vec![*input],
             Instruction::Sharpen { input, .. } => vec![*input],
+            Instruction::ParseInt { input, .. } => vec![*input],
+            Instruction::ParseFloat { input, .. } => vec![*input],
+            Instruction::JsonSerialize { input, .. } => vec![*input],
+            Instruction::CsvParse { input, delimiter, .. } => vec![*input, *delimiter],
+            Instruction::FormatString { format, args, .. } => {
+                let mut regs = vec![*format];
+                regs.extend(args);
+                regs
+            },
+            Instruction::RegexMatch { input, pattern, .. } => vec![*input, *pattern],
+            Instruction::RegexReplace { input, pattern, replacement, .. } => vec![*input, *pattern, *replacement],
+            Instruction::ReadLine { .. } => vec![],
+            Instruction::AppendFile { path, content, .. } => vec![*path, *content],
+            Instruction::FileExists { path, .. } => vec![*path],
+            Instruction::DeleteFile { path, .. } => vec![*path],
+            Instruction::ListFiles { path, .. } => vec![*path],
+            Instruction::CreateDir { path, .. } => vec![*path],
+            Instruction::DeleteDir { path, .. } => vec![*path],
+            Instruction::ReadJson { path, .. } => vec![*path],
+            Instruction::WriteJson { path, value, .. } => vec![*path, *value],
+            Instruction::ReadCsv { path, delimiter, .. } => vec![*path, *delimiter],
+            Instruction::WriteCsv { path, data, delimiter, .. } => vec![*path, *data, *delimiter],
             Instruction::If { cond, .. } => vec![*cond],
             Instruction::Jump { .. } => vec![],
             Instruction::Loop { cond, .. } => vec![*cond],

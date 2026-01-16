@@ -1308,6 +1308,443 @@ impl ExecutionContext {
                 }
             }
 
+            // === Parsing Operations ===
+
+            Instruction::ParseInt { out, input } => {
+                let s = self.get_reg(*input)?;
+                match s {
+                    Value::String(s) => {
+                        match s.trim().parse::<i64>() {
+                            Ok(i) => self.set_reg(*out, Value::Integer(i)),
+                            Err(_) => return Err(HlxError::ValidationFail {
+                                message: format!("Failed to parse '{}' as integer", s),
+                            }),
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string".to_string(),
+                        got: s.type_name().to_string(),
+                    }),
+                }
+            }
+
+            Instruction::ParseFloat { out, input } => {
+                let s = self.get_reg(*input)?;
+                match s {
+                    Value::String(s) => {
+                        match s.trim().parse::<f64>() {
+                            Ok(f) => self.set_reg(*out, Value::Float(f)),
+                            Err(_) => return Err(HlxError::ValidationFail {
+                                message: format!("Failed to parse '{}' as float", s),
+                            }),
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string".to_string(),
+                        got: s.type_name().to_string(),
+                    }),
+                }
+            }
+
+            Instruction::JsonSerialize { out, input } => {
+                let val = self.get_reg(*input)?;
+                // Simple JSON serialization
+                let json = match val {
+                    Value::Integer(i) => i.to_string(),
+                    Value::Float(f) => f.to_string(),
+                    Value::String(s) => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
+                    Value::Boolean(b) => b.to_string(),
+                    Value::Null => "null".to_string(),
+                    Value::Array(arr) => {
+                        let items: Vec<String> = arr.iter().map(|v| {
+                            match v {
+                                Value::Integer(i) => i.to_string(),
+                                Value::Float(f) => f.to_string(),
+                                Value::String(s) => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
+                                Value::Boolean(b) => b.to_string(),
+                                Value::Null => "null".to_string(),
+                                _ => "null".to_string(),
+                            }
+                        }).collect();
+                        format!("[{}]", items.join(","))
+                    }
+                    _ => return Err(HlxError::ValidationFail {
+                        message: format!("Cannot serialize {} to JSON", val.type_name()),
+                    }),
+                };
+                self.set_reg(*out, Value::String(json));
+            }
+
+            Instruction::CsvParse { out, input, delimiter } => {
+                let s = self.get_reg(*input)?;
+                let delim = self.get_reg(*delimiter)?;
+
+                let (csv_str, delim_str) = match (s, delim) {
+                    (Value::String(s), Value::String(d)) => (s.clone(), d.clone()),
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string, string".to_string(),
+                        got: format!("{}, {}", s.type_name(), delim.type_name()),
+                    }),
+                };
+
+                let delimiter_char = delim_str.chars().next().unwrap_or(',');
+                let lines: Vec<Value> = csv_str.lines().map(|line| {
+                    let fields: Vector<Value> = line.split(delimiter_char)
+                        .map(|f| Value::String(f.trim().to_string()))
+                        .collect();
+                    Value::Array(fields)
+                }).collect();
+
+                self.set_reg(*out, Value::Array(lines.into_iter().collect()));
+            }
+
+            Instruction::FormatString { out, format, args } => {
+                let fmt = self.get_reg(*format)?;
+                match fmt {
+                    Value::String(fmt_str) => {
+                        let mut result = fmt_str.clone();
+                        for arg_reg in args {
+                            let arg = self.get_reg(*arg_reg)?;
+                            // Replace first occurrence of {}
+                            if let Some(pos) = result.find("{}") {
+                                let arg_str = format!("{}", arg);
+                                result.replace_range(pos..pos+2, &arg_str);
+                            }
+                        }
+                        self.set_reg(*out, Value::String(result));
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string".to_string(),
+                        got: fmt.type_name().to_string(),
+                    }),
+                }
+            }
+
+            Instruction::RegexMatch { out, input, pattern } => {
+                // Simplified regex - just does basic string contains for now
+                let s = self.get_reg(*input)?;
+                let pat = self.get_reg(*pattern)?;
+
+                match (s, pat) {
+                    (Value::String(s), Value::String(p)) => {
+                        // Simple implementation: return array with match or empty array
+                        if s.contains(p.as_str()) {
+                            self.set_reg(*out, Value::Array(vec![Value::String(p.clone())].into_iter().collect()));
+                        } else {
+                            self.set_reg(*out, Value::Array(Vector::new()));
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string, string".to_string(),
+                        got: format!("{}, {}", s.type_name(), pat.type_name()),
+                    }),
+                }
+            }
+
+            Instruction::RegexReplace { out, input, pattern, replacement } => {
+                // Simplified regex - just does basic string replace for now
+                let s = self.get_reg(*input)?;
+                let pat = self.get_reg(*pattern)?;
+                let rep = self.get_reg(*replacement)?;
+
+                match (s, pat, rep) {
+                    (Value::String(s), Value::String(p), Value::String(r)) => {
+                        let result = s.replace(p.as_str(), r.as_str());
+                        self.set_reg(*out, Value::String(result));
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string, string, string".to_string(),
+                        got: format!("{}, {}, {}", s.type_name(), pat.type_name(), rep.type_name()),
+                    }),
+                }
+            }
+
+            // === File I/O Operations ===
+
+            Instruction::ReadLine { out } => {
+                use std::io::{self, BufRead};
+                let stdin = io::stdin();
+                let mut line = String::new();
+                match stdin.lock().read_line(&mut line) {
+                    Ok(_) => {
+                        // Remove trailing newline
+                        if line.ends_with('\n') {
+                            line.pop();
+                            if line.ends_with('\r') {
+                                line.pop();
+                            }
+                        }
+                        self.set_reg(*out, Value::String(line));
+                    }
+                    Err(e) => return Err(HlxError::ValidationFail {
+                        message: format!("Failed to read line: {}", e),
+                    }),
+                }
+            }
+
+            Instruction::AppendFile { out, path, content } => {
+                use std::fs::OpenOptions;
+                use std::io::Write;
+
+                let path_val = self.get_reg(*path)?;
+                let content_val = self.get_reg(*content)?;
+
+                match (path_val, content_val) {
+                    (Value::String(p), Value::String(c)) => {
+                        match OpenOptions::new().create(true).append(true).open(p.as_str()) {
+                            Ok(mut file) => {
+                                match file.write_all(c.as_bytes()) {
+                                    Ok(_) => self.set_reg(*out, Value::Boolean(true)),
+                                    Err(e) => {
+                                        eprintln!("Failed to write to file: {}", e);
+                                        self.set_reg(*out, Value::Boolean(false));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to open file: {}", e);
+                                self.set_reg(*out, Value::Boolean(false));
+                            }
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string, string".to_string(),
+                        got: format!("{}, {}", path_val.type_name(), content_val.type_name()),
+                    }),
+                }
+            }
+
+            Instruction::FileExists { out, path } => {
+                let path_val = self.get_reg(*path)?;
+                match path_val {
+                    Value::String(p) => {
+                        let exists = std::path::Path::new(p.as_str()).exists();
+                        self.set_reg(*out, Value::Boolean(exists));
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string".to_string(),
+                        got: path_val.type_name().to_string(),
+                    }),
+                }
+            }
+
+            Instruction::DeleteFile { out, path } => {
+                let path_val = self.get_reg(*path)?;
+                match path_val {
+                    Value::String(p) => {
+                        match std::fs::remove_file(p.as_str()) {
+                            Ok(_) => self.set_reg(*out, Value::Boolean(true)),
+                            Err(e) => {
+                                eprintln!("Failed to delete file: {}", e);
+                                self.set_reg(*out, Value::Boolean(false));
+                            }
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string".to_string(),
+                        got: path_val.type_name().to_string(),
+                    }),
+                }
+            }
+
+            Instruction::ListFiles { out, path } => {
+                let path_val = self.get_reg(*path)?;
+                match path_val {
+                    Value::String(p) => {
+                        match std::fs::read_dir(p.as_str()) {
+                            Ok(entries) => {
+                                let files: Vector<Value> = entries
+                                    .filter_map(|e| e.ok())
+                                    .map(|e| Value::String(e.file_name().to_string_lossy().to_string()))
+                                    .collect();
+                                self.set_reg(*out, Value::Array(files));
+                            }
+                            Err(e) => return Err(HlxError::ValidationFail {
+                                message: format!("Failed to list directory: {}", e),
+                            }),
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string".to_string(),
+                        got: path_val.type_name().to_string(),
+                    }),
+                }
+            }
+
+            Instruction::CreateDir { out, path } => {
+                let path_val = self.get_reg(*path)?;
+                match path_val {
+                    Value::String(p) => {
+                        match std::fs::create_dir_all(p.as_str()) {
+                            Ok(_) => self.set_reg(*out, Value::Boolean(true)),
+                            Err(e) => {
+                                eprintln!("Failed to create directory: {}", e);
+                                self.set_reg(*out, Value::Boolean(false));
+                            }
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string".to_string(),
+                        got: path_val.type_name().to_string(),
+                    }),
+                }
+            }
+
+            Instruction::DeleteDir { out, path } => {
+                let path_val = self.get_reg(*path)?;
+                match path_val {
+                    Value::String(p) => {
+                        match std::fs::remove_dir(p.as_str()) {
+                            Ok(_) => self.set_reg(*out, Value::Boolean(true)),
+                            Err(e) => {
+                                eprintln!("Failed to delete directory: {}", e);
+                                self.set_reg(*out, Value::Boolean(false));
+                            }
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string".to_string(),
+                        got: path_val.type_name().to_string(),
+                    }),
+                }
+            }
+
+            Instruction::ReadJson { out, path } => {
+                let path_val = self.get_reg(*path)?;
+                match path_val {
+                    Value::String(p) => {
+                        match std::fs::read_to_string(p.as_str()) {
+                            Ok(content) => {
+                                // Simple JSON parsing - for now just return the string
+                                // TODO: Implement proper JSON parsing
+                                self.set_reg(*out, Value::String(content));
+                            }
+                            Err(e) => return Err(HlxError::ValidationFail {
+                                message: format!("Failed to read JSON file: {}", e),
+                            }),
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string".to_string(),
+                        got: path_val.type_name().to_string(),
+                    }),
+                }
+            }
+
+            Instruction::WriteJson { out, path, value } => {
+                use std::fs::File;
+                use std::io::Write;
+
+                let path_val = self.get_reg(*path)?;
+                let val = self.get_reg(*value)?;
+
+                match path_val {
+                    Value::String(p) => {
+                        // Serialize to JSON
+                        let json = match val {
+                            Value::String(s) => s.clone(),
+                            Value::Integer(i) => i.to_string(),
+                            Value::Float(f) => f.to_string(),
+                            Value::Boolean(b) => b.to_string(),
+                            _ => format!("{:?}", val),
+                        };
+
+                        match File::create(p.as_str()) {
+                            Ok(mut file) => {
+                                match file.write_all(json.as_bytes()) {
+                                    Ok(_) => self.set_reg(*out, Value::Boolean(true)),
+                                    Err(e) => {
+                                        eprintln!("Failed to write JSON: {}", e);
+                                        self.set_reg(*out, Value::Boolean(false));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to create file: {}", e);
+                                self.set_reg(*out, Value::Boolean(false));
+                            }
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string".to_string(),
+                        got: path_val.type_name().to_string(),
+                    }),
+                }
+            }
+
+            Instruction::ReadCsv { out, path, delimiter } => {
+                let path_val = self.get_reg(*path)?;
+                let delim_val = self.get_reg(*delimiter)?;
+
+                match (path_val, delim_val) {
+                    (Value::String(p), Value::String(d)) => {
+                        match std::fs::read_to_string(p.as_str()) {
+                            Ok(content) => {
+                                let delimiter_char = d.chars().next().unwrap_or(',');
+                                let lines: Vec<Value> = content.lines().map(|line| {
+                                    let fields: Vector<Value> = line.split(delimiter_char)
+                                        .map(|f| Value::String(f.trim().to_string()))
+                                        .collect();
+                                    Value::Array(fields)
+                                }).collect();
+                                self.set_reg(*out, Value::Array(lines.into_iter().collect()));
+                            }
+                            Err(e) => return Err(HlxError::ValidationFail {
+                                message: format!("Failed to read CSV file: {}", e),
+                            }),
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string, string".to_string(),
+                        got: format!("{}, {}", path_val.type_name(), delim_val.type_name()),
+                    }),
+                }
+            }
+
+            Instruction::WriteCsv { out, path, data, delimiter } => {
+                use std::fs::File;
+                use std::io::Write;
+
+                let path_val = self.get_reg(*path)?;
+                let data_val = self.get_reg(*data)?;
+                let delim_val = self.get_reg(*delimiter)?;
+
+                match (path_val, data_val, delim_val) {
+                    (Value::String(p), Value::Array(rows), Value::String(d)) => {
+                        let delimiter_char = d.chars().next().unwrap_or(',');
+
+                        let mut csv_content = String::new();
+                        for row in rows.iter() {
+                            if let Value::Array(fields) = row {
+                                let row_str: Vec<String> = fields.iter().map(|f| format!("{}", f)).collect();
+                                csv_content.push_str(&row_str.join(&delimiter_char.to_string()));
+                                csv_content.push('\n');
+                            }
+                        }
+
+                        match File::create(p.as_str()) {
+                            Ok(mut file) => {
+                                match file.write_all(csv_content.as_bytes()) {
+                                    Ok(_) => self.set_reg(*out, Value::Boolean(true)),
+                                    Err(e) => {
+                                        eprintln!("Failed to write CSV: {}", e);
+                                        self.set_reg(*out, Value::Boolean(false));
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to create file: {}", e);
+                                self.set_reg(*out, Value::Boolean(false));
+                            }
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string, array, string".to_string(),
+                        got: format!("{}, {}, {}", path_val.type_name(), data_val.type_name(), delim_val.type_name()),
+                    }),
+                }
+            }
+
             // === Function Calls handled above ===
             
             // Default: unimplemented instructions
