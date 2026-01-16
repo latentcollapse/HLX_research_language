@@ -1122,6 +1122,18 @@ impl LoweringContext {
                     let out = self.alloc_reg();
                     self.emit(Instruction::WriteCsv { out, path: arg_regs[0], data: arg_regs[1], delimiter: arg_regs[2] });
                     Ok(out)
+
+                // Image I/O builtins
+                } else if name == "load_image" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "load_image takes 1 argument (path)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::LoadImage { out, path: arg_regs[0] });
+                    Ok(out)
+                } else if name == "save_image" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "save_image takes 2 arguments (tensor, path)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::SaveImage { out, tensor: arg_regs[0], path: arg_regs[1] });
+                    Ok(out)
                                 } else {
                                     let out = self.alloc_reg();
                                     self.emit(Instruction::Call { out, func: name, args: arg_regs });

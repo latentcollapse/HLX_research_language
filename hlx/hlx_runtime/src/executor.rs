@@ -1745,6 +1745,145 @@ impl ExecutionContext {
                 }
             }
 
+            // === Image I/O Operations ===
+
+            Instruction::LoadImage { out, path } => {
+                let path_val = self.get_reg(*path)?;
+                match path_val {
+                    Value::String(p) => {
+                        use image::GenericImageView;
+
+                        match image::open(p.as_str()) {
+                            Ok(img) => {
+                                let (width, height) = img.dimensions();
+                                let rgba = img.to_rgba8();
+                                let raw_pixels = rgba.as_raw();
+
+                                // Create tensor shape: [height, width, 4] for RGBA
+                                let shape = vec![height as usize, width as usize, 4];
+
+                                // Allocate tensor in backend
+                                let h_tensor = backend.alloc_tensor(&shape, crate::backend::DType::F32)?;
+
+                                // Convert u8 pixels to f32 (normalized 0.0-1.0)
+                                let float_pixels: Vec<f32> = raw_pixels.iter()
+                                    .map(|&p| p as f32 / 255.0)
+                                    .collect();
+
+                                // Write pixel data to tensor
+                                let bytes: Vec<u8> = float_pixels.iter()
+                                    .flat_map(|f| f.to_le_bytes())
+                                    .collect();
+
+                                backend.write_tensor(h_tensor, &bytes)?;
+
+                                // Store tensor handle
+                                self.tensors.insert(*out, h_tensor);
+                            }
+                            Err(e) => return Err(HlxError::ValidationFail {
+                                message: format!("Failed to load image '{}': {}", p, e),
+                            }),
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string".to_string(),
+                        got: path_val.type_name().to_string(),
+                    }),
+                }
+            }
+
+            Instruction::SaveImage { out, tensor, path } => {
+                let path_val = self.get_reg(*path)?;
+
+                match path_val {
+                    Value::String(p) => {
+                        // Get tensor handle
+                        if let Some(&h_tensor) = self.tensors.get(tensor) {
+                            let meta = backend.tensor_meta(h_tensor)?;
+
+                            // Expect shape [height, width, channels]
+                            if meta.shape.len() != 3 {
+                                return Err(HlxError::TypeError {
+                                    expected: "[height, width, channels] tensor".to_string(),
+                                    got: format!("{:?}", meta.shape),
+                                });
+                            }
+
+                            let height = meta.shape[0] as u32;
+                            let width = meta.shape[1] as u32;
+                            let channels = meta.shape[2];
+
+                            // Read tensor data
+                            let bytes = backend.read_tensor(h_tensor)?;
+                            let float_pixels: Vec<f32> = bytes.chunks_exact(4)
+                                .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+                                .collect();
+
+                            // Convert f32 (0.0-1.0) to u8 (0-255)
+                            let u8_pixels: Vec<u8> = float_pixels.iter()
+                                .map(|&f| (f.clamp(0.0, 1.0) * 255.0) as u8)
+                                .collect();
+
+                            // Create image buffer
+                            use image::{ImageBuffer, Rgba, Rgb};
+
+                            let result = if channels == 4 {
+                                // RGBA image
+                                let img_buf = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(
+                                    width, height, u8_pixels
+                                );
+
+                                if let Some(img) = img_buf {
+                                    img.save(p.as_str())
+                                } else {
+                                    Err(image::ImageError::Parameter(
+                                        image::error::ParameterError::from_kind(
+                                            image::error::ParameterErrorKind::DimensionMismatch
+                                        )
+                                    ))
+                                }
+                            } else if channels == 3 {
+                                // RGB image
+                                let img_buf = ImageBuffer::<Rgb<u8>, Vec<u8>>::from_raw(
+                                    width, height, u8_pixels
+                                );
+
+                                if let Some(img) = img_buf {
+                                    img.save(p.as_str())
+                                } else {
+                                    Err(image::ImageError::Parameter(
+                                        image::error::ParameterError::from_kind(
+                                            image::error::ParameterErrorKind::DimensionMismatch
+                                        )
+                                    ))
+                                }
+                            } else {
+                                return Err(HlxError::ValidationFail {
+                                    message: format!("Unsupported channel count: {}. Expected 3 (RGB) or 4 (RGBA)", channels),
+                                });
+                            };
+
+                            match result {
+                                Ok(_) => self.set_reg(*out, Value::Boolean(true)),
+                                Err(e) => {
+                                    eprintln!("Failed to save image: {}", e);
+                                    self.set_reg(*out, Value::Boolean(false));
+                                }
+                            }
+                        } else {
+                            return Err(HlxError::TypeError {
+                                expected: "tensor handle".to_string(),
+                                got: "scalar".to_string(),
+                            });
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string".to_string(),
+                        got: path_val.type_name().to_string(),
+                    }),
+                }
+            }
+
             // === Function Calls handled above ===
             
             // Default: unimplemented instructions

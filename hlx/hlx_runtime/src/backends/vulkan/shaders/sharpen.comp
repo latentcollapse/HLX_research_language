@@ -1,0 +1,63 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) buffer InputImage {
+    float data[];
+} input_image;
+
+layout(set = 0, binding = 1) buffer OutputImage {
+    float data[];
+} output_image;
+
+layout(push_constant) uniform PushConstants {
+    uint width;
+    uint height;
+    uint channels;
+} params;
+
+void main() {
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+
+    if (x >= params.width || y >= params.height) {
+        return;
+    }
+
+    // Sharpen kernel (3x3):
+    //  0  -1   0
+    // -1   5  -1
+    //  0  -1   0
+    const float kernel[9] = float[](
+        0.0, -1.0,  0.0,
+       -1.0,  5.0, -1.0,
+        0.0, -1.0,  0.0
+    );
+
+    uint idx = (y * params.width + x) * params.channels;
+
+    // Apply sharpen kernel to each channel
+    for (uint c = 0; c < params.channels; ++c) {
+        float sum = 0.0;
+
+        // Convolve with 3x3 kernel
+        for (int ky = -1; ky <= 1; ++ky) {
+            for (int kx = -1; kx <= 1; ++kx) {
+                int nx = int(x) + kx;
+                int ny = int(y) + ky;
+
+                // Clamp to image boundaries
+                nx = clamp(nx, 0, int(params.width) - 1);
+                ny = clamp(ny, 0, int(params.height) - 1);
+
+                uint nidx = (uint(ny) * params.width + uint(nx)) * params.channels + c;
+                float pixel = input_image.data[nidx];
+
+                int kernel_idx = (ky + 1) * 3 + (kx + 1);
+                sum += pixel * kernel[kernel_idx];
+            }
+        }
+
+        output_image.data[idx + c] = clamp(sum, 0.0, 1.0);
+    }
+}

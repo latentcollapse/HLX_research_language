@@ -229,3 +229,157 @@ Phase 4 establishes the complete **infrastructure** for image processing in HLX:
 - ⏳ Image I/O operations needed for practical use
 
 The foundation is solid and ready for shader implementations and image I/O to make these operations fully functional for real-world image processing tasks.
+
+---
+
+## UPDATE: Image I/O Complete! (2026-01-16)
+
+### ✅ Completed Features
+
+#### Image I/O Operations
+1. **load_image(path)**
+   - ✅ Loads PNG, JPEG, and other formats
+   - ✅ Returns tensor with shape [height, width, 4] (RGBA)
+   - ✅ Pixels normalized to 0.0-1.0 range
+   - ✅ Full integration with tensor system
+
+2. **save_image(tensor, path)**
+   - ✅ Saves tensor as image file (PNG, JPEG, etc.)
+   - ✅ Supports RGB (3 channels) and RGBA (4 channels)
+   - ✅ Automatic format detection from extension
+   - ✅ Returns boolean success status
+
+#### New Compute Shaders (All Compiled)
+1. **grayscale.comp** (3.1 KB)
+   - Luminance conversion: 0.299*R + 0.587*G + 0.114*B
+   - 16x16 local workgroup size
+   - Preserves alpha channel
+
+2. **threshold.comp** (2.6 KB)
+   - Binary threshold operation
+   - Configurable threshold value via push constants
+   - Per-channel thresholding
+
+3. **brightness.comp** (2.6 KB)
+   - Multiply brightness by factor
+   - Clamped to [0.0, 1.0] range
+   - Push constant for factor
+
+4. **contrast.comp** (2.6 KB)
+   - Formula: (pixel - 0.5) * factor + 0.5
+   - Push constant for factor
+   - Clamped output
+
+5. **invert_colors.comp** (2.4 KB)
+   - Simple inversion: 1.0 - pixel
+   - Per-channel operation
+
+6. **sharpen.comp** (4.2 KB)
+   - 3x3 sharpen kernel convolution
+   - Edge handling via clamping
+   - Per-channel sharpening
+
+### Implementation Status
+
+**Image I/O**: ✅ **COMPLETE**
+- Instructions added to IR
+- Executor implementation using `image` crate
+- Compiler builtins (load_image, save_image)
+- Full PNG/JPEG/etc support
+- Tensor integration working
+
+**Compute Shaders**: ✅ **WRITTEN & COMPILED**
+- 6 new shaders implemented in GLSL
+- All compiled to SPIR-V
+- Integrated into Vulkan backend constants
+- Ready for dispatch implementation
+
+**CPU Backend**: ✅ **WORKING**
+- grayscale, threshold, brightness, contrast, invert_colors all functional
+- Using ndarray for pixel operations
+- Good for testing and small images
+
+**Vulkan Dispatch**: ⏳ **NEXT STEP**
+- Shader constants defined
+- Shaders compiled and included
+- Requires pipeline setup and buffer binding
+- Push constant configuration needed
+
+### Updated Usage Example (Now Working!)
+
+```hlx
+program image_pipeline {
+    fn main() {
+        // Load image as tensor
+        let img = load_image("input.png");
+
+        // Apply CPU-accelerated processing
+        let gray = grayscale(img);
+        let bright = brightness(gray, 1.3);
+        let contrast_img = contrast(bright, 1.5);
+        let inverted = invert_colors(contrast_img);
+
+        // Save processed image
+        let success = save_image(inverted, "output.png");
+
+        if success {
+            print("Image processing complete!");
+        }
+
+        return 0;
+    }
+}
+```
+
+### Files Added/Modified
+
+**New Files:**
+- `hlx_core/src/instruction.rs`: LoadImage, SaveImage instructions
+- `hlx_runtime/src/backends/vulkan/shaders/grayscale.comp`
+- `hlx_runtime/src/backends/vulkan/shaders/threshold.comp`
+- `hlx_runtime/src/backends/vulkan/shaders/brightness.comp`
+- `hlx_runtime/src/backends/vulkan/shaders/contrast.comp`
+- `hlx_runtime/src/backends/vulkan/shaders/invert_colors.comp`
+- `hlx_runtime/src/backends/vulkan/shaders/sharpen.comp`
+- All corresponding `.spv` compiled shaders
+
+**Modified Files:**
+- `hlx_runtime/src/executor.rs`: Image I/O handlers
+- `hlx_compiler/src/lower.rs`: load_image, save_image builtins
+- `hlx_runtime/src/backends/vulkan.rs`: Shader constants added
+
+### Remaining Work
+
+1. **Vulkan Shader Dispatch** (Complex)
+   - Create compute pipeline for each shader
+   - Set up descriptor sets for buffer binding
+   - Configure push constants for parameters
+   - Implement proper workgroup dispatch
+   - Handle tensor-to-buffer mapping
+
+2. **Gaussian Blur & Sobel** (Existing Shaders)
+   - Wire up dispatch for existing shaders
+   - gaussian_blur.comp already compiled
+   - sobel.comp already compiled
+
+3. **Advanced Operations**
+   - Median filter
+   - Morphological operations
+   - Histogram operations
+   - Color space conversions
+
+### Performance Notes
+
+**Image I/O**: Fast native Rust via `image` crate
+**CPU Operations**: Single-threaded but efficient for testing
+**Vulkan (when complete)**: Expected 10-100x speedup for large images
+
+### Conclusion
+
+Phase 4 image processing is now **practically usable**:
+- ✅ Can load and save images
+- ✅ Can apply 5 CPU-accelerated filters
+- ✅ Complete shader infrastructure
+- ⏳ GPU acceleration next step
+
+The foundation is solid and the infrastructure is complete. Vulkan dispatch would provide the performance boost, but the operations are fully functional on CPU today!

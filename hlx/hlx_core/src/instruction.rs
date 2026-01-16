@@ -608,6 +608,24 @@ pub enum Instruction {
         delimiter: Register,  // Optional delimiter (defaults to ",")
     },
 
+    // === Image I/O Operations ===
+
+    /// Load image from file as tensor
+    /// Returns tensor with shape [height, width, channels]
+    /// Channels: 3 for RGB, 4 for RGBA
+    LoadImage {
+        out: Register,   // Tensor handle
+        path: Register,  // File path (PNG, JPEG, etc.)
+    },
+
+    /// Save tensor as image file
+    /// Tensor shape should be [height, width, channels]
+    SaveImage {
+        out: Register,    // Success boolean
+        tensor: Register, // Tensor handle
+        path: Register,   // File path
+    },
+
     // === Control Flow ===
     
     /// Conditional branch
@@ -1056,6 +1074,8 @@ impl Instruction {
             Instruction::WriteJson { out, .. } => Some(*out),
             Instruction::ReadCsv { out, .. } => Some(*out),
             Instruction::WriteCsv { out, .. } => Some(*out),
+            Instruction::LoadImage { out, .. } => Some(*out),
+            Instruction::SaveImage { out, .. } => Some(*out),
             Instruction::Return { .. } => None,
             Instruction::Break => None,
             Instruction::Continue => None,
@@ -1177,6 +1197,8 @@ impl Instruction {
             Instruction::WriteJson { path, value, .. } => vec![*path, *value],
             Instruction::ReadCsv { path, delimiter, .. } => vec![*path, *delimiter],
             Instruction::WriteCsv { path, data, delimiter, .. } => vec![*path, *data, *delimiter],
+            Instruction::LoadImage { path, .. } => vec![*path],
+            Instruction::SaveImage { tensor, path, .. } => vec![*tensor, *path],
             Instruction::If { cond, .. } => vec![*cond],
             Instruction::Jump { .. } => vec![],
             Instruction::Loop { cond, .. } => vec![*cond],
