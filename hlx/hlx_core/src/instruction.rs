@@ -98,6 +98,75 @@ pub enum Instruction {
         src: Register,
     },
 
+    // === Math Functions ===
+
+    /// Square root: out = sqrt(src)
+    Sqrt {
+        out: Register,
+        src: Register,
+    },
+
+    /// Power: out = base^exp
+    Pow {
+        out: Register,
+        base: Register,
+        exp: Register,
+    },
+
+    /// Sine: out = sin(src)
+    Sin {
+        out: Register,
+        src: Register,
+    },
+
+    /// Cosine: out = cos(src)
+    Cos {
+        out: Register,
+        src: Register,
+    },
+
+    /// Tangent: out = tan(src)
+    Tan {
+        out: Register,
+        src: Register,
+    },
+
+    /// Natural logarithm: out = ln(src)
+    Log {
+        out: Register,
+        src: Register,
+    },
+
+    /// Exponential: out = e^src
+    Exp {
+        out: Register,
+        src: Register,
+    },
+
+    /// Floor: out = floor(src)
+    Floor {
+        out: Register,
+        src: Register,
+    },
+
+    /// Ceiling: out = ceil(src)
+    Ceil {
+        out: Register,
+        src: Register,
+    },
+
+    /// Round: out = round(src)
+    Round {
+        out: Register,
+        src: Register,
+    },
+
+    /// Absolute value: out = abs(src)
+    Abs {
+        out: Register,
+        src: Register,
+    },
+
     // === Comparison Operations ===
     
     /// Equal: out = lhs == rhs
@@ -525,6 +594,17 @@ impl Instruction {
             Instruction::Div { out, .. } => Some(*out),
             Instruction::Mod { out, .. } => Some(*out),
             Instruction::Neg { out, .. } => Some(*out),
+            Instruction::Sqrt { out, .. } => Some(*out),
+            Instruction::Pow { out, .. } => Some(*out),
+            Instruction::Sin { out, .. } => Some(*out),
+            Instruction::Cos { out, .. } => Some(*out),
+            Instruction::Tan { out, .. } => Some(*out),
+            Instruction::Log { out, .. } => Some(*out),
+            Instruction::Exp { out, .. } => Some(*out),
+            Instruction::Floor { out, .. } => Some(*out),
+            Instruction::Ceil { out, .. } => Some(*out),
+            Instruction::Round { out, .. } => Some(*out),
+            Instruction::Abs { out, .. } => Some(*out),
             Instruction::Eq { out, .. } => Some(*out),
             Instruction::Ne { out, .. } => Some(*out),
             Instruction::Lt { out, .. } => Some(*out),
@@ -594,6 +674,17 @@ impl Instruction {
             Instruction::Div { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::Mod { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::Neg { src, .. } => vec![*src],
+            Instruction::Sqrt { src, .. } => vec![*src],
+            Instruction::Pow { base, exp, .. } => vec![*base, *exp],
+            Instruction::Sin { src, .. } => vec![*src],
+            Instruction::Cos { src, .. } => vec![*src],
+            Instruction::Tan { src, .. } => vec![*src],
+            Instruction::Log { src, .. } => vec![*src],
+            Instruction::Exp { src, .. } => vec![*src],
+            Instruction::Floor { src, .. } => vec![*src],
+            Instruction::Ceil { src, .. } => vec![*src],
+            Instruction::Round { src, .. } => vec![*src],
+            Instruction::Abs { src, .. } => vec![*src],
             Instruction::Eq { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::Ne { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::Lt { lhs, rhs, .. } => vec![*lhs, *rhs],

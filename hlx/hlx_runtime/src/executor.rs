@@ -500,7 +500,76 @@ impl ExecutionContext {
                 };
                 self.set_reg(*out, result);
             }
-            
+
+            // === Math Functions ===
+
+            Instruction::Sqrt { out, src } => {
+                let a = self.get_reg(*src)?;
+                let result = backend.scalar_sqrt(a)?;
+                self.set_reg(*out, result);
+            }
+
+            Instruction::Pow { out, base, exp } => {
+                let b = self.get_reg(*base)?;
+                let e = self.get_reg(*exp)?;
+                let result = backend.scalar_pow(b, e)?;
+                self.set_reg(*out, result);
+            }
+
+            Instruction::Sin { out, src } => {
+                let a = self.get_reg(*src)?;
+                let result = backend.scalar_sin(a)?;
+                self.set_reg(*out, result);
+            }
+
+            Instruction::Cos { out, src } => {
+                let a = self.get_reg(*src)?;
+                let result = backend.scalar_cos(a)?;
+                self.set_reg(*out, result);
+            }
+
+            Instruction::Tan { out, src } => {
+                let a = self.get_reg(*src)?;
+                let result = backend.scalar_tan(a)?;
+                self.set_reg(*out, result);
+            }
+
+            Instruction::Log { out, src } => {
+                let a = self.get_reg(*src)?;
+                let result = backend.scalar_log(a)?;
+                self.set_reg(*out, result);
+            }
+
+            Instruction::Exp { out, src } => {
+                let a = self.get_reg(*src)?;
+                let result = backend.scalar_exp(a)?;
+                self.set_reg(*out, result);
+            }
+
+            Instruction::Floor { out, src } => {
+                let a = self.get_reg(*src)?;
+                let result = backend.scalar_floor(a)?;
+                self.set_reg(*out, result);
+            }
+
+            Instruction::Ceil { out, src } => {
+                let a = self.get_reg(*src)?;
+                let result = backend.scalar_ceil(a)?;
+                self.set_reg(*out, result);
+            }
+
+            Instruction::Round { out, src } => {
+                let a = self.get_reg(*src)?;
+                let result = backend.scalar_round(a)?;
+                self.set_reg(*out, result);
+            }
+
+            Instruction::Abs { out, src } => {
+                let a = self.get_reg(*src)?;
+                let result = backend.scalar_abs(a)?;
+                self.set_reg(*out, result);
+            }
+
             // === Comparison ===
             Instruction::Eq { out, lhs, rhs } => {
                 let a = self.get_reg(*lhs)?;
@@ -1664,17 +1733,10 @@ impl ExecutionContext {
                 // Get raw tensor data
                 let tensor_handle = crate::backend::TensorHandle(handle.parse::<u64>().map_err(|_| HlxError::ValidationFail { message: "Invalid tensor handle".to_string() })?);
                 let data = backend.read_tensor(tensor_handle)?;
-                let i32_data: &[i32] = bytemuck::cast_slice(&data);
-                
-                // Convert i32 back to u8 for the pipe
-                let mut u8_data = Vec::with_capacity(i32_data.len());
-                for &val in i32_data {
-                    u8_data.push(val.clamp(0, 255) as u8);
-                }
                 
                 if let Some(child) = self.pipes.get_mut(&pipe_id) {
                     if let Some(stdin) = child.stdin.as_mut() {
-                        stdin.write_all(&u8_data).map_err(|e| HlxError::BackendError { message: format!("Pipe write failed: {}", e) })?;
+                        stdin.write_all(&data).map_err(|e| HlxError::BackendError { message: format!("Pipe write failed: {}", e) })?;
                         stdin.flush().ok();
                     }
                 }

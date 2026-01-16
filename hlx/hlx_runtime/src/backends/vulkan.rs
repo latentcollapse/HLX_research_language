@@ -106,7 +106,7 @@ impl VulkanBackend {
                             None
                         }
                     })
-            }).ok_or(HlxError::BackendError { message: "No compute-capable GPU found".to_string() })?;
+            }).ok_or(HlxError::BackendError { message: "No compute-capable GPU got".to_string() })?;
 
             // Detect vendor for tuning
             let props = instance.get_physical_device_properties(pdevice);
@@ -591,6 +591,91 @@ impl Backend for VulkanBackend {
     fn scalar_mul(&mut self, a: &Value, b: &Value) -> Result<Value> { a.mul(b) }
     fn scalar_div(&mut self, a: &Value, b: &Value) -> Result<Value> { a.div(b) }
     fn scalar_mod(&mut self, a: &Value, b: &Value) -> Result<Value> { a.rem(b) }
+
+    // Math functions
+    fn scalar_sqrt(&mut self, a: &Value) -> Result<Value> {
+        match a {
+            Value::Float(f) => Ok(Value::Float((*f as f64).sqrt())),
+            Value::Integer(i) => Ok(Value::Float((*i as f64).sqrt())),
+            _ => Err(hlx_core::HlxError::TypeError { expected: "number".to_string(), got: a.type_name().to_string() }),
+        }
+    }
+    fn scalar_pow(&mut self, base: &Value, exp: &Value) -> Result<Value> {
+        match (base, exp) {
+            (Value::Float(b), Value::Float(e)) => Ok(Value::Float((*b as f64).powf(*e as f64))),
+            (Value::Float(b), Value::Integer(e)) => Ok(Value::Float((*b as f64).powi(*e as i32))),
+            (Value::Integer(b), Value::Integer(e)) => {
+                if *e >= 0 { Ok(Value::Integer((*b as i64).pow(*e as u32))) }
+                else { Ok(Value::Float((*b as f64).powf(*e as f64))) }
+            }
+            (Value::Integer(b), Value::Float(e)) => Ok(Value::Float((*b as f64).powf(*e as f64))),
+            _ => Err(hlx_core::HlxError::TypeError { expected: "number".to_string(), got: base.type_name().to_string() }),
+        }
+    }
+    fn scalar_sin(&mut self, a: &Value) -> Result<Value> {
+        match a {
+            Value::Float(f) => Ok(Value::Float((*f as f64).sin())),
+            Value::Integer(i) => Ok(Value::Float((*i as f64).sin())),
+            _ => Err(hlx_core::HlxError::TypeError { expected: "number".to_string(), got: a.type_name().to_string() }),
+        }
+    }
+    fn scalar_cos(&mut self, a: &Value) -> Result<Value> {
+        match a {
+            Value::Float(f) => Ok(Value::Float((*f as f64).cos())),
+            Value::Integer(i) => Ok(Value::Float((*i as f64).cos())),
+            _ => Err(hlx_core::HlxError::TypeError { expected: "number".to_string(), got: a.type_name().to_string() }),
+        }
+    }
+    fn scalar_tan(&mut self, a: &Value) -> Result<Value> {
+        match a {
+            Value::Float(f) => Ok(Value::Float((*f as f64).tan())),
+            Value::Integer(i) => Ok(Value::Float((*i as f64).tan())),
+            _ => Err(hlx_core::HlxError::TypeError { expected: "number".to_string(), got: a.type_name().to_string() }),
+        }
+    }
+    fn scalar_log(&mut self, a: &Value) -> Result<Value> {
+        match a {
+            Value::Float(f) => Ok(Value::Float((*f as f64).ln())),
+            Value::Integer(i) => Ok(Value::Float((*i as f64).ln())),
+            _ => Err(hlx_core::HlxError::TypeError { expected: "number".to_string(), got: a.type_name().to_string() }),
+        }
+    }
+    fn scalar_exp(&mut self, a: &Value) -> Result<Value> {
+        match a {
+            Value::Float(f) => Ok(Value::Float((*f as f64).exp())),
+            Value::Integer(i) => Ok(Value::Float((*i as f64).exp())),
+            _ => Err(hlx_core::HlxError::TypeError { expected: "number".to_string(), got: a.type_name().to_string() }),
+        }
+    }
+    fn scalar_floor(&mut self, a: &Value) -> Result<Value> {
+        match a {
+            Value::Float(f) => Ok(Value::Integer((*f as f64).floor() as i64)),
+            Value::Integer(i) => Ok(Value::Integer(*i)),
+            _ => Err(hlx_core::HlxError::TypeError { expected: "number".to_string(), got: a.type_name().to_string() }),
+        }
+    }
+    fn scalar_ceil(&mut self, a: &Value) -> Result<Value> {
+        match a {
+            Value::Float(f) => Ok(Value::Integer((*f as f64).ceil() as i64)),
+            Value::Integer(i) => Ok(Value::Integer(*i)),
+            _ => Err(hlx_core::HlxError::TypeError { expected: "number".to_string(), got: a.type_name().to_string() }),
+        }
+    }
+    fn scalar_round(&mut self, a: &Value) -> Result<Value> {
+        match a {
+            Value::Float(f) => Ok(Value::Integer((*f as f64).round() as i64)),
+            Value::Integer(i) => Ok(Value::Integer(*i)),
+            _ => Err(hlx_core::HlxError::TypeError { expected: "number".to_string(), got: a.type_name().to_string() }),
+        }
+    }
+    fn scalar_abs(&mut self, a: &Value) -> Result<Value> {
+        match a {
+            Value::Float(f) => Ok(Value::Float((*f as f64).abs())),
+            Value::Integer(i) => Ok(Value::Integer((*i as i64).abs())),
+            _ => Err(hlx_core::HlxError::TypeError { expected: "number".to_string(), got: a.type_name().to_string() }),
+        }
+    }
+
     fn scalar_eq(&mut self, a: &Value, b: &Value) -> Result<Value> { Ok(Value::Boolean(a == b)) }
     fn scalar_ne(&mut self, a: &Value, b: &Value) -> Result<Value> { Ok(Value::Boolean(a != b)) }
     fn scalar_lt(&mut self, a: &Value, b: &Value) -> Result<Value> { Ok(Value::Boolean(a.lt(b)?)) }
@@ -690,10 +775,10 @@ impl Backend for VulkanBackend {
     fn matmul(&mut self, a: TensorHandle, b: TensorHandle, out: TensorHandle) -> Result<()> {
         // GEMM: C = A @ B (alpha=1.0, beta=0.0)
         let meta_a = self.metadata.get(&a.0).ok_or(HlxError::BackendError {
-            message: "Tensor A not found".to_string()
+            message: "Tensor A not got".to_string()
         })?;
         let meta_b = self.metadata.get(&b.0).ok_or(HlxError::BackendError {
-            message: "Tensor B not found".to_string()
+            message: "Tensor B not got".to_string()
         })?;
 
         // Get dimensions: A is (M x K), B is (K x N), C is (M x N)

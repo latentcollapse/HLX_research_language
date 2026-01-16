@@ -798,6 +798,62 @@ impl LoweringContext {
 
                     self.emit(Instruction::ArrayAlloc { out, size: arg_regs[0], element_type });
                     Ok(out)
+                // Math function builtins
+                } else if name == "sqrt" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "sqrt takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Sqrt { out, src: arg_regs[0] });
+                    Ok(out)
+                } else if name == "pow" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "pow takes 2 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Pow { out, base: arg_regs[0], exp: arg_regs[1] });
+                    Ok(out)
+                } else if name == "sin" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "sin takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Sin { out, src: arg_regs[0] });
+                    Ok(out)
+                } else if name == "cos" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "cos takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Cos { out, src: arg_regs[0] });
+                    Ok(out)
+                } else if name == "tan" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "tan takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Tan { out, src: arg_regs[0] });
+                    Ok(out)
+                } else if name == "log" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "log takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Log { out, src: arg_regs[0] });
+                    Ok(out)
+                } else if name == "exp" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "exp takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Exp { out, src: arg_regs[0] });
+                    Ok(out)
+                } else if name == "floor" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "floor takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Floor { out, src: arg_regs[0] });
+                    Ok(out)
+                } else if name == "ceil" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "ceil takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Ceil { out, src: arg_regs[0] });
+                    Ok(out)
+                } else if name == "round" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "round takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Round { out, src: arg_regs[0] });
+                    Ok(out)
+                } else if name == "abs" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "abs takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Abs { out, src: arg_regs[0] });
+                    Ok(out)
                                 } else {
                                     let out = self.alloc_reg();
                                     self.emit(Instruction::Call { out, func: name, args: arg_regs });

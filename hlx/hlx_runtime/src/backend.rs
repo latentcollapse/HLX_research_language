@@ -104,6 +104,41 @@ pub trait Backend: Send + Sync {
     /// Modulo two scalars
     fn scalar_mod(&mut self, a: &Value, b: &Value) -> Result<Value>;
 
+    // === Math Functions ===
+
+    /// Square root
+    fn scalar_sqrt(&mut self, a: &Value) -> Result<Value>;
+
+    /// Power
+    fn scalar_pow(&mut self, base: &Value, exp: &Value) -> Result<Value>;
+
+    /// Sine
+    fn scalar_sin(&mut self, a: &Value) -> Result<Value>;
+
+    /// Cosine
+    fn scalar_cos(&mut self, a: &Value) -> Result<Value>;
+
+    /// Tangent
+    fn scalar_tan(&mut self, a: &Value) -> Result<Value>;
+
+    /// Natural logarithm
+    fn scalar_log(&mut self, a: &Value) -> Result<Value>;
+
+    /// Exponential
+    fn scalar_exp(&mut self, a: &Value) -> Result<Value>;
+
+    /// Floor
+    fn scalar_floor(&mut self, a: &Value) -> Result<Value>;
+
+    /// Ceiling
+    fn scalar_ceil(&mut self, a: &Value) -> Result<Value>;
+
+    /// Round
+    fn scalar_round(&mut self, a: &Value) -> Result<Value>;
+
+    /// Absolute value
+    fn scalar_abs(&mut self, a: &Value) -> Result<Value>;
+
     // === Comparison Operations ===
     
     fn scalar_eq(&mut self, a: &Value, b: &Value) -> Result<Value>;
