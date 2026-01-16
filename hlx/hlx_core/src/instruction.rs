@@ -533,6 +533,174 @@ pub enum Instruction {
         value: Register,
     },
 
+    // === String Operations ===
+
+    /// String concatenation: out = lhs + rhs
+    StrConcat {
+        out: Register,
+        lhs: Register,
+        rhs: Register,
+    },
+
+    /// String length
+    StrLen {
+        out: Register,
+        src: Register,
+    },
+
+    /// Substring extraction: out = src[start..start+len]
+    Substring {
+        out: Register,
+        src: Register,
+        start: Register,
+        length: Register,
+    },
+
+    /// Find index of substring: out = haystack.find(needle) or -1
+    IndexOf {
+        out: Register,
+        haystack: Register,
+        needle: Register,
+    },
+
+    /// Replace all occurrences: out = src.replace(from, to)
+    StrReplace {
+        out: Register,
+        src: Register,
+        from: Register,
+        to: Register,
+    },
+
+    /// Split string by delimiter: out = src.split(delimiter)
+    StrSplit {
+        out: Register,
+        src: Register,
+        delimiter: Register,
+    },
+
+    /// Join array of strings: out = arr.join(separator)
+    StrJoin {
+        out: Register,
+        array: Register,
+        separator: Register,
+    },
+
+    /// To uppercase
+    ToUpper {
+        out: Register,
+        src: Register,
+    },
+
+    /// To lowercase
+    ToLower {
+        out: Register,
+        src: Register,
+    },
+
+    /// Trim whitespace
+    StrTrim {
+        out: Register,
+        src: Register,
+    },
+
+    /// Check if starts with prefix
+    StartsWith {
+        out: Register,
+        src: Register,
+        prefix: Register,
+    },
+
+    /// Check if ends with suffix
+    EndsWith {
+        out: Register,
+        src: Register,
+        suffix: Register,
+    },
+
+    /// Repeat string n times
+    StrRepeat {
+        out: Register,
+        src: Register,
+        count: Register,
+    },
+
+    /// Reverse string
+    StrReverse {
+        out: Register,
+        src: Register,
+    },
+
+    /// Get character at index
+    CharAt {
+        out: Register,
+        src: Register,
+        index: Register,
+    },
+
+    // === Array Operations ===
+
+    /// Push element to end of array (returns new array)
+    ArrayPush {
+        out: Register,
+        array: Register,
+        element: Register,
+    },
+
+    /// Pop element from end of array (returns [new_array, element])
+    ArrayPop {
+        array_out: Register,
+        element_out: Register,
+        array: Register,
+    },
+
+    /// Remove first element (returns [new_array, element])
+    ArrayShift {
+        array_out: Register,
+        element_out: Register,
+        array: Register,
+    },
+
+    /// Prepend element to start of array (returns new array)
+    ArrayUnshift {
+        out: Register,
+        array: Register,
+        element: Register,
+    },
+
+    /// Slice array: out = arr[start..start+len]
+    ArraySlice {
+        out: Register,
+        array: Register,
+        start: Register,
+        length: Register,
+    },
+
+    /// Concatenate arrays: out = lhs + rhs
+    ArrayConcat {
+        out: Register,
+        lhs: Register,
+        rhs: Register,
+    },
+
+    /// Reverse array
+    ArrayReverse {
+        out: Register,
+        array: Register,
+    },
+
+    /// Sort array (in-place, persistent)
+    ArraySort {
+        out: Register,
+        array: Register,
+    },
+
+    /// Find element in array (returns index or -1)
+    ArrayFind {
+        out: Register,
+        array: Register,
+        element: Register,
+    },
+
     // === Debug/Introspection ===
     
     /// Print value (deterministic output)
@@ -605,6 +773,30 @@ impl Instruction {
             Instruction::Ceil { out, .. } => Some(*out),
             Instruction::Round { out, .. } => Some(*out),
             Instruction::Abs { out, .. } => Some(*out),
+            Instruction::StrConcat { out, .. } => Some(*out),
+            Instruction::StrLen { out, .. } => Some(*out),
+            Instruction::Substring { out, .. } => Some(*out),
+            Instruction::IndexOf { out, .. } => Some(*out),
+            Instruction::StrReplace { out, .. } => Some(*out),
+            Instruction::StrSplit { out, .. } => Some(*out),
+            Instruction::StrJoin { out, .. } => Some(*out),
+            Instruction::ToUpper { out, .. } => Some(*out),
+            Instruction::ToLower { out, .. } => Some(*out),
+            Instruction::StrTrim { out, .. } => Some(*out),
+            Instruction::StartsWith { out, .. } => Some(*out),
+            Instruction::EndsWith { out, .. } => Some(*out),
+            Instruction::StrRepeat { out, .. } => Some(*out),
+            Instruction::StrReverse { out, .. } => Some(*out),
+            Instruction::CharAt { out, .. } => Some(*out),
+            Instruction::ArrayPush { out, .. } => Some(*out),
+            Instruction::ArrayPop { array_out, .. } => Some(*array_out),
+            Instruction::ArrayShift { array_out, .. } => Some(*array_out),
+            Instruction::ArrayUnshift { out, .. } => Some(*out),
+            Instruction::ArraySlice { out, .. } => Some(*out),
+            Instruction::ArrayConcat { out, .. } => Some(*out),
+            Instruction::ArrayReverse { out, .. } => Some(*out),
+            Instruction::ArraySort { out, .. } => Some(*out),
+            Instruction::ArrayFind { out, .. } => Some(*out),
             Instruction::Eq { out, .. } => Some(*out),
             Instruction::Ne { out, .. } => Some(*out),
             Instruction::Lt { out, .. } => Some(*out),
@@ -685,6 +877,30 @@ impl Instruction {
             Instruction::Ceil { src, .. } => vec![*src],
             Instruction::Round { src, .. } => vec![*src],
             Instruction::Abs { src, .. } => vec![*src],
+            Instruction::StrConcat { lhs, rhs, .. } => vec![*lhs, *rhs],
+            Instruction::StrLen { src, .. } => vec![*src],
+            Instruction::Substring { src, start, length, .. } => vec![*src, *start, *length],
+            Instruction::IndexOf { haystack, needle, .. } => vec![*haystack, *needle],
+            Instruction::StrReplace { src, from, to, .. } => vec![*src, *from, *to],
+            Instruction::StrSplit { src, delimiter, .. } => vec![*src, *delimiter],
+            Instruction::StrJoin { array, separator, .. } => vec![*array, *separator],
+            Instruction::ToUpper { src, .. } => vec![*src],
+            Instruction::ToLower { src, .. } => vec![*src],
+            Instruction::StrTrim { src, .. } => vec![*src],
+            Instruction::StartsWith { src, prefix, .. } => vec![*src, *prefix],
+            Instruction::EndsWith { src, suffix, .. } => vec![*src, *suffix],
+            Instruction::StrRepeat { src, count, .. } => vec![*src, *count],
+            Instruction::StrReverse { src, .. } => vec![*src],
+            Instruction::CharAt { src, index, .. } => vec![*src, *index],
+            Instruction::ArrayPush { array, element, .. } => vec![*array, *element],
+            Instruction::ArrayPop { array, .. } => vec![*array],
+            Instruction::ArrayShift { array, .. } => vec![*array],
+            Instruction::ArrayUnshift { array, element, .. } => vec![*array, *element],
+            Instruction::ArraySlice { array, start, length, .. } => vec![*array, *start, *length],
+            Instruction::ArrayConcat { lhs, rhs, .. } => vec![*lhs, *rhs],
+            Instruction::ArrayReverse { array, .. } => vec![*array],
+            Instruction::ArraySort { array, .. } => vec![*array],
+            Instruction::ArrayFind { array, element, .. } => vec![*array, *element],
             Instruction::Eq { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::Ne { lhs, rhs, .. } => vec![*lhs, *rhs],
             Instruction::Lt { lhs, rhs, .. } => vec![*lhs, *rhs],

@@ -1,0 +1,31 @@
+// Simple string operations test
+program test_strings_simple {
+    fn main() {
+        print("=== Testing String Operations ===");
+
+        // String concatenation
+        let s1 = "Hello, ";
+        let s2 = "World!";
+        let s3 = concat(s1, s2);
+        print(s3);
+
+        // String length
+        let slen = strlen(s3);
+        print(slen);
+
+        // Substring
+        let sub = substring(s3, 0, 5);
+        print(sub);
+
+        // Index of
+        let sidx = index_of(s3, "World");
+        print(sidx);
+
+        // Replace
+        let replaced = replace(s3, "World", "HLX");
+        print(replaced);
+
+        print("=== Done ===");
+        return 0;
+    }
+}

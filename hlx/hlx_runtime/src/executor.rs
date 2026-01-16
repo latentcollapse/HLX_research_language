@@ -744,7 +744,333 @@ impl ExecutionContext {
                 // Write back the mutated (persistent) value to the register
                 self.set_reg(*container, new_container_val);
             }
-            
+
+            // === String Operations ===
+
+            Instruction::StrConcat { out, lhs, rhs } => {
+                let l = self.get_reg(*lhs)?;
+                let r = self.get_reg(*rhs)?;
+                match (l, r) {
+                    (Value::String(a), Value::String(b)) => {
+                        self.set_reg(*out, Value::String(format!("{}{}", a, b)));
+                    }
+                    _ => {
+                        // Allow concatenating any values by converting to strings
+                        self.set_reg(*out, Value::String(format!("{}{}", l, r)));
+                    }
+                }
+            }
+
+            Instruction::StrLen { out, src } => {
+                let s = self.get_reg(*src)?;
+                match s {
+                    Value::String(s) => self.set_reg(*out, Value::Integer(s.len() as i64)),
+                    _ => return Err(HlxError::TypeError {
+                        expected: "string".to_string(),
+                        got: s.type_name().to_string(),
+                    }),
+                }
+            }
+
+            Instruction::Substring { out, src, start, length } => {
+                let s = self.get_reg(*src)?;
+                let start_idx = match self.get_reg(*start)? {
+                    Value::Integer(i) => *i as usize,
+                    v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }),
+                };
+                let len = match self.get_reg(*length)? {
+                    Value::Integer(i) => *i as usize,
+                    v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }),
+                };
+                match s {
+                    Value::String(s) => {
+                        let end = (start_idx + len).min(s.len());
+                        if start_idx > s.len() {
+                            self.set_reg(*out, Value::String(String::new()));
+                        } else {
+                            self.set_reg(*out, Value::String(s[start_idx..end].to_string()));
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "string".to_string(), got: s.type_name().to_string() }),
+                }
+            }
+
+            Instruction::IndexOf { out, haystack, needle } => {
+                let h = self.get_reg(*haystack)?;
+                let n = self.get_reg(*needle)?;
+                match (h, n) {
+                    (Value::String(h), Value::String(n)) => {
+                        match h.find(n.as_str()) {
+                            Some(i) => self.set_reg(*out, Value::Integer(i as i64)),
+                            None => self.set_reg(*out, Value::Integer(-1)),
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "string, string".to_string(), got: format!("{}, {}", h.type_name(), n.type_name()) }),
+                }
+            }
+
+            Instruction::StrReplace { out, src, from, to } => {
+                let s = self.get_reg(*src)?;
+                let f = self.get_reg(*from)?;
+                let t = self.get_reg(*to)?;
+                match (s, f, t) {
+                    (Value::String(s), Value::String(f), Value::String(t)) => {
+                        self.set_reg(*out, Value::String(s.replace(f.as_str(), t.as_str())));
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "string, string, string".to_string(), got: format!("{}, {}, {}", s.type_name(), f.type_name(), t.type_name()) }),
+                }
+            }
+
+            Instruction::StrSplit { out, src, delimiter } => {
+                let s = self.get_reg(*src)?;
+                let d = self.get_reg(*delimiter)?;
+                match (s, d) {
+                    (Value::String(s), Value::String(d)) => {
+                        let parts: Vector<Value> = s.split(d.as_str())
+                            .map(|p| Value::String(p.to_string()))
+                            .collect();
+                        self.set_reg(*out, Value::Array(parts));
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "string, string".to_string(), got: format!("{}, {}", s.type_name(), d.type_name()) }),
+                }
+            }
+
+            Instruction::StrJoin { out, array, separator } => {
+                let a = self.get_reg(*array)?;
+                let s = self.get_reg(*separator)?;
+                match (a, s) {
+                    (Value::Array(a), Value::String(s)) => {
+                        let strings: Vec<String> = a.iter()
+                            .map(|v| v.to_string())
+                            .collect();
+                        self.set_reg(*out, Value::String(strings.join(s.as_str())));
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "array, string".to_string(), got: format!("{}, {}", a.type_name(), s.type_name()) }),
+                }
+            }
+
+            Instruction::ToUpper { out, src } => {
+                let s = self.get_reg(*src)?;
+                self.set_reg(*out, Value::String(s.to_string().to_uppercase()));
+            }
+
+            Instruction::ToLower { out, src } => {
+                let s = self.get_reg(*src)?;
+                self.set_reg(*out, Value::String(s.to_string().to_lowercase()));
+            }
+
+            Instruction::StrTrim { out, src } => {
+                let s = self.get_reg(*src)?;
+                match s {
+                    Value::String(s) => self.set_reg(*out, Value::String(s.trim().to_string())),
+                    _ => self.set_reg(*out, Value::String(s.to_string().trim().to_string())),
+                }
+            }
+
+            Instruction::StartsWith { out, src, prefix } => {
+                let s = self.get_reg(*src)?;
+                let p = self.get_reg(*prefix)?;
+                let s_str = s.to_string();
+                let p_str = p.to_string();
+                self.set_reg(*out, Value::Boolean(s_str.starts_with(&p_str)));
+            }
+
+            Instruction::EndsWith { out, src, suffix } => {
+                let s = self.get_reg(*src)?;
+                let suf = self.get_reg(*suffix)?;
+                let s_str = s.to_string();
+                let suf_str = suf.to_string();
+                self.set_reg(*out, Value::Boolean(s_str.ends_with(&suf_str)));
+            }
+
+            Instruction::StrRepeat { out, src, count } => {
+                let s = self.get_reg(*src)?;
+                let c = self.get_reg(*count)?;
+                match (s, c) {
+                    (Value::String(s), Value::Integer(c)) => {
+                        if *c < 0 {
+                            return Err(HlxError::ValidationFail { message: "repeat count must be non-negative".to_string() });
+                        }
+                        self.set_reg(*out, Value::String(s.repeat(*c as usize)));
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "string, integer".to_string(), got: format!("{}, {}", s.type_name(), c.type_name()) }),
+                }
+            }
+
+            Instruction::StrReverse { out, src } => {
+                let s = self.get_reg(*src)?;
+                match s {
+                    Value::String(s) => {
+                        let reversed: String = s.chars().rev().collect();
+                        self.set_reg(*out, Value::String(reversed));
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "string".to_string(), got: s.type_name().to_string() }),
+                }
+            }
+
+            Instruction::CharAt { out, src, index } => {
+                let s = self.get_reg(*src)?;
+                let i = self.get_reg(*index)?;
+                match (s, i) {
+                    (Value::String(s), Value::Integer(i)) => {
+                        let idx = *i as usize;
+                        match s.chars().nth(idx) {
+                            Some(c) => self.set_reg(*out, Value::String(c.to_string())),
+                            None => return Err(HlxError::IndexOutOfBounds { index: idx, len: s.chars().count() }),
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "string, integer".to_string(), got: format!("{}, {}", s.type_name(), i.type_name()) }),
+                }
+            }
+
+            // === Array Operations ===
+
+            Instruction::ArrayPush { out, array, element } => {
+                let arr = self.get_reg(*array)?;
+                let elem = self.get_reg(*element)?.clone();
+                match arr {
+                    Value::Array(arr) => {
+                        let mut new_arr = arr.clone();
+                        new_arr.push_back(elem);
+                        self.set_reg(*out, Value::Array(new_arr));
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "array".to_string(), got: arr.type_name().to_string() }),
+                }
+            }
+
+            Instruction::ArrayPop { array_out, element_out, array } => {
+                let arr = self.get_reg(*array)?;
+                match arr {
+                    Value::Array(arr) => {
+                        if arr.is_empty() {
+                            return Err(HlxError::ValidationFail { message: "cannot pop from empty array".to_string() });
+                        }
+                        let mut new_arr = arr.clone();
+                        let elem = new_arr.pop_back().unwrap();
+                        self.set_reg(*array_out, Value::Array(new_arr));
+                        self.set_reg(*element_out, elem);
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "array".to_string(), got: arr.type_name().to_string() }),
+                }
+            }
+
+            Instruction::ArrayShift { array_out, element_out, array } => {
+                let arr = self.get_reg(*array)?;
+                match arr {
+                    Value::Array(arr) => {
+                        if arr.is_empty() {
+                            return Err(HlxError::ValidationFail { message: "cannot shift from empty array".to_string() });
+                        }
+                        let mut new_arr = arr.clone();
+                        let elem = new_arr.pop_front().unwrap();
+                        self.set_reg(*array_out, Value::Array(new_arr));
+                        self.set_reg(*element_out, elem);
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "array".to_string(), got: arr.type_name().to_string() }),
+                }
+            }
+
+            Instruction::ArrayUnshift { out, array, element } => {
+                let arr = self.get_reg(*array)?;
+                let elem = self.get_reg(*element)?.clone();
+                match arr {
+                    Value::Array(arr) => {
+                        let mut new_arr = arr.clone();
+                        new_arr.push_front(elem);
+                        self.set_reg(*out, Value::Array(new_arr));
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "array".to_string(), got: arr.type_name().to_string() }),
+                }
+            }
+
+            Instruction::ArraySlice { out, array, start, length } => {
+                let arr = self.get_reg(*array)?;
+                let start_idx = match self.get_reg(*start)? {
+                    Value::Integer(i) => *i as usize,
+                    v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }),
+                };
+                let len = match self.get_reg(*length)? {
+                    Value::Integer(i) => *i as usize,
+                    v => return Err(HlxError::TypeError { expected: "integer".to_string(), got: v.type_name().to_string() }),
+                };
+                match arr {
+                    Value::Array(arr) => {
+                        let end = (start_idx + len).min(arr.len());
+                        if start_idx > arr.len() {
+                            self.set_reg(*out, Value::Array(Vector::new()));
+                        } else {
+                            let sliced: Vector<Value> = arr.iter().skip(start_idx).take(end - start_idx).cloned().collect();
+                            self.set_reg(*out, Value::Array(sliced));
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "array".to_string(), got: arr.type_name().to_string() }),
+                }
+            }
+
+            Instruction::ArrayConcat { out, lhs, rhs } => {
+                let l = self.get_reg(*lhs)?;
+                let r = self.get_reg(*rhs)?;
+                match (l, r) {
+                    (Value::Array(l), Value::Array(r)) => {
+                        let mut new_arr = l.clone();
+                        for elem in r.iter() {
+                            new_arr.push_back(elem.clone());
+                        }
+                        self.set_reg(*out, Value::Array(new_arr));
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "array, array".to_string(), got: format!("{}, {}", l.type_name(), r.type_name()) }),
+                }
+            }
+
+            Instruction::ArrayReverse { out, array } => {
+                let arr = self.get_reg(*array)?;
+                match arr {
+                    Value::Array(arr) => {
+                        let reversed: Vector<Value> = arr.iter().rev().cloned().collect();
+                        self.set_reg(*out, Value::Array(reversed));
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "array".to_string(), got: arr.type_name().to_string() }),
+                }
+            }
+
+            Instruction::ArraySort { out, array } => {
+                let arr = self.get_reg(*array)?;
+                match arr {
+                    Value::Array(arr) => {
+                        let mut vec: Vec<Value> = arr.iter().cloned().collect();
+                        vec.sort_by(|a, b| {
+                            // Simple comparison - integers, floats, strings, etc.
+                            match (a, b) {
+                                (Value::Integer(x), Value::Integer(y)) => x.cmp(y),
+                                (Value::Float(x), Value::Float(y)) => {
+                                    x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
+                                }
+                                (Value::String(x), Value::String(y)) => x.cmp(y),
+                                (Value::Boolean(x), Value::Boolean(y)) => x.cmp(y),
+                                _ => std::cmp::Ordering::Equal, // Mixed types stay in place
+                            }
+                        });
+                        let sorted: Vector<Value> = vec.into_iter().collect();
+                        self.set_reg(*out, Value::Array(sorted));
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "array".to_string(), got: arr.type_name().to_string() }),
+                }
+            }
+
+            Instruction::ArrayFind { out, array, element } => {
+                let arr = self.get_reg(*array)?;
+                let elem = self.get_reg(*element)?;
+                match arr {
+                    Value::Array(arr) => {
+                        match arr.iter().position(|v| v == elem) {
+                            Some(i) => self.set_reg(*out, Value::Integer(i as i64)),
+                            None => self.set_reg(*out, Value::Integer(-1)),
+                        }
+                    }
+                    _ => return Err(HlxError::TypeError { expected: "array".to_string(), got: arr.type_name().to_string() }),
+                }
+            }
+
             // === Latent Space Operations ===
             Instruction::Collapse { handle_out, val } => {
                 let v = self.get_reg(*val)?.clone();

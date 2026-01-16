@@ -1,0 +1,38 @@
+// Simple array operations test
+program test_arrays_simple {
+    fn main() {
+        print("=== Testing Array Operations ===");
+
+        // Array push
+        let arr1 = [1, 2, 3];
+        print(arr1);
+
+        let arr2 = push(arr1, 4);
+        print(arr2);
+
+        // Array unshift
+        let arr3 = unshift(arr2, 0);
+        print(arr3);
+
+        // Array slice
+        let sliced = slice(arr3, 1, 3);
+        print(sliced);
+
+        // Array concat
+        let arr4 = [5, 6];
+        let concatenated = arr_concat(arr2, arr4);
+        print(concatenated);
+
+        // Array reverse
+        let rev = reverse(arr2);
+        print(rev);
+
+        // Array sort
+        let unsorted = [3, 1, 4, 1, 5, 9, 2, 6];
+        let sorted = sort(unsorted);
+        print(sorted);
+
+        print("=== Done ===");
+        return 0;
+    }
+}

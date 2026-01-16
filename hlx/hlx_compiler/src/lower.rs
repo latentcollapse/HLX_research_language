@@ -854,6 +854,136 @@ impl LoweringContext {
                     let out = self.alloc_reg();
                     self.emit(Instruction::Abs { out, src: arg_regs[0] });
                     Ok(out)
+                // String operation builtins
+                } else if name == "str_concat" || name == "concat" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "concat takes 2 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::StrConcat { out, lhs: arg_regs[0], rhs: arg_regs[1] });
+                    Ok(out)
+                } else if name == "str_len" || name == "strlen" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "strlen takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::StrLen { out, src: arg_regs[0] });
+                    Ok(out)
+                } else if name == "substring" {
+                    if arg_regs.len() != 3 { return Err(HlxError::ValidationFail { message: "substring takes 3 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Substring { out, src: arg_regs[0], start: arg_regs[1], length: arg_regs[2] });
+                    Ok(out)
+                } else if name == "index_of" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "index_of takes 2 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::IndexOf { out, haystack: arg_regs[0], needle: arg_regs[1] });
+                    Ok(out)
+                } else if name == "str_replace" || name == "replace" {
+                    if arg_regs.len() != 3 { return Err(HlxError::ValidationFail { message: "replace takes 3 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::StrReplace { out, src: arg_regs[0], from: arg_regs[1], to: arg_regs[2] });
+                    Ok(out)
+                } else if name == "split" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "split takes 2 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::StrSplit { out, src: arg_regs[0], delimiter: arg_regs[1] });
+                    Ok(out)
+                } else if name == "join" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "join takes 2 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::StrJoin { out, array: arg_regs[0], separator: arg_regs[1] });
+                    Ok(out)
+                } else if name == "to_upper" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "to_upper takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ToUpper { out, src: arg_regs[0] });
+                    Ok(out)
+                } else if name == "to_lower" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "to_lower takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ToLower { out, src: arg_regs[0] });
+                    Ok(out)
+                } else if name == "trim" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "trim takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::StrTrim { out, src: arg_regs[0] });
+                    Ok(out)
+                } else if name == "starts_with" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "starts_with takes 2 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::StartsWith { out, src: arg_regs[0], prefix: arg_regs[1] });
+                    Ok(out)
+                } else if name == "ends_with" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "ends_with takes 2 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::EndsWith { out, src: arg_regs[0], suffix: arg_regs[1] });
+                    Ok(out)
+                } else if name == "str_repeat" || name == "repeat" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "repeat takes 2 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::StrRepeat { out, src: arg_regs[0], count: arg_regs[1] });
+                    Ok(out)
+                } else if name == "str_reverse" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "str_reverse takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::StrReverse { out, src: arg_regs[0] });
+                    Ok(out)
+                } else if name == "char_at" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "char_at takes 2 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::CharAt { out, src: arg_regs[0], index: arg_regs[1] });
+                    Ok(out)
+                // Array operation builtins
+                } else if name == "arr_push" || name == "push" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "push takes 2 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ArrayPush { out, array: arg_regs[0], element: arg_regs[1] });
+                    Ok(out)
+                } else if name == "arr_pop" || name == "pop" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "pop takes 1 argument".to_string() }); }
+                    let array_out = self.alloc_reg();
+                    let element_out = self.alloc_reg();
+                    self.emit(Instruction::ArrayPop { array_out, element_out, array: arg_regs[0] });
+                    // Return array with element as second element
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ArrayCreate { out, elements: vec![array_out, element_out], element_type: None });
+                    Ok(out)
+                } else if name == "arr_shift" || name == "shift" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "shift takes 1 argument".to_string() }); }
+                    let array_out = self.alloc_reg();
+                    let element_out = self.alloc_reg();
+                    self.emit(Instruction::ArrayShift { array_out, element_out, array: arg_regs[0] });
+                    // Return array with element as second element
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ArrayCreate { out, elements: vec![array_out, element_out], element_type: None });
+                    Ok(out)
+                } else if name == "arr_unshift" || name == "unshift" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "unshift takes 2 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ArrayUnshift { out, array: arg_regs[0], element: arg_regs[1] });
+                    Ok(out)
+                } else if name == "arr_slice" || name == "slice" {
+                    if arg_regs.len() != 3 { return Err(HlxError::ValidationFail { message: "slice takes 3 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ArraySlice { out, array: arg_regs[0], start: arg_regs[1], length: arg_regs[2] });
+                    Ok(out)
+                } else if name == "arr_concat" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "arr_concat takes 2 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ArrayConcat { out, lhs: arg_regs[0], rhs: arg_regs[1] });
+                    Ok(out)
+                } else if name == "arr_reverse" || name == "reverse" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "reverse takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ArrayReverse { out, array: arg_regs[0] });
+                    Ok(out)
+                } else if name == "arr_sort" || name == "sort" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "sort takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ArraySort { out, array: arg_regs[0] });
+                    Ok(out)
+                } else if name == "arr_find" || name == "find" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "find takes 2 arguments".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::ArrayFind { out, array: arg_regs[0], element: arg_regs[1] });
+                    Ok(out)
                                 } else {
                                     let out = self.alloc_reg();
                                     self.emit(Instruction::Call { out, func: name, args: arg_regs });
