@@ -984,6 +984,48 @@ impl LoweringContext {
                     let out = self.alloc_reg();
                     self.emit(Instruction::ArrayFind { out, array: arg_regs[0], element: arg_regs[1] });
                     Ok(out)
+
+                // Image processing builtins
+                } else if name == "gaussian_blur" || name == "blur" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "gaussian_blur takes 2 arguments (image, sigma)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::GaussianBlur { out, input: arg_regs[0], sigma: arg_regs[1] });
+                    Ok(out)
+                } else if name == "sobel_edges" || name == "edge_detect" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "sobel_edges takes 2 arguments (image, threshold)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::SobelEdges { out, input: arg_regs[0], threshold: arg_regs[1] });
+                    Ok(out)
+                } else if name == "grayscale" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "grayscale takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Grayscale { out, input: arg_regs[0] });
+                    Ok(out)
+                } else if name == "threshold" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "threshold takes 2 arguments (image, value)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Threshold { out, input: arg_regs[0], value: arg_regs[1] });
+                    Ok(out)
+                } else if name == "brightness" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "brightness takes 2 arguments (image, factor)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Brightness { out, input: arg_regs[0], factor: arg_regs[1] });
+                    Ok(out)
+                } else if name == "contrast" {
+                    if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "contrast takes 2 arguments (image, factor)".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Contrast { out, input: arg_regs[0], factor: arg_regs[1] });
+                    Ok(out)
+                } else if name == "invert_colors" || name == "invert" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "invert_colors takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::InvertColors { out, input: arg_regs[0] });
+                    Ok(out)
+                } else if name == "sharpen" {
+                    if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "sharpen takes 1 argument".to_string() }); }
+                    let out = self.alloc_reg();
+                    self.emit(Instruction::Sharpen { out, input: arg_regs[0] });
+                    Ok(out)
                                 } else {
                                     let out = self.alloc_reg();
                                     self.emit(Instruction::Call { out, func: name, args: arg_regs });

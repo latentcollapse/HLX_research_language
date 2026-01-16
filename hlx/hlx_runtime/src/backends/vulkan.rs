@@ -1666,6 +1666,101 @@ impl Backend for VulkanBackend {
         Ok(())
     }
 
+    // === Image Processing Operations ===
+
+    fn gaussian_blur(
+        &mut self,
+        _input: TensorHandle,
+        _out: TensorHandle,
+        _sigma: &Value,
+    ) -> Result<()> {
+        // TODO: Dispatch gaussian_blur.comp shader
+        Err(HlxError::BackendError {
+            message: "gaussian_blur shader dispatch not yet implemented for Vulkan backend".to_string(),
+        })
+    }
+
+    fn sobel_edges(
+        &mut self,
+        _input: TensorHandle,
+        _out: TensorHandle,
+        _threshold: &Value,
+    ) -> Result<()> {
+        // TODO: Dispatch sobel.comp shader
+        Err(HlxError::BackendError {
+            message: "sobel_edges shader dispatch not yet implemented for Vulkan backend".to_string(),
+        })
+    }
+
+    fn grayscale(
+        &mut self,
+        _input: TensorHandle,
+        _out: TensorHandle,
+    ) -> Result<()> {
+        // TODO: Implement grayscale compute shader
+        Err(HlxError::BackendError {
+            message: "grayscale not yet implemented for Vulkan backend".to_string(),
+        })
+    }
+
+    fn threshold(
+        &mut self,
+        _input: TensorHandle,
+        _out: TensorHandle,
+        _value: &Value,
+    ) -> Result<()> {
+        // TODO: Implement threshold compute shader
+        Err(HlxError::BackendError {
+            message: "threshold not yet implemented for Vulkan backend".to_string(),
+        })
+    }
+
+    fn brightness(
+        &mut self,
+        _input: TensorHandle,
+        _out: TensorHandle,
+        _factor: &Value,
+    ) -> Result<()> {
+        // TODO: Implement brightness compute shader
+        Err(HlxError::BackendError {
+            message: "brightness not yet implemented for Vulkan backend".to_string(),
+        })
+    }
+
+    fn contrast(
+        &mut self,
+        _input: TensorHandle,
+        _out: TensorHandle,
+        _factor: &Value,
+    ) -> Result<()> {
+        // TODO: Implement contrast compute shader
+        Err(HlxError::BackendError {
+            message: "contrast not yet implemented for Vulkan backend".to_string(),
+        })
+    }
+
+    fn invert_colors(
+        &mut self,
+        _input: TensorHandle,
+        _out: TensorHandle,
+    ) -> Result<()> {
+        // TODO: Implement invert_colors compute shader
+        Err(HlxError::BackendError {
+            message: "invert_colors not yet implemented for Vulkan backend".to_string(),
+        })
+    }
+
+    fn sharpen(
+        &mut self,
+        _input: TensorHandle,
+        _out: TensorHandle,
+    ) -> Result<()> {
+        // TODO: Implement sharpen compute shader
+        Err(HlxError::BackendError {
+            message: "sharpen not yet implemented for Vulkan backend".to_string(),
+        })
+    }
+
     fn sync(&mut self) -> Result<()> {
         unsafe {
             self.device.device_wait_idle()

@@ -407,7 +407,7 @@ pub enum Instruction {
     },
 
     // === Optimizer Operations ===
-    
+
     /// Adam optimizer step
     /// Maps to adam_update.glsl
     AdamUpdate {
@@ -420,6 +420,67 @@ pub enum Instruction {
         beta2: f64,
         eps: f64,
         step: u64,       // For bias correction
+    },
+
+    // === Image Processing Operations ===
+
+    /// Gaussian blur filter
+    /// Maps to gaussian_blur.comp shader
+    GaussianBlur {
+        out: Register,
+        input: Register,
+        sigma: Register,  // Blur strength
+    },
+
+    /// Sobel edge detection
+    /// Maps to sobel.comp shader
+    SobelEdges {
+        out: Register,
+        input: Register,
+        threshold: Register,  // Edge threshold (0.0 to 1.0)
+    },
+
+    /// Convert RGB to grayscale
+    Grayscale {
+        out: Register,
+        input: Register,
+    },
+
+    /// Binary threshold
+    /// Output: 0 if pixel < threshold, 1 if pixel >= threshold
+    Threshold {
+        out: Register,
+        input: Register,
+        value: Register,
+    },
+
+    /// Adjust brightness
+    /// Output: input * factor
+    Brightness {
+        out: Register,
+        input: Register,
+        factor: Register,
+    },
+
+    /// Adjust contrast
+    /// Output: (input - 0.5) * factor + 0.5
+    Contrast {
+        out: Register,
+        input: Register,
+        factor: Register,
+    },
+
+    /// Invert colors
+    /// Output: 1.0 - input
+    InvertColors {
+        out: Register,
+        input: Register,
+    },
+
+    /// Sharpen filter
+    Sharpen {
+        out: Register,
+        input: Register,
     },
 
     // === Control Flow ===
@@ -844,6 +905,14 @@ impl Instruction {
             Instruction::Loop { .. } => None,
             Instruction::FuncDef { .. } => None,
             Instruction::AdamUpdate { .. } => None,
+            Instruction::GaussianBlur { out, .. } => Some(*out),
+            Instruction::SobelEdges { out, .. } => Some(*out),
+            Instruction::Grayscale { out, .. } => Some(*out),
+            Instruction::Threshold { out, .. } => Some(*out),
+            Instruction::Brightness { out, .. } => Some(*out),
+            Instruction::Contrast { out, .. } => Some(*out),
+            Instruction::InvertColors { out, .. } => Some(*out),
+            Instruction::Sharpen { out, .. } => Some(*out),
             Instruction::Return { .. } => None,
             Instruction::Break => None,
             Instruction::Continue => None,
@@ -935,6 +1004,14 @@ impl Instruction {
             Instruction::ReduceMax { input, .. } => vec![*input],
             Instruction::Embedding { indices, weight, .. } => vec![*indices, *weight],
             Instruction::AdamUpdate { param, grad, m, v, .. } => vec![*param, *grad, *m, *v],
+            Instruction::GaussianBlur { input, sigma, .. } => vec![*input, *sigma],
+            Instruction::SobelEdges { input, threshold, .. } => vec![*input, *threshold],
+            Instruction::Grayscale { input, .. } => vec![*input],
+            Instruction::Threshold { input, value, .. } => vec![*input, *value],
+            Instruction::Brightness { input, factor, .. } => vec![*input, *factor],
+            Instruction::Contrast { input, factor, .. } => vec![*input, *factor],
+            Instruction::InvertColors { input, .. } => vec![*input],
+            Instruction::Sharpen { input, .. } => vec![*input],
             Instruction::If { cond, .. } => vec![*cond],
             Instruction::Jump { .. } => vec![],
             Instruction::Loop { cond, .. } => vec![*cond],

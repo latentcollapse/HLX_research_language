@@ -1188,7 +1188,126 @@ impl ExecutionContext {
                     self.set_reg(*out, x);
                 }
             }
-            
+
+            // === Image Processing Operations ===
+
+            Instruction::GaussianBlur { out, input, sigma } => {
+                if let Some(&h_in) = self.tensors.get(input) {
+                    let meta = backend.tensor_meta(h_in)?;
+                    let h_out = backend.alloc_tensor(&meta.shape, meta.dtype)?;
+                    let sigma_val = self.get_reg(*sigma)?;
+                    backend.gaussian_blur(h_in, h_out, sigma_val)?;
+                    self.tensors.insert(*out, h_out);
+                } else {
+                    return Err(HlxError::TypeError {
+                        expected: "tensor (image)".to_string(),
+                        got: "scalar".to_string(),
+                    });
+                }
+            }
+
+            Instruction::SobelEdges { out, input, threshold } => {
+                if let Some(&h_in) = self.tensors.get(input) {
+                    let meta = backend.tensor_meta(h_in)?;
+                    let h_out = backend.alloc_tensor(&meta.shape, meta.dtype)?;
+                    let threshold_val = self.get_reg(*threshold)?;
+                    backend.sobel_edges(h_in, h_out, threshold_val)?;
+                    self.tensors.insert(*out, h_out);
+                } else {
+                    return Err(HlxError::TypeError {
+                        expected: "tensor (image)".to_string(),
+                        got: "scalar".to_string(),
+                    });
+                }
+            }
+
+            Instruction::Grayscale { out, input } => {
+                if let Some(&h_in) = self.tensors.get(input) {
+                    let meta = backend.tensor_meta(h_in)?;
+                    let h_out = backend.alloc_tensor(&meta.shape, meta.dtype)?;
+                    backend.grayscale(h_in, h_out)?;
+                    self.tensors.insert(*out, h_out);
+                } else {
+                    return Err(HlxError::TypeError {
+                        expected: "tensor (image)".to_string(),
+                        got: "scalar".to_string(),
+                    });
+                }
+            }
+
+            Instruction::Threshold { out, input, value } => {
+                if let Some(&h_in) = self.tensors.get(input) {
+                    let meta = backend.tensor_meta(h_in)?;
+                    let h_out = backend.alloc_tensor(&meta.shape, meta.dtype)?;
+                    let threshold_val = self.get_reg(*value)?;
+                    backend.threshold(h_in, h_out, threshold_val)?;
+                    self.tensors.insert(*out, h_out);
+                } else {
+                    return Err(HlxError::TypeError {
+                        expected: "tensor (image)".to_string(),
+                        got: "scalar".to_string(),
+                    });
+                }
+            }
+
+            Instruction::Brightness { out, input, factor } => {
+                if let Some(&h_in) = self.tensors.get(input) {
+                    let meta = backend.tensor_meta(h_in)?;
+                    let h_out = backend.alloc_tensor(&meta.shape, meta.dtype)?;
+                    let factor_val = self.get_reg(*factor)?;
+                    backend.brightness(h_in, h_out, factor_val)?;
+                    self.tensors.insert(*out, h_out);
+                } else {
+                    return Err(HlxError::TypeError {
+                        expected: "tensor (image)".to_string(),
+                        got: "scalar".to_string(),
+                    });
+                }
+            }
+
+            Instruction::Contrast { out, input, factor } => {
+                if let Some(&h_in) = self.tensors.get(input) {
+                    let meta = backend.tensor_meta(h_in)?;
+                    let h_out = backend.alloc_tensor(&meta.shape, meta.dtype)?;
+                    let factor_val = self.get_reg(*factor)?;
+                    backend.contrast(h_in, h_out, factor_val)?;
+                    self.tensors.insert(*out, h_out);
+                } else {
+                    return Err(HlxError::TypeError {
+                        expected: "tensor (image)".to_string(),
+                        got: "scalar".to_string(),
+                    });
+                }
+            }
+
+            Instruction::InvertColors { out, input } => {
+                if let Some(&h_in) = self.tensors.get(input) {
+                    let meta = backend.tensor_meta(h_in)?;
+                    let h_out = backend.alloc_tensor(&meta.shape, meta.dtype)?;
+                    backend.invert_colors(h_in, h_out)?;
+                    self.tensors.insert(*out, h_out);
+                } else {
+                    return Err(HlxError::TypeError {
+                        expected: "tensor (image)".to_string(),
+                        got: "scalar".to_string(),
+                    });
+                }
+            }
+
+            Instruction::Sharpen { out, input } => {
+                if let Some(&h_in) = self.tensors.get(input) {
+                    let meta = backend.tensor_meta(h_in)?;
+                    let h_out = backend.alloc_tensor(&meta.shape, meta.dtype)?;
+                    backend.sharpen(h_in, h_out)?;
+                    self.tensors.insert(*out, h_out);
+                } else {
+                    return Err(HlxError::TypeError {
+                        expected: "tensor (image)".to_string(),
+                        got: "scalar".to_string(),
+                    });
+                }
+            }
+
             // === Function Calls handled above ===
             
             // Default: unimplemented instructions

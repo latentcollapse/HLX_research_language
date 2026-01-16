@@ -257,6 +257,69 @@ pub trait Backend: Send + Sync {
         step: u64,
     ) -> Result<()>;
 
+    // === Image Processing Operations ===
+
+    /// Gaussian blur filter
+    fn gaussian_blur(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+        sigma: &Value,
+    ) -> Result<()>;
+
+    /// Sobel edge detection
+    fn sobel_edges(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+        threshold: &Value,
+    ) -> Result<()>;
+
+    /// Convert to grayscale
+    fn grayscale(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+    ) -> Result<()>;
+
+    /// Binary threshold
+    fn threshold(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+        value: &Value,
+    ) -> Result<()>;
+
+    /// Adjust brightness
+    fn brightness(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+        factor: &Value,
+    ) -> Result<()>;
+
+    /// Adjust contrast
+    fn contrast(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+        factor: &Value,
+    ) -> Result<()>;
+
+    /// Invert colors
+    fn invert_colors(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+    ) -> Result<()>;
+
+    /// Sharpen filter
+    fn sharpen(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+    ) -> Result<()>;
+
     // === Generic Compute ===
 
     /// Dispatch a generic compute shader

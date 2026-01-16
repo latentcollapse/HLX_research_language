@@ -750,7 +750,166 @@ impl Backend for CpuBackend {
         
         Ok(())
     }
-    
+
+    // === Image Processing Operations ===
+
+    fn gaussian_blur(
+        &mut self,
+        _input: TensorHandle,
+        _out: TensorHandle,
+        _sigma: &Value,
+    ) -> Result<()> {
+        Err(HlxError::BackendError {
+            message: "gaussian_blur not yet implemented for CPU backend".to_string(),
+        })
+    }
+
+    fn sobel_edges(
+        &mut self,
+        _input: TensorHandle,
+        _out: TensorHandle,
+        _threshold: &Value,
+    ) -> Result<()> {
+        Err(HlxError::BackendError {
+            message: "sobel_edges not yet implemented for CPU backend".to_string(),
+        })
+    }
+
+    fn grayscale(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+    ) -> Result<()> {
+        let in_arr = self.get_f32(input)?.clone();
+        let out_arr = self.get_f32_mut(out)?;
+
+        // Assuming input is [H, W, 3] RGB
+        let shape = in_arr.shape();
+        if shape.len() != 3 || shape[2] != 3 {
+            return Err(HlxError::TypeError {
+                expected: "[H, W, 3] RGB image".to_string(),
+                got: format!("{:?}", shape),
+            });
+        }
+
+        // Luminance: 0.299*R + 0.587*G + 0.114*B
+        for h in 0..shape[0] {
+            for w in 0..shape[1] {
+                let r = in_arr[[h, w, 0]];
+                let g = in_arr[[h, w, 1]];
+                let b = in_arr[[h, w, 2]];
+                let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+                out_arr[[h, w, 0]] = gray;
+                out_arr[[h, w, 1]] = gray;
+                out_arr[[h, w, 2]] = gray;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn threshold(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+        value: &Value,
+    ) -> Result<()> {
+        let threshold = match value {
+            Value::Float(f) => *f as f32,
+            Value::Integer(i) => *i as f32,
+            _ => return Err(HlxError::TypeError {
+                expected: "number".to_string(),
+                got: value.type_name().to_string(),
+            }),
+        };
+
+        let in_arr = self.get_f32(input)?.clone();
+        let out_arr = self.get_f32_mut(out)?;
+
+        for (i, &val) in in_arr.iter().enumerate() {
+            out_arr.as_slice_mut().unwrap()[i] = if val >= threshold { 1.0 } else { 0.0 };
+        }
+
+        Ok(())
+    }
+
+    fn brightness(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+        factor: &Value,
+    ) -> Result<()> {
+        let brightness_factor = match factor {
+            Value::Float(f) => *f as f32,
+            Value::Integer(i) => *i as f32,
+            _ => return Err(HlxError::TypeError {
+                expected: "number".to_string(),
+                got: factor.type_name().to_string(),
+            }),
+        };
+
+        let in_arr = self.get_f32(input)?.clone();
+        let out_arr = self.get_f32_mut(out)?;
+
+        for (i, &val) in in_arr.iter().enumerate() {
+            out_arr.as_slice_mut().unwrap()[i] = (val * brightness_factor).clamp(0.0, 1.0);
+        }
+
+        Ok(())
+    }
+
+    fn contrast(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+        factor: &Value,
+    ) -> Result<()> {
+        let contrast_factor = match factor {
+            Value::Float(f) => *f as f32,
+            Value::Integer(i) => *i as f32,
+            _ => return Err(HlxError::TypeError {
+                expected: "number".to_string(),
+                got: factor.type_name().to_string(),
+            }),
+        };
+
+        let in_arr = self.get_f32(input)?.clone();
+        let out_arr = self.get_f32_mut(out)?;
+
+        // Contrast: (pixel - 0.5) * factor + 0.5
+        for (i, &val) in in_arr.iter().enumerate() {
+            let adjusted = (val - 0.5) * contrast_factor + 0.5;
+            out_arr.as_slice_mut().unwrap()[i] = adjusted.clamp(0.0, 1.0);
+        }
+
+        Ok(())
+    }
+
+    fn invert_colors(
+        &mut self,
+        input: TensorHandle,
+        out: TensorHandle,
+    ) -> Result<()> {
+        let in_arr = self.get_f32(input)?.clone();
+        let out_arr = self.get_f32_mut(out)?;
+
+        for (i, &val) in in_arr.iter().enumerate() {
+            out_arr.as_slice_mut().unwrap()[i] = 1.0 - val;
+        }
+
+        Ok(())
+    }
+
+    fn sharpen(
+        &mut self,
+        _input: TensorHandle,
+        _out: TensorHandle,
+    ) -> Result<()> {
+        Err(HlxError::BackendError {
+            message: "sharpen not yet implemented for CPU backend".to_string(),
+        })
+    }
+
     fn sync(&mut self) -> Result<()> {
         // CPU is synchronous, nothing to do
         Ok(())
