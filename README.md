@@ -1,11 +1,12 @@
 # HLX: The IR for AI-Generated GPU Compute
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Status: Production](https://img.shields.io/badge/Status-Production-success.svg)](https://github.com/latentcollapse/hlx-compiler)
+[![Status: Self-Hosting](https://img.shields.io/badge/Status-Self--Hosting-yellow.svg)](https://github.com/latentcollapse/hlx-compiler)
+[![CI](https://github.com/latentcollapse/hlx-compiler/workflows/CI/badge.svg)](https://github.com/latentcollapse/hlx-compiler/actions)
 
-**HLX** is a deterministic, GPU-accelerated intermediate representation designed for AI systems to generate, execute, and verify compute workloads reliably across any GPU vendor.
+**HLX** is a deterministic, GPU-accelerated intermediate representation designed for AI systems to generate, execute, and verify compute workloads reliably across any platform.
 
-Write HLX once. Run on **Vulkan, CUDA, ROCm, Metal, or CPU**. Get **deterministic results** every time.
+Write HLX once. Run on **any GPU (via Vulkan) or CPU**. Get **deterministic results** every time.
 
 ---
 
@@ -102,12 +103,10 @@ fn detect_obstacles(frame: Tensor) -> Tensor {
 - Works on any platform (no floating-point surprises)
 - Enables reliable AI iteration loops
 
-### ✅ Cross-Platform GPU Support
-- **Vulkan** - Cross-platform (any GPU vendor)
-- **CUDA** - NVIDIA optimized (when available)
-- **ROCm** - AMD GPUs
-- **Metal** - Apple Silicon
-- **CPU** - LLVM fallback for testing
+### ✅ Universal GPU Support via Vulkan
+- **Vulkan** - Works on all GPUs (NVIDIA, AMD, Intel, Apple via MoltenVK)
+- **CPU** - Always-available fallback for testing and compatibility
+- **Auto-selection** - Tries GPU, gracefully falls back to CPU if needed
 
 ### ✅ LLM-Friendly Syntax
 - Simple, regular syntax
@@ -251,20 +250,17 @@ Iteration 2 (improved):
 Same code runs on any hardware:
 
 ```bash
-# NVIDIA GPUs
-hlx --backend cuda vision_pipeline.hlxa
+# Any GPU (NVIDIA/AMD/Intel/Apple)
+hlx run vision_pipeline.hlxa  # Auto-selects Vulkan
 
-# AMD GPUs
-hlx --backend rocm vision_pipeline.hlxa
+# Explicit GPU backend
+hlx --backend vulkan vision_pipeline.hlxa
 
-# Apple Silicon
-hlx --backend metal vision_pipeline.hlxa
-
-# CPU fallback
-hlx --backend llvm vision_pipeline.hlxa
+# CPU fallback (always available)
+hlx --backend cpu vision_pipeline.hlxa
 ```
 
-All produce **identical results**.
+All produce **bit-identical results** across all platforms.
 
 ### 4. Reproducible Research
 
@@ -316,23 +312,66 @@ fn detect_lane(frame: Tensor[H, W, 3]) -> Tensor[H, W, 1] {
              │
              ↓
 ┌─────────────────────────────────────┐
-│   HLX IR (Intermediate Repr.)       │
+│   HLX IR (LC-B bytecode)            │
 │   (backend-agnostic, portable)      │
 └────────────┬────────────────────────┘
              │
-      ┌──────┴──────┬─────────────────┐
-      ↓             ↓                 ↓
-  Vulkan         CUDA              LLVM
-  (cross-        (NVIDIA-          (CPU)
-   platform)     optimized)
+      ┌──────┴──────┐
+      ↓             ↓
+  Vulkan          CPU
+  (GPU:           (Fallback:
+   any vendor)     always works)
 
-   ↓             ↓                 ↓
-  GPU           GPU               CPU
+   ↓             ↓
+  GPU           CPU
+  (NVIDIA,      (Any
+   AMD,          platform)
+   Intel,
+   Apple)
 ```
 
 ### Key Insight
 
 HLX is both a **language** and an **IR**. Most IRs are unreadable (SPIR-V, LLVM). HLX is readable because it's designed for LLMs to understand and generate.
+
+---
+
+## Developer Tooling
+
+### Language Server Protocol (LSP)
+Full IDE integration with:
+- **Autocomplete** - Context-aware suggestions
+- **Diagnostics** - Real-time error checking
+- **Hover** - Type information and documentation
+- **Goto Definition** - Navigate to declarations
+- **Signature Help** - Function parameter hints
+
+Works with any LSP-compatible editor (VS Code, Neovim, Emacs, etc.)
+
+### VS Code Extension
+- Syntax highlighting
+- Bracket matching
+- Comment toggling
+- Full LSP integration
+
+### CI/CD Testing
+Automated testing on every commit:
+- ✅ Linux (x86-64 + ARM64)
+- ✅ macOS (Intel + Apple Silicon)
+- ✅ Windows (MSVC)
+- ✅ Code formatting, linting, security audits
+- ✅ Full test suite on all platforms
+
+### FFI (Foreign Function Interface)
+Call HLX from:
+- **C** - Direct ABI-compatible calls
+- **Python** - ctypes bindings
+- **Ada/SPARK** - For formal verification workflows
+
+### Performance Profiling
+- Flamegraph generation
+- Execution tracing
+- GPU performance analysis
 
 ---
 
@@ -495,29 +534,50 @@ fn summarize(data: Tensor) -> Float {
 
 ## Current Status
 
-### ✅ Complete & Production-Ready
-- Self-hosting compiler
-- Vulkan GPU backend (full dispatch)
-- Image processing (6 operations, GPU-accelerated)
+**Self-Hosting & Functional** - The compiler works, runs real applications, and has comprehensive tooling. **Seeking real-world validation** before claiming production readiness.
+
+### ✅ Complete & Working
+**Core Infrastructure:**
+- Self-hosting compiler (compiles itself)
+- Vulkan GPU backend (NVIDIA, AMD, Intel, Apple)
+- CPU backend (always-available fallback)
+- Deterministic execution (bit-identical across platforms)
+- Type system with full inference
+
+**Operations:**
+- Image processing (8 GPU-accelerated operations)
 - Tensor operations (creation, manipulation, reductions)
-- Image I/O (load, save)
-- File I/O (JSON, CSV, raw files)
-- LLVM CPU backend
-- Deterministic execution
-- Type system with inference
+- File I/O (JSON, CSV, images, raw files)
+- Math operations (full suite)
 
-### 🚧 In Progress
-- CUDA backend (NVIDIA optimization)
-- ROCm backend (AMD GPUs)
-- Metal backend (Apple GPUs)
-- Extended stdlib (more builtins)
-- FFI (C interop)
+**Developer Experience:**
+- **Language Server Protocol (LSP)** - Full IDE support (autocomplete, diagnostics, hover, goto-def)
+- **VS Code extension** - Syntax highlighting and IDE integration
+- **CI/CD testing** - Automated testing on Linux, macOS, Windows (every commit)
+- **FFI support** - C, Python, and Ada/SPARK interop
 
-### 🔮 Planned
-- Formal verification (Coq/Isabelle proofs)
+**Safety & Verification:**
+- **Formal verification path** - Rocq (Coq) integration for provable correctness
+- **Determinism guarantees** - Required for safety-critical systems
+- **Cross-platform validation** - CI proves it works everywhere
+
+### 🎯 Validation Phase
+**What we have:**
+- ✅ Technical infrastructure is complete
+- ✅ Self-hosting compiler proves it works
+- ✅ Early validation (engaged community feedback)
+- ✅ Working applications built with HLX
+
+**What we need:**
+- Real-world adoption in production systems
+- Community validation of workflows
+- Battle-testing in diverse environments
+
+### 🔮 Future Extensions
+- Additional backends (native CUDA/ROCm/Metal if demand justifies it)
 - Package manager
-- VS Code integration
-- Standard library expansion
+- Expanded standard library
+- More formal verification examples
 
 ---
 
@@ -562,7 +622,7 @@ A: HLX is 10-100x **faster** than CPU-based alternatives for GPU work. The only 
 A: HLX is designed for the **compute layer** of ML systems. You use Python/JAX for the ML framework, HLX for the GPU kernels. HLX handles tensor processing, image operations, mathematical compute—whatever needs GPU acceleration.
 
 **Q: Is this production-ready?**
-A: Yes. We ship real GPU compute that executes deterministically. The test suite is comprehensive. Image processing pipelines are tested on Vulkan. LLVM backend is production-grade.
+A: **Technically yes, but seeking validation.** The compiler is self-hosting, has comprehensive tooling (LSP, CI/CD, FFI), and runs real applications. GPU compute executes deterministically on all platforms. However, we're in a validation phase - waiting for real-world production adoption before claiming "battle-tested." If you're interested in being an early adopter, let's talk.
 
 **Q: What about training neural networks?**
 A: HLX doesn't have automatic differentiation (yet). Use JAX/PyTorch for training, call HLX for inference/preprocessing. HLX is the **compute substrate**, not the ML framework.
