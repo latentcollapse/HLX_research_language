@@ -599,4 +599,6 @@ We're looking for feedback from:
 - Systems researchers
 - Anyone working on deterministic computation
 
+Reddit conversation link: https://www.reddit.com/r/ClaudeAI/comments/1q86kq8/comment/nym9t0h/
+
 **If you're building AI systems and need reliable GPU compute, let's talk.**
