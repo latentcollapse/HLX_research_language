@@ -995,6 +995,184 @@ impl BuiltinRegistry {
         builtins.insert("measure_time", BuiltinSignature::fixed("measure_time", vec![ParamType::String], ReturnType::Int, "Measure function execution time (microseconds)", BackendImpl::CompilerSpecial));
         builtins.insert("typeof_detailed", BuiltinSignature::fixed("typeof_detailed", vec![ParamType::Any], ReturnType::String, "Get detailed type information", BackendImpl::CompilerSpecial));
 
+        // === Tier 1 Tensor Operations ===
+        builtins.insert(
+            "shape",
+            BuiltinSignature::fixed(
+                "shape",
+                vec![ParamType::Handle],
+                ReturnType::Array,
+                "Get tensor shape as array of dimensions",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
+        builtins.insert(
+            "size",
+            BuiltinSignature::fixed(
+                "size",
+                vec![ParamType::Handle],
+                ReturnType::Int,
+                "Get total number of elements in tensor",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
+        builtins.insert(
+            "zeros",
+            BuiltinSignature::fixed(
+                "zeros",
+                vec![ParamType::Array],
+                ReturnType::Handle,
+                "Create tensor filled with zeros",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
+        builtins.insert(
+            "ones",
+            BuiltinSignature::fixed(
+                "ones",
+                vec![ParamType::Array],
+                ReturnType::Handle,
+                "Create tensor filled with ones",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
+        builtins.insert(
+            "sum",
+            BuiltinSignature::range(
+                "sum",
+                vec![ParamType::Handle, ParamType::Int],
+                1,
+                2,
+                ReturnType::Any,
+                "Sum tensor elements along optional axis",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
+        builtins.insert(
+            "mean",
+            BuiltinSignature::range(
+                "mean",
+                vec![ParamType::Handle, ParamType::Int],
+                1,
+                2,
+                ReturnType::Any,
+                "Mean of tensor elements along optional axis",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
+        // === Tier 2 Tensor Operations ===
+        builtins.insert(
+            "argmax",
+            BuiltinSignature::range(
+                "argmax",
+                vec![ParamType::Handle, ParamType::Int],
+                1,
+                2,
+                ReturnType::Int,
+                "Index of maximum value in tensor",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
+        builtins.insert(
+            "argmin",
+            BuiltinSignature::range(
+                "argmin",
+                vec![ParamType::Handle, ParamType::Int],
+                1,
+                2,
+                ReturnType::Int,
+                "Index of minimum value in tensor",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
+        builtins.insert(
+            "random_tensor",
+            BuiltinSignature::range(
+                "random_tensor",
+                vec![ParamType::Array, ParamType::Float, ParamType::Float],
+                1,
+                3,
+                ReturnType::Handle,
+                "Create tensor with random uniform values (shape, min=0.0, max=1.0)",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
+        builtins.insert(
+            "concat_tensors",
+            BuiltinSignature::fixed(
+                "concat_tensors",
+                vec![ParamType::Array, ParamType::Int],
+                ReturnType::Handle,
+                "Concatenate array of tensors along axis",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
+        // === Tier 3 Tensor Operations (Completion) ===
+        builtins.insert(
+            "tensor_max",
+            BuiltinSignature::fixed(
+                "tensor_max",
+                vec![ParamType::Handle],
+                ReturnType::Float,
+                "Get maximum value in tensor",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
+        builtins.insert(
+            "tensor_min",
+            BuiltinSignature::fixed(
+                "tensor_min",
+                vec![ParamType::Handle],
+                ReturnType::Float,
+                "Get minimum value in tensor",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
+        builtins.insert(
+            "get_element",
+            BuiltinSignature::fixed(
+                "get_element",
+                vec![ParamType::Handle, ParamType::Array],
+                ReturnType::Float,
+                "Get single element from tensor at indices",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
+        builtins.insert(
+            "reshape",
+            BuiltinSignature::fixed(
+                "reshape",
+                vec![ParamType::Handle, ParamType::Array],
+                ReturnType::Handle,
+                "Reshape tensor to new dimensions (same total size)",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
+        builtins.insert(
+            "slice_tensor",
+            BuiltinSignature::fixed(
+                "slice_tensor",
+                vec![ParamType::Handle, ParamType::Int, ParamType::Int, ParamType::Int],
+                ReturnType::Handle,
+                "Extract slice from tensor (tensor, start, end, axis)",
+                BackendImpl::RuntimeCall,
+            ),
+        );
+
         Self { builtins }
     }
 

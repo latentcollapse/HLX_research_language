@@ -3167,17 +3167,67 @@ impl ExecutionContext {
                 Ok(Value::Array(result))
             }
             "sum" => {
-                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "sum() takes 1 arg".to_string() }); }
-                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
-                let mut total = 0.0;
-                for item in arr.iter() {
-                    match item {
-                        Value::Integer(i) => total += *i as f64,
-                        Value::Float(f) => total += *f,
-                        _ => return Err(HlxError::TypeError { expected: "numeric array".to_string(), got: "mixed types".to_string() }),
-                    }
+                if args.is_empty() || args.len() > 2 {
+                    return Err(HlxError::ValidationFail {
+                        message: "sum() takes 1-2 arguments".to_string(),
+                    });
                 }
-                Ok(Value::Float(total))
+                let val = self.get_reg(args[0])?;
+                match val {
+                    Value::Array(arr) => {
+                        // Array sum
+                        let mut total = 0.0;
+                        for item in arr.iter() {
+                            match item {
+                                Value::Integer(i) => total += *i as f64,
+                                Value::Float(f) => total += *f,
+                                _ => return Err(HlxError::TypeError { expected: "numeric array".to_string(), got: "mixed types".to_string() }),
+                            }
+                        }
+                        Ok(Value::Float(total))
+                    }
+                    Value::Handle(h) => {
+                        // Tensor sum
+                        let axis = if args.len() == 2 {
+                            let axis_val = self.get_reg(args[1])?;
+                            match axis_val {
+                                Value::Integer(i) => Some(*i as usize),
+                                _ => return Err(HlxError::TypeError {
+                                    expected: "integer".to_string(),
+                                    got: axis_val.type_name().to_string(),
+                                }),
+                            }
+                        } else {
+                            None
+                        };
+
+                        let handle_id = h.parse::<u64>().map_err(|_| HlxError::ValidationFail {
+                            message: "Invalid tensor handle".to_string(),
+                        })?;
+                        let tensor_handle = TensorHandle(handle_id);
+                        let data = backend.read_tensor(tensor_handle)?;
+
+                        // Convert bytes to f32 values
+                        let values: Vec<f32> = data.chunks_exact(4)
+                            .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                            .collect();
+
+                        if axis.is_none() {
+                            // Sum all elements
+                            let total: f32 = values.iter().sum();
+                            Ok(Value::Float(total as f64))
+                        } else {
+                            // Axis-wise sum not yet implemented
+                            Err(HlxError::ValidationFail {
+                                message: "Axis-wise sum not yet implemented, use sum(tensor) for total sum".to_string(),
+                            })
+                        }
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "array or tensor".to_string(),
+                        got: val.type_name().to_string(),
+                    }),
+                }
             }
             "product" => {
                 if args.len() != 1 { return Err(HlxError::ValidationFail { message: "product() takes 1 arg".to_string() }); }
@@ -3193,18 +3243,73 @@ impl ExecutionContext {
                 Ok(Value::Float(result))
             }
             "mean" => {
-                if args.len() != 1 { return Err(HlxError::ValidationFail { message: "mean() takes 1 arg".to_string() }); }
-                let arr = match self.get_reg(args[0])? { Value::Array(a) => a, v => return Err(HlxError::TypeError { expected: "array".to_string(), got: v.type_name().to_string() }) };
-                if arr.is_empty() { return Ok(Value::Float(0.0)); }
-                let mut total = 0.0;
-                for item in arr.iter() {
-                    match item {
-                        Value::Integer(i) => total += *i as f64,
-                        Value::Float(f) => total += *f,
-                        _ => return Err(HlxError::TypeError { expected: "numeric array".to_string(), got: "mixed types".to_string() }),
-                    }
+                if args.is_empty() || args.len() > 2 {
+                    return Err(HlxError::ValidationFail {
+                        message: "mean() takes 1-2 arguments".to_string(),
+                    });
                 }
-                Ok(Value::Float(total / arr.len() as f64))
+                let val = self.get_reg(args[0])?;
+                match val {
+                    Value::Array(arr) => {
+                        // Array mean
+                        if arr.is_empty() { return Ok(Value::Float(0.0)); }
+                        let mut total = 0.0;
+                        for item in arr.iter() {
+                            match item {
+                                Value::Integer(i) => total += *i as f64,
+                                Value::Float(f) => total += *f,
+                                _ => return Err(HlxError::TypeError { expected: "numeric array".to_string(), got: "mixed types".to_string() }),
+                            }
+                        }
+                        Ok(Value::Float(total / arr.len() as f64))
+                    }
+                    Value::Handle(h) => {
+                        // Tensor mean
+                        let axis = if args.len() == 2 {
+                            let axis_val = self.get_reg(args[1])?;
+                            match axis_val {
+                                Value::Integer(i) => Some(*i as usize),
+                                _ => return Err(HlxError::TypeError {
+                                    expected: "integer".to_string(),
+                                    got: axis_val.type_name().to_string(),
+                                }),
+                            }
+                        } else {
+                            None
+                        };
+
+                        let handle_id = h.parse::<u64>().map_err(|_| HlxError::ValidationFail {
+                            message: "Invalid tensor handle".to_string(),
+                        })?;
+                        let tensor_handle = TensorHandle(handle_id);
+                        let data = backend.read_tensor(tensor_handle)?;
+
+                        // Convert bytes to f32 values
+                        let values: Vec<f32> = data.chunks_exact(4)
+                            .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                            .collect();
+
+                        if axis.is_none() {
+                            // Mean of all elements
+                            if values.is_empty() {
+                                Ok(Value::Float(0.0))
+                            } else {
+                                let total: f32 = values.iter().sum();
+                                let mean = total / (values.len() as f32);
+                                Ok(Value::Float(mean as f64))
+                            }
+                        } else {
+                            // Axis-wise mean not yet implemented
+                            Err(HlxError::ValidationFail {
+                                message: "Axis-wise mean not yet implemented, use mean(tensor) for total mean".to_string(),
+                            })
+                        }
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "array or tensor".to_string(),
+                        got: val.type_name().to_string(),
+                    }),
+                }
             }
             "median" => {
                 if args.len() != 1 { return Err(HlxError::ValidationFail { message: "median() takes 1 arg".to_string() }); }
@@ -3918,6 +4023,602 @@ impl ExecutionContext {
                 
                 let handle = backend.alloc_tensor(&shape, dtype)?;
                 Ok(Value::Handle(handle.0.to_string()))
+            }
+            // === Tier 1 Tensor Builtins ===
+            "shape" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "shape() takes exactly 1 argument".to_string(),
+                    });
+                }
+                let handle_val = self.get_reg(args[0])?;
+                match handle_val {
+                    Value::Handle(h) => {
+                        let handle_id = h.parse::<u64>().map_err(|_| HlxError::ValidationFail {
+                            message: "Invalid tensor handle".to_string(),
+                        })?;
+                        let tensor_handle = TensorHandle(handle_id);
+                        let meta = backend.tensor_meta(tensor_handle)?;
+                        let shape_array: Vector<Value> = meta.shape.iter()
+                            .map(|&dim| Value::Integer(dim as i64))
+                            .collect();
+                        Ok(Value::Array(shape_array))
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "tensor handle".to_string(),
+                        got: handle_val.type_name().to_string(),
+                    }),
+                }
+            }
+            "size" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "size() takes exactly 1 argument".to_string(),
+                    });
+                }
+                let handle_val = self.get_reg(args[0])?;
+                match handle_val {
+                    Value::Handle(h) => {
+                        let handle_id = h.parse::<u64>().map_err(|_| HlxError::ValidationFail {
+                            message: "Invalid tensor handle".to_string(),
+                        })?;
+                        let tensor_handle = TensorHandle(handle_id);
+                        let meta = backend.tensor_meta(tensor_handle)?;
+                        let total_size: usize = meta.shape.iter().product();
+                        Ok(Value::Integer(total_size as i64))
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "tensor handle".to_string(),
+                        got: handle_val.type_name().to_string(),
+                    }),
+                }
+            }
+            "zeros" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "zeros() takes exactly 1 argument (shape array)".to_string(),
+                    });
+                }
+                let shape_val = self.get_reg(args[0])?;
+                match shape_val {
+                    Value::Array(arr) => {
+                        let shape: Result<Vec<usize>> = arr.iter()
+                            .map(|v| match v {
+                                Value::Integer(i) if *i > 0 => Ok(*i as usize),
+                                Value::Integer(_) => Err(HlxError::ValidationFail {
+                                    message: "Shape dimensions must be positive".to_string(),
+                                }),
+                                _ => Err(HlxError::TypeError {
+                                    expected: "integer".to_string(),
+                                    got: v.type_name().to_string(),
+                                }),
+                            })
+                            .collect();
+                        let shape = shape?;
+                        let handle = backend.alloc_tensor(&shape, crate::backend::DType::F32)?;
+                        let total_size: usize = shape.iter().product();
+                        let zeros_data = vec![0u8; total_size * 4]; // F32 = 4 bytes
+                        backend.write_tensor(handle, &zeros_data)?;
+                        Ok(Value::Handle(handle.0.to_string()))
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "array".to_string(),
+                        got: shape_val.type_name().to_string(),
+                    }),
+                }
+            }
+            "ones" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "ones() takes exactly 1 argument (shape array)".to_string(),
+                    });
+                }
+                let shape_val = self.get_reg(args[0])?;
+                match shape_val {
+                    Value::Array(arr) => {
+                        let shape: Result<Vec<usize>> = arr.iter()
+                            .map(|v| match v {
+                                Value::Integer(i) if *i > 0 => Ok(*i as usize),
+                                Value::Integer(_) => Err(HlxError::ValidationFail {
+                                    message: "Shape dimensions must be positive".to_string(),
+                                }),
+                                _ => Err(HlxError::TypeError {
+                                    expected: "integer".to_string(),
+                                    got: v.type_name().to_string(),
+                                }),
+                            })
+                            .collect();
+                        let shape = shape?;
+                        let handle = backend.alloc_tensor(&shape, crate::backend::DType::F32)?;
+                        let total_size: usize = shape.iter().product();
+                        let ones_bytes: Vec<u8> = (0..total_size)
+                            .flat_map(|_| 1.0f32.to_le_bytes())
+                            .collect();
+                        backend.write_tensor(handle, &ones_bytes)?;
+                        Ok(Value::Handle(handle.0.to_string()))
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "array".to_string(),
+                        got: shape_val.type_name().to_string(),
+                    }),
+                }
+            }
+            // === Tier 2 Tensor Builtins ===
+            "argmax" => {
+                if args.is_empty() || args.len() > 2 {
+                    return Err(HlxError::ValidationFail {
+                        message: "argmax() takes 1-2 arguments (tensor, optional axis)".to_string(),
+                    });
+                }
+                let handle_val = self.get_reg(args[0])?;
+                match handle_val {
+                    Value::Handle(h) => {
+                        let handle_id = h.parse::<u64>().map_err(|_| HlxError::ValidationFail {
+                            message: "Invalid tensor handle".to_string(),
+                        })?;
+                        let tensor_handle = TensorHandle(handle_id);
+                        let data = backend.read_tensor(tensor_handle)?;
+
+                        // Convert bytes to f32 values
+                        let values: Vec<f32> = data.chunks_exact(4)
+                            .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                            .collect();
+
+                        if values.is_empty() {
+                            return Err(HlxError::ValidationFail {
+                                message: "Cannot find argmax of empty tensor".to_string(),
+                            });
+                        }
+
+                        // Simple argmax - find index of maximum value
+                        let (max_idx, _) = values.iter()
+                            .enumerate()
+                            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                            .unwrap();
+
+                        Ok(Value::Integer(max_idx as i64))
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "tensor handle".to_string(),
+                        got: handle_val.type_name().to_string(),
+                    }),
+                }
+            }
+            "argmin" => {
+                if args.is_empty() || args.len() > 2 {
+                    return Err(HlxError::ValidationFail {
+                        message: "argmin() takes 1-2 arguments (tensor, optional axis)".to_string(),
+                    });
+                }
+                let handle_val = self.get_reg(args[0])?;
+                match handle_val {
+                    Value::Handle(h) => {
+                        let handle_id = h.parse::<u64>().map_err(|_| HlxError::ValidationFail {
+                            message: "Invalid tensor handle".to_string(),
+                        })?;
+                        let tensor_handle = TensorHandle(handle_id);
+                        let data = backend.read_tensor(tensor_handle)?;
+
+                        // Convert bytes to f32 values
+                        let values: Vec<f32> = data.chunks_exact(4)
+                            .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                            .collect();
+
+                        if values.is_empty() {
+                            return Err(HlxError::ValidationFail {
+                                message: "Cannot find argmin of empty tensor".to_string(),
+                            });
+                        }
+
+                        // Simple argmin - find index of minimum value
+                        let (min_idx, _) = values.iter()
+                            .enumerate()
+                            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                            .unwrap();
+
+                        Ok(Value::Integer(min_idx as i64))
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "tensor handle".to_string(),
+                        got: handle_val.type_name().to_string(),
+                    }),
+                }
+            }
+            "random_tensor" => {
+                if args.is_empty() || args.len() > 3 {
+                    return Err(HlxError::ValidationFail {
+                        message: "random_tensor() takes 1-3 arguments (shape, min=0.0, max=1.0)".to_string(),
+                    });
+                }
+
+                // Parse shape
+                let shape_val = self.get_reg(args[0])?;
+                let shape: Vec<usize> = match shape_val {
+                    Value::Array(arr) => {
+                        arr.iter()
+                            .map(|v| match v {
+                                Value::Integer(i) if *i > 0 => Ok(*i as usize),
+                                Value::Integer(_) => Err(HlxError::ValidationFail {
+                                    message: "Shape dimensions must be positive".to_string(),
+                                }),
+                                _ => Err(HlxError::TypeError {
+                                    expected: "integer".to_string(),
+                                    got: v.type_name().to_string(),
+                                }),
+                            })
+                            .collect::<Result<Vec<usize>>>()?
+                    }
+                    _ => return Err(HlxError::TypeError {
+                        expected: "array".to_string(),
+                        got: shape_val.type_name().to_string(),
+                    }),
+                };
+
+                // Parse min and max
+                let min = if args.len() >= 2 {
+                    match self.get_reg(args[1])? {
+                        Value::Float(f) => *f as f32,
+                        Value::Integer(i) => *i as f32,
+                        v => return Err(HlxError::TypeError {
+                            expected: "number".to_string(),
+                            got: v.type_name().to_string(),
+                        }),
+                    }
+                } else {
+                    0.0
+                };
+
+                let max = if args.len() >= 3 {
+                    match self.get_reg(args[2])? {
+                        Value::Float(f) => *f as f32,
+                        Value::Integer(i) => *i as f32,
+                        v => return Err(HlxError::TypeError {
+                            expected: "number".to_string(),
+                            got: v.type_name().to_string(),
+                        }),
+                    }
+                } else {
+                    1.0
+                };
+
+                // Create tensor
+                let handle = backend.alloc_tensor(&shape, crate::backend::DType::F32)?;
+                let total_size: usize = shape.iter().product();
+
+                // Generate random values using deterministic LCG
+                let mut seed = 42u64; // Simple seed, can be made configurable
+                let random_bytes: Vec<u8> = (0..total_size)
+                    .flat_map(|_| {
+                        // LCG: same algorithm as random() builtin
+                        seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                        let normalized = (seed & 0x7fffffff) as f64 / 2147483647.0;
+                        let val = min + (normalized as f32) * (max - min);
+                        val.to_le_bytes()
+                    })
+                    .collect();
+
+                backend.write_tensor(handle, &random_bytes)?;
+                Ok(Value::Handle(handle.0.to_string()))
+            }
+            "concat_tensors" => {
+                if args.len() != 2 {
+                    return Err(HlxError::ValidationFail {
+                        message: "concat_tensors() takes 2 arguments (array of tensors, axis)".to_string(),
+                    });
+                }
+
+                // For now, return not implemented
+                // Full implementation would require complex shape calculations and data copying
+                Err(HlxError::ValidationFail {
+                    message: "concat_tensors() not yet fully implemented".to_string(),
+                })
+            }
+            // === Tier 3 Tensor Operations (Completion) ===
+            "tensor_max" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "tensor_max() takes exactly 1 argument".to_string(),
+                    });
+                }
+                let handle_val = self.get_reg(args[0])?;
+                match handle_val {
+                    Value::Handle(h) => {
+                        let handle_id = h.parse::<u64>().map_err(|_| HlxError::ValidationFail {
+                            message: "Invalid tensor handle".to_string(),
+                        })?;
+                        let tensor_handle = TensorHandle(handle_id);
+                        let data = backend.read_tensor(tensor_handle)?;
+
+                        let values: Vec<f32> = data.chunks_exact(4)
+                            .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                            .collect();
+
+                        if values.is_empty() {
+                            return Err(HlxError::ValidationFail {
+                                message: "Cannot find max of empty tensor".to_string(),
+                            });
+                        }
+
+                        let max_val = values.iter()
+                            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                            .unwrap();
+
+                        Ok(Value::Float(*max_val as f64))
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "tensor handle".to_string(),
+                        got: handle_val.type_name().to_string(),
+                    }),
+                }
+            }
+            "tensor_min" => {
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "tensor_min() takes exactly 1 argument".to_string(),
+                    });
+                }
+                let handle_val = self.get_reg(args[0])?;
+                match handle_val {
+                    Value::Handle(h) => {
+                        let handle_id = h.parse::<u64>().map_err(|_| HlxError::ValidationFail {
+                            message: "Invalid tensor handle".to_string(),
+                        })?;
+                        let tensor_handle = TensorHandle(handle_id);
+                        let data = backend.read_tensor(tensor_handle)?;
+
+                        let values: Vec<f32> = data.chunks_exact(4)
+                            .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                            .collect();
+
+                        if values.is_empty() {
+                            return Err(HlxError::ValidationFail {
+                                message: "Cannot find min of empty tensor".to_string(),
+                            });
+                        }
+
+                        let min_val = values.iter()
+                            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                            .unwrap();
+
+                        Ok(Value::Float(*min_val as f64))
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "tensor handle".to_string(),
+                        got: handle_val.type_name().to_string(),
+                    }),
+                }
+            }
+            "get_element" => {
+                if args.len() != 2 {
+                    return Err(HlxError::ValidationFail {
+                        message: "get_element() takes 2 arguments (tensor, indices)".to_string(),
+                    });
+                }
+                let handle_val = self.get_reg(args[0])?;
+                let indices_val = self.get_reg(args[1])?;
+
+                match (handle_val, indices_val) {
+                    (Value::Handle(h), Value::Array(indices)) => {
+                        let handle_id = h.parse::<u64>().map_err(|_| HlxError::ValidationFail {
+                            message: "Invalid tensor handle".to_string(),
+                        })?;
+                        let tensor_handle = TensorHandle(handle_id);
+                        let meta = backend.tensor_meta(tensor_handle)?;
+                        let data = backend.read_tensor(tensor_handle)?;
+
+                        // Parse indices
+                        let idx_vec: Vec<usize> = indices.iter()
+                            .map(|v| match v {
+                                Value::Integer(i) if *i >= 0 => Ok(*i as usize),
+                                Value::Integer(_) => Err(HlxError::ValidationFail {
+                                    message: "Indices must be non-negative".to_string(),
+                                }),
+                                _ => Err(HlxError::TypeError {
+                                    expected: "integer".to_string(),
+                                    got: v.type_name().to_string(),
+                                }),
+                            })
+                            .collect::<Result<Vec<usize>>>()?;
+
+                        // Validate indices match shape dimensions
+                        if idx_vec.len() != meta.shape.len() {
+                            return Err(HlxError::ValidationFail {
+                                message: format!(
+                                    "Index dimensions ({}) don't match tensor dimensions ({})",
+                                    idx_vec.len(),
+                                    meta.shape.len()
+                                ),
+                            });
+                        }
+
+                        // Calculate linear index
+                        let mut linear_idx = 0;
+                        let mut stride = 1;
+                        for i in (0..meta.shape.len()).rev() {
+                            if idx_vec[i] >= meta.shape[i] {
+                                return Err(HlxError::ValidationFail {
+                                    message: format!(
+                                        "Index {} out of bounds for dimension {} (size {})",
+                                        idx_vec[i], i, meta.shape[i]
+                                    ),
+                                });
+                            }
+                            linear_idx += idx_vec[i] * stride;
+                            stride *= meta.shape[i];
+                        }
+
+                        // Extract value
+                        let offset = linear_idx * 4; // F32 = 4 bytes
+                        if offset + 4 > data.len() {
+                            return Err(HlxError::ValidationFail {
+                                message: "Index out of bounds".to_string(),
+                            });
+                        }
+                        let value = f32::from_le_bytes([
+                            data[offset],
+                            data[offset + 1],
+                            data[offset + 2],
+                            data[offset + 3],
+                        ]);
+
+                        Ok(Value::Float(value as f64))
+                    }
+                    (Value::Handle(_), _) => Err(HlxError::TypeError {
+                        expected: "array".to_string(),
+                        got: indices_val.type_name().to_string(),
+                    }),
+                    _ => Err(HlxError::TypeError {
+                        expected: "tensor handle".to_string(),
+                        got: handle_val.type_name().to_string(),
+                    }),
+                }
+            }
+            "reshape" => {
+                if args.len() != 2 {
+                    return Err(HlxError::ValidationFail {
+                        message: "reshape() takes 2 arguments (tensor, new_shape)".to_string(),
+                    });
+                }
+                let handle_val = self.get_reg(args[0])?;
+                let new_shape_val = self.get_reg(args[1])?;
+
+                match (handle_val, new_shape_val) {
+                    (Value::Handle(h), Value::Array(shape_arr)) => {
+                        let handle_id = h.parse::<u64>().map_err(|_| HlxError::ValidationFail {
+                            message: "Invalid tensor handle".to_string(),
+                        })?;
+                        let tensor_handle = TensorHandle(handle_id);
+                        let meta = backend.tensor_meta(tensor_handle)?;
+
+                        // Parse new shape
+                        let new_shape: Vec<usize> = shape_arr.iter()
+                            .map(|v| match v {
+                                Value::Integer(i) if *i > 0 => Ok(*i as usize),
+                                Value::Integer(_) => Err(HlxError::ValidationFail {
+                                    message: "Shape dimensions must be positive".to_string(),
+                                }),
+                                _ => Err(HlxError::TypeError {
+                                    expected: "integer".to_string(),
+                                    got: v.type_name().to_string(),
+                                }),
+                            })
+                            .collect::<Result<Vec<usize>>>()?;
+
+                        // Validate total size matches
+                        let old_size: usize = meta.shape.iter().product();
+                        let new_size: usize = new_shape.iter().product();
+                        if old_size != new_size {
+                            return Err(HlxError::ValidationFail {
+                                message: format!(
+                                    "Cannot reshape: old size ({}) != new size ({})",
+                                    old_size, new_size
+                                ),
+                            });
+                        }
+
+                        // Create new tensor with reshaped data
+                        let data = backend.read_tensor(tensor_handle)?;
+                        let new_handle = backend.alloc_tensor(&new_shape, meta.dtype)?;
+                        backend.write_tensor(new_handle, &data)?;
+
+                        Ok(Value::Handle(new_handle.0.to_string()))
+                    }
+                    (Value::Handle(_), _) => Err(HlxError::TypeError {
+                        expected: "array".to_string(),
+                        got: new_shape_val.type_name().to_string(),
+                    }),
+                    _ => Err(HlxError::TypeError {
+                        expected: "tensor handle".to_string(),
+                        got: handle_val.type_name().to_string(),
+                    }),
+                }
+            }
+            "slice_tensor" => {
+                if args.len() != 4 {
+                    return Err(HlxError::ValidationFail {
+                        message: "slice_tensor() takes 4 arguments (tensor, start, end, axis)".to_string(),
+                    });
+                }
+                let handle_val = self.get_reg(args[0])?;
+                let start = match self.get_reg(args[1])? {
+                    Value::Integer(i) => *i as usize,
+                    v => return Err(HlxError::TypeError {
+                        expected: "integer".to_string(),
+                        got: v.type_name().to_string(),
+                    }),
+                };
+                let end = match self.get_reg(args[2])? {
+                    Value::Integer(i) => *i as usize,
+                    v => return Err(HlxError::TypeError {
+                        expected: "integer".to_string(),
+                        got: v.type_name().to_string(),
+                    }),
+                };
+                let axis = match self.get_reg(args[3])? {
+                    Value::Integer(i) => *i as usize,
+                    v => return Err(HlxError::TypeError {
+                        expected: "integer".to_string(),
+                        got: v.type_name().to_string(),
+                    }),
+                };
+
+                match handle_val {
+                    Value::Handle(h) => {
+                        let handle_id = h.parse::<u64>().map_err(|_| HlxError::ValidationFail {
+                            message: "Invalid tensor handle".to_string(),
+                        })?;
+                        let tensor_handle = TensorHandle(handle_id);
+                        let meta = backend.tensor_meta(tensor_handle)?;
+
+                        // Validate axis
+                        if axis >= meta.shape.len() {
+                            return Err(HlxError::ValidationFail {
+                                message: format!("Axis {} out of bounds (tensor has {} dimensions)", axis, meta.shape.len()),
+                            });
+                        }
+
+                        // Validate slice range
+                        if start >= end || end > meta.shape[axis] {
+                            return Err(HlxError::ValidationFail {
+                                message: format!(
+                                    "Invalid slice range [{}:{}] for axis {} (size {})",
+                                    start, end, axis, meta.shape[axis]
+                                ),
+                            });
+                        }
+
+                        // Calculate new shape
+                        let mut new_shape = meta.shape.clone();
+                        new_shape[axis] = end - start;
+
+                        // Read and slice data
+                        let data = backend.read_tensor(tensor_handle)?;
+                        let values: Vec<f32> = data.chunks_exact(4)
+                            .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                            .collect();
+
+                        // Simple 1D slice for now
+                        if meta.shape.len() == 1 {
+                            let sliced: Vec<f32> = values[start..end].to_vec();
+                            let sliced_bytes: Vec<u8> = sliced.iter()
+                                .flat_map(|&v| v.to_le_bytes())
+                                .collect();
+
+                            let new_handle = backend.alloc_tensor(&new_shape, meta.dtype)?;
+                            backend.write_tensor(new_handle, &sliced_bytes)?;
+                            Ok(Value::Handle(new_handle.0.to_string()))
+                        } else {
+                            // Multi-dimensional slicing is complex - return not implemented for now
+                            Err(HlxError::ValidationFail {
+                                message: "slice_tensor() currently only supports 1D tensors".to_string(),
+                            })
+                        }
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "tensor handle".to_string(),
+                        got: handle_val.type_name().to_string(),
+                    }),
+                }
             }
             _ => Err(HlxError::ValidationFail {
                 message: format!("Unknown function: {}", func),

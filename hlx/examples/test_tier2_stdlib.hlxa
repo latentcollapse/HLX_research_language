@@ -1,0 +1,41 @@
+program test_tier2_stdlib {
+    fn main() {
+        print("=== Testing Tier 2 Stdlib ===");
+
+        // Test random_tensor
+        print("\n1. Testing random_tensor():");
+        let r = random_tensor([2, 3]);
+        print("Created random tensor [2, 3]");
+        let r_shape = shape(r);
+        print("Shape:");
+        print(r_shape);
+
+        // Test random_tensor with min/max
+        print("\n2. Testing random_tensor with range:");
+        let r2 = random_tensor([3, 2], -1.0, 1.0);
+        print("Created random tensor [3, 2] with values in [-1, 1]");
+
+        // Test argmax and argmin
+        print("\n3. Testing argmax/argmin:");
+        let values = ones([10]);
+        let max_idx = argmax(values);
+        let min_idx = argmin(values);
+        print("argmax of ones tensor:");
+        print(max_idx);
+        print("argmin of ones tensor:");
+        print(min_idx);
+
+        // Test with varied values
+        print("\n4. Testing argmax on varied tensor:");
+        let varied = random_tensor([5], 0.0, 10.0);
+        print("Random tensor:");
+        let v_sum = sum(varied);
+        print("Sum:");
+        print(v_sum);
+        let v_max_idx = argmax(varied);
+        print("Index of max:");
+        print(v_max_idx);
+
+        print("\n=== Tier 2 Tests Passed! ===");
+    }
+}

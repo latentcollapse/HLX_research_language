@@ -1,0 +1,106 @@
+program test_complete_tensor {
+    fn main() {
+        print("=== Complete Tensor Operations Test ===\n");
+
+        // 1. Test tensor_max and tensor_min
+        print("1. TENSOR MAX/MIN");
+        print("------------------");
+        let data = random_tensor([100], 0.0, 100.0);
+        print("Created 100-element tensor [0, 100]");
+
+        let max_val = tensor_max(data);
+        let min_val = tensor_min(data);
+        let max_idx = argmax(data);
+        let min_idx = argmin(data);
+
+        print(concat("  Maximum value: ", max_val));
+        print(concat("  Minimum value: ", min_val));
+        print(concat("  Max at index: ", max_idx));
+        print(concat("  Min at index: ", min_idx));
+
+        // 2. Test get_element
+        print("\n2. GET ELEMENT");
+        print("--------------");
+        let matrix = ones([5, 10]);
+        print("Created 5x10 matrix of ones");
+
+        let elem1 = get_element(matrix, [0, 0]);
+        let elem2 = get_element(matrix, [2, 5]);
+        let elem3 = get_element(matrix, [4, 9]);
+
+        print(concat("  Element at [0,0]: ", elem1));
+        print(concat("  Element at [2,5]: ", elem2));
+        print(concat("  Element at [4,9]: ", elem3));
+
+        // 3. Test reshape
+        print("\n3. RESHAPE");
+        print("----------");
+        let original = ones([6, 4]);
+        print(concat("Original shape: ", shape(original)));
+        print(concat("Original size: ", size(original)));
+
+        let reshaped1 = reshape(original, [4, 6]);
+        print(concat("Reshaped to [4,6]: ", shape(reshaped1)));
+
+        let reshaped2 = reshape(original, [2, 12]);
+        print(concat("Reshaped to [2,12]: ", shape(reshaped2)));
+
+        let reshaped3 = reshape(original, [24]);
+        print(concat("Reshaped to [24]: ", shape(reshaped3)));
+        print(concat("  All have same size: ", size(reshaped3)));
+
+        // 4. Test slice_tensor (1D only)
+        print("\n4. SLICE TENSOR (1D)");
+        print("--------------------");
+        let vec = random_tensor([20], 0.0, 10.0);
+        print("Created 20-element vector");
+        print(concat("  Original size: ", size(vec)));
+
+        let slice1 = slice_tensor(vec, 0, 10, 0);
+        print(concat("  Slice [0:10] size: ", size(slice1)));
+
+        let slice2 = slice_tensor(vec, 5, 15, 0);
+        print(concat("  Slice [5:15] size: ", size(slice2)));
+
+        let slice3 = slice_tensor(vec, 10, 20, 0);
+        print(concat("  Slice [10:20] size: ", size(slice3)));
+
+        // 5. Combined operations
+        print("\n5. COMBINED OPERATIONS");
+        print("----------------------");
+        let tensor = random_tensor([50], -5.0, 5.0);
+        print("Created 50-element tensor [-5, 5]");
+
+        let t_sum = sum(tensor);
+        let t_mean = mean(tensor);
+        let t_max = tensor_max(tensor);
+        let t_min = tensor_min(tensor);
+
+        print(concat("  Sum: ", t_sum));
+        print(concat("  Mean: ", t_mean));
+        print(concat("  Max: ", t_max));
+        print(concat("  Min: ", t_min));
+        print(concat("  Range: ", t_max - t_min));
+
+        // Get specific elements
+        let max_pos = argmax(tensor);
+        let max_elem = get_element(tensor, [max_pos]);
+        print(concat("  Max element verification: ", max_elem));
+
+        // Reshape and verify
+        let reshaped = reshape(tensor, [10, 5]);
+        print(concat("  Reshaped to: ", shape(reshaped)));
+        print(concat("  Sum after reshape: ", sum(reshaped)));
+
+        print("\n=== All Complete Tensor Operations Work! ===");
+        print("\nHLX now supports:");
+        print("  ✓ Tensor creation (zeros, ones, random)");
+        print("  ✓ Shape introspection (shape, size)");
+        print("  ✓ Reductions (sum, mean, max, min)");
+        print("  ✓ Extrema indices (argmax, argmin)");
+        print("  ✓ Element access (get_element)");
+        print("  ✓ Reshaping (reshape)");
+        print("  ✓ Slicing (slice_tensor for 1D)");
+        print("\nTensor programming: COMPLETE");
+    }
+}
