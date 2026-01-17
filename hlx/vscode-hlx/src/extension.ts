@@ -16,7 +16,7 @@ export function activate(context: ExtensionContext) {
     if (!serverPath) {
         // Use bundled LSP binary
         // Assuming the binary is in ../target/release/hlx_lsp relative to extension
-        serverPath = path.join(context.extensionPath, '..', '..', 'target', 'release', 'hlx_lsp');
+        serverPath = path.join(context.extensionPath, '..', 'target', 'release', 'hlx_lsp');
     }
 
     // Server options: run the hlx_lsp binary

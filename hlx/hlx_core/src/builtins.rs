@@ -113,6 +113,8 @@ pub struct BuiltinSignature {
     pub return_type: ReturnType,
     /// Human-readable description
     pub description: &'static str,
+    /// Code example showing usage
+    pub example: Option<&'static str>,
     /// Backend implementation category
     pub backend_impl: BackendImpl,
 }
@@ -134,6 +136,29 @@ impl BuiltinSignature {
             max_args: Some(arg_count),
             return_type,
             description,
+            example: None,
+            backend_impl,
+        }
+    }
+
+    /// Create a fixed-arity builtin with example
+    pub fn fixed_with_example(
+        name: &'static str,
+        params: Vec<ParamType>,
+        return_type: ReturnType,
+        description: &'static str,
+        example: &'static str,
+        backend_impl: BackendImpl,
+    ) -> Self {
+        let arg_count = params.len();
+        Self {
+            name,
+            params,
+            min_args: arg_count,
+            max_args: Some(arg_count),
+            return_type,
+            description,
+            example: Some(example),
             backend_impl,
         }
     }
@@ -153,6 +178,28 @@ impl BuiltinSignature {
             max_args: None,
             return_type,
             description,
+            example: None,
+            backend_impl,
+        }
+    }
+
+    /// Create a variadic builtin with example
+    pub fn variadic_with_example(
+        name: &'static str,
+        min_args: usize,
+        return_type: ReturnType,
+        description: &'static str,
+        example: &'static str,
+        backend_impl: BackendImpl,
+    ) -> Self {
+        Self {
+            name,
+            params: vec![],
+            min_args,
+            max_args: None,
+            return_type,
+            description,
+            example: Some(example),
             backend_impl,
         }
     }
@@ -174,6 +221,7 @@ impl BuiltinSignature {
             max_args: Some(max_args),
             return_type,
             description,
+            example: None,
             backend_impl,
         }
     }
@@ -1203,6 +1251,107 @@ impl BuiltinRegistry {
         } else {
             Err(format!("Unknown builtin function: {}", name))
         }
+    }
+
+    /// Find similar function names using Levenshtein distance
+    pub fn find_similar(&self, name: &str, max_distance: usize) -> Vec<&'static str> {
+        self.builtins
+            .keys()
+            .filter(|key| {
+                let dist = levenshtein_distance(name, key);
+                dist > 0 && dist <= max_distance
+            })
+            .copied()
+            .collect()
+    }
+
+    /// Get functions by category (string/array/math/etc)
+    pub fn get_by_category(&self, prefix: &str) -> Vec<&BuiltinSignature> {
+        self.builtins
+            .values()
+            .filter(|sig| {
+                sig.name.starts_with(prefix)
+                    || sig.description.to_lowercase().contains(&prefix.to_lowercase())
+            })
+            .collect()
+    }
+}
+
+/// Calculate Levenshtein distance between two strings
+fn levenshtein_distance(s1: &str, s2: &str) -> usize {
+    let len1 = s1.len();
+    let len2 = s2.len();
+
+    if len1 == 0 {
+        return len2;
+    }
+    if len2 == 0 {
+        return len1;
+    }
+
+    let mut matrix = vec![vec![0; len2 + 1]; len1 + 1];
+
+    for i in 0..=len1 {
+        matrix[i][0] = i;
+    }
+    for j in 0..=len2 {
+        matrix[0][j] = j;
+    }
+
+    for (i, c1) in s1.chars().enumerate() {
+        for (j, c2) in s2.chars().enumerate() {
+            let cost = if c1 == c2 { 0 } else { 1 };
+            matrix[i + 1][j + 1] = std::cmp::min(
+                std::cmp::min(
+                    matrix[i][j + 1] + 1,      // deletion
+                    matrix[i + 1][j] + 1,      // insertion
+                ),
+                matrix[i][j] + cost,            // substitution
+            );
+        }
+    }
+
+    matrix[len1][len2]
+}
+
+impl BuiltinSignature {
+    /// Format signature for display (e.g., "len(arr: Array) -> Int")
+    pub fn format_signature(&self) -> String {
+        let params_str = if self.params.is_empty() {
+            if self.min_args > 0 {
+                format!("...{}+ args", self.min_args)
+            } else {
+                "...".to_string()
+            }
+        } else {
+            self.params
+                .iter()
+                .enumerate()
+                .map(|(i, p)| format!("arg{}: {}", i, p.to_string()))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
+        format!(
+            "{}({}) -> {}",
+            self.name,
+            params_str,
+            self.return_type.to_string()
+        )
+    }
+
+    /// Format full documentation for LSP hover
+    pub fn format_documentation(&self) -> String {
+        let mut doc = format!("### `{}`\n\n", self.format_signature());
+        doc.push_str(&format!("{}\n\n", self.description));
+
+        if let Some(example) = &self.example {
+            doc.push_str("**Example**:\n```hlx\n");
+            doc.push_str(example);
+            doc.push_str("\n```\n");
+        }
+
+        doc
     }
 }
 

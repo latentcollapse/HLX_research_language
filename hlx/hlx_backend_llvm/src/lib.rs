@@ -374,6 +374,7 @@ impl<'ctx> CodeGen<'ctx> {
         functions.insert("fseek".to_string(), module.add_function("fseek", i32_type.fn_type(&[ptr_type.into(), i64_type.into(), i32_type.into()], false), Some(Linkage::External)));
         functions.insert("ftell".to_string(), module.add_function("ftell", i64_type.fn_type(&[ptr_type.into()], false), Some(Linkage::External)));
         functions.insert("memcpy".to_string(), module.add_function("memcpy", ptr_type.fn_type(&[ptr_type.into(), ptr_type.into(), i64_type.into()], false), Some(Linkage::External)));
+        functions.insert("atoi".to_string(), module.add_function("atoi", i32_type.fn_type(&[ptr_type.into()], false), Some(Linkage::External)));
 
         // Math (libm) - LLVM Intrinsics
         // These correspond to BackendImpl::LLVMIntrinsic in the unified BuiltinRegistry
@@ -1110,7 +1111,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
     
     fn compile_inst(&mut self, inst: &Instruction) -> Result<()> {
-        // println!("DEBUG: Compiling inst {:?}", inst);
+        // eprintln!("DEBUG: Compiling inst {:?}", inst);
         let i64_t = self.context.i64_type();
         let _ptr_t = self.context.ptr_type(inkwell::AddressSpace::default());
         match inst {
@@ -1559,6 +1560,40 @@ impl<'ctx> CodeGen<'ctx> {
                     self.store_reg(*out, buf.into(), ValueType::Pointer)?;
                     return Ok(());
                 }
+                if func == "chr" {
+                    // chr(int) - Convert ASCII code to single-character string
+                    let (val, _) = self.load_reg(args[0])?;
+                    let malloc = self.get_function("malloc")?;
+
+                    // Allocate 2 bytes (char + null terminator)
+                    let buf_result = self.builder.build_call(malloc, &[self.context.i64_type().const_int(2, false).into()], "chr_buf")?
+                        .try_as_basic_value().left()
+                        .ok_or_else(|| anyhow!("malloc call for chr buffer returned void"))?;
+                    let buf = self.call_result_to_ptr(buf_result, "malloc(chr)")?;
+
+                    // Convert i64 to i8 (truncate to byte)
+                    let int_val = if val.is_int_value() {
+                        val.into_int_value()
+                    } else {
+                        self.builder.build_ptr_to_int(val.into_pointer_value(), self.context.i64_type(), "chr_ptrtoint")?
+                    };
+                    let char_val = self.builder.build_int_truncate(int_val, self.context.i8_type(), "chr_trunc")?;
+
+                    // Store character at buf[0]
+                    let char_ptr = unsafe {
+                        self.builder.build_gep(self.context.i8_type(), buf, &[self.context.i32_type().const_int(0, false)], "chr_gep0")?
+                    };
+                    self.builder.build_store(char_ptr, char_val)?;
+
+                    // Store null terminator at buf[1]
+                    let null_ptr = unsafe {
+                        self.builder.build_gep(self.context.i8_type(), buf, &[self.context.i32_type().const_int(1, false)], "chr_gep1")?
+                    };
+                    self.builder.build_store(null_ptr, self.context.i8_type().const_int(0, false))?;
+
+                    self.store_reg(*out, buf.into(), ValueType::Pointer)?;
+                    return Ok(());
+                }
 
                 let f = *self.functions.get(func).ok_or_else(|| anyhow!("Fn missing: {}", func))?;
                 let mut llvm_args = Vec::new();
@@ -1979,7 +2014,109 @@ impl<'ctx> CodeGen<'ctx> {
                     }
                 }
             }
-            _ => {} 
+            Instruction::ParseInt { out, input } => {
+                // Load the input string pointer
+                let (str_val, _) = self.load_reg(*input)?;
+
+                // Convert to pointer if needed
+                let str_ptr = if str_val.is_pointer_value() {
+                    str_val.into_pointer_value()
+                } else {
+                    self.builder.build_int_to_ptr(
+                        str_val.into_int_value(),
+                        self.context.ptr_type(inkwell::AddressSpace::default()),
+                        "int_to_ptr"
+                    )?
+                };
+
+                // Call atoi(str)
+                let atoi = self.get_function("atoi")?;
+                let result = self.builder.build_call(atoi, &[str_ptr.into()], "atoi_call")?
+                    .try_as_basic_value().left()
+                    .ok_or_else(|| anyhow!("atoi call returned void"))?;
+
+                // atoi returns i32, need to extend to i64
+                let result_i64 = self.builder.build_int_s_extend(
+                    result.into_int_value(),
+                    self.context.i64_type(),
+                    "sext_i32_to_i64"
+                )?;
+
+                // Store the result
+                self.store_reg(*out, result_i64.into(), ValueType::Int)?;
+            }
+            Instruction::ArraySlice { out, array, start, length } => {
+                // Determine element size and type
+                let (elem_size, llvm_type) = if let Some(dtype) = self.array_element_types.get(array).cloned() {
+                    let base_dtype = Self::get_base_dtype(&dtype);
+                    let size_and_type = match base_dtype {
+                        hlx_core::instruction::DType::F32 => (4, self.context.f32_type().as_basic_type_enum()),
+                        hlx_core::instruction::DType::F64 => (8, self.context.f64_type().as_basic_type_enum()),
+                        hlx_core::instruction::DType::I32 => (4, self.context.i32_type().as_basic_type_enum()),
+                        hlx_core::instruction::DType::I64 => (8, self.context.i64_type().as_basic_type_enum()),
+                        hlx_core::instruction::DType::Bool => (1, self.context.bool_type().as_basic_type_enum()),
+                        hlx_core::instruction::DType::Array(_) => (8, self.context.i64_type().as_basic_type_enum()),
+                    };
+                    // Propagate element type to output
+                    self.array_element_types.insert(*out, dtype);
+                    size_and_type
+                } else {
+                    // Untyped array defaults to i64
+                    (8, self.context.i64_type().as_basic_type_enum())
+                };
+
+                // Load array pointer, start index, and length
+                let (arr_val, _) = self.load_reg(*array)?;
+                let (start_val, _) = self.load_reg(*start)?;
+                let (len_val, _) = self.load_reg(*length)?;
+
+                let arr_ptr = if arr_val.is_pointer_value() {
+                    arr_val.into_pointer_value()
+                } else {
+                    self.builder.build_int_to_ptr(
+                        arr_val.into_int_value(),
+                        self.context.ptr_type(inkwell::AddressSpace::default()),
+                        "arr_int_to_ptr"
+                    )?
+                };
+
+                let start_idx = start_val.into_int_value();
+                let length_val = len_val.into_int_value();
+
+                // Calculate byte offsets
+                let elem_size_val = i64_t.const_int(elem_size, false);
+                let start_bytes = self.builder.build_int_mul(start_idx, elem_size_val, "start_bytes")?;
+                let total_bytes = self.builder.build_int_mul(length_val, elem_size_val, "total_bytes")?;
+
+                // Allocate new array
+                let malloc = self.get_function("malloc")?;
+                let new_arr = self.builder.build_call(malloc, &[total_bytes.into()], "slice_malloc")?
+                    .try_as_basic_value().left()
+                    .ok_or_else(|| anyhow!("malloc for ArraySlice returned void"))?;
+                let new_arr_ptr = new_arr.into_pointer_value();
+
+                // Calculate source pointer (array + start * elem_size)
+                let src_ptr = unsafe {
+                    self.builder.build_gep(
+                        llvm_type,
+                        arr_ptr,
+                        &[start_idx],
+                        "src_gep"
+                    )?
+                };
+
+                // memcpy(new_arr, src_ptr, total_bytes)
+                let memcpy = self.get_function("memcpy")?;
+                self.builder.build_call(
+                    memcpy,
+                    &[new_arr_ptr.into(), src_ptr.into(), total_bytes.into()],
+                    "slice_memcpy"
+                )?;
+
+                // Store result
+                self.store_reg(*out, new_arr_ptr.into(), ValueType::Pointer)?;
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -2013,6 +2150,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
     
     fn load_reg(&self, reg: Register) -> Result<(BasicValueEnum<'ctx>, ValueType)> {
+        // eprintln!("DEBUG: load_reg r{}", reg);
         let ptr = self.reg_map.get(&reg).ok_or_else(|| anyhow!("Reg missing"))?;
         let val_type = *self.reg_types.get(&reg).ok_or_else(|| {
             // Detailed error for debugging
@@ -2037,6 +2175,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn store_reg(&mut self, reg: Register, val: BasicValueEnum<'ctx>, val_type: ValueType) -> Result<()> {
+        // eprintln!("DEBUG: store_reg r{} = {:?}", reg, val_type);
         let ptr = self.reg_map.get(&reg).ok_or_else(|| anyhow!("Reg missing"))?;
 
         // Cast to i64 (storage type)
