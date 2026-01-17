@@ -7,6 +7,8 @@ members = [
     "hlx_cli",
     "hlx_backend_llvm",
     "hlx_lsp",
+    "hlx_codegen",
+    "hlx_apps/hlx-codegen",
 ]
 
 [workspace.package]

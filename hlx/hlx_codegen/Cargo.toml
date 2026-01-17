@@ -1,0 +1,17 @@
+[package]
+name = "hlx_codegen"
+version = "0.1.0"
+edition = "2021"
+authors = ["HLX Contributors"]
+description = "HLX Code Generation Framework - Synthetic code generation for safety-critical systems and AI training"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/hlx-lang/hlx"
+keywords = ["code-generation", "aerospace", "safety-critical", "training-data", "lora"]
+categories = ["development-tools", "text-processing"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+rand = "0.8"
+
+[dev-dependencies]

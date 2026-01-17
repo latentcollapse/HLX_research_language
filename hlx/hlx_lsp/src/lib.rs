@@ -37,6 +37,19 @@ mod semantic_tokens;
 mod module_support;
 mod shader_validator;
 mod capability_validator;
+mod formatter;
+mod call_hierarchy;
+mod folding_ranges;
+mod auto_import;
+mod snippets;
+mod enhanced_type_inference;
+mod ai_context_generation;
+mod contract_synthesis;
+mod pattern_learning;
+mod intent_detection;
+mod test_runner;
+mod import_organization;
+pub mod codegen;
 
 use contracts::{ContractCache, ContractCatalogue};
 use ai_diagnostics::AIDiagnosticBuilder;
@@ -64,6 +77,18 @@ use semantic_tokens::SemanticTokensProvider;
 use module_support::ModuleSupport;
 use shader_validator::ShaderContractCache;
 use capability_validator::CapabilityValidator;
+use formatter::HlxFormatter;
+use call_hierarchy::CallHierarchyIndex;
+use folding_ranges::FoldingRangesProvider;
+use auto_import::AutoImportProvider;
+use snippets::SnippetProvider;
+use enhanced_type_inference::EnhancedTypeInference;
+use ai_context_generation::AIContextGenerator;
+use contract_synthesis::ContractSynthesizer;
+use pattern_learning::PatternLearner;
+use intent_detection::IntentDetector;
+use test_runner::TestRunnerProvider;
+use import_organization::ImportOrganizer;
 use tokio::sync::Mutex;
 
 pub struct Backend {
@@ -91,6 +116,21 @@ pub struct Backend {
     module_support: Arc<Mutex<ModuleSupport>>,
     shader_contract_cache: Arc<ShaderContractCache>,
     capability_validator: Arc<CapabilityValidator>,
+    formatter: Arc<HlxFormatter>,
+    call_hierarchy_index: Arc<CallHierarchyIndex>,
+    folding_ranges_provider: Arc<FoldingRangesProvider>,
+    auto_import_provider: Arc<AutoImportProvider>,
+    snippet_provider: Arc<tokio::sync::Mutex<SnippetProvider>>,
+    enhanced_type_inference: Arc<tokio::sync::Mutex<EnhancedTypeInference>>,
+    // Phase 8: AI-Native Features
+    ai_context_generator: Arc<AIContextGenerator>,
+    contract_synthesizer: Arc<ContractSynthesizer>,
+    pattern_learner: Arc<tokio::sync::Mutex<PatternLearner>>,
+    intent_detector: Arc<tokio::sync::Mutex<IntentDetector>>,
+    // Phase 6: Testing & Validation
+    test_runner: Arc<tokio::sync::Mutex<TestRunnerProvider>>,
+    // Phase 7: Workspace Intelligence
+    import_organizer: Arc<ImportOrganizer>,
 }
 
 #[tower_lsp::async_trait]
@@ -137,6 +177,10 @@ impl LanguageServer for Backend {
                         }
                     )
                 ),
+                document_formatting_provider: Some(OneOf::Left(true)),
+                document_range_formatting_provider: Some(OneOf::Left(true)),
+                call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
+                folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -159,6 +203,12 @@ impl LanguageServer for Backend {
         // Index symbols
         self.symbol_index.index_document(&params.text_document.uri, &params.text_document.text);
 
+        // Index call hierarchy
+        self.call_hierarchy_index.index_document(&params.text_document.uri, &params.text_document.text);
+
+        // Update import cache
+        self.auto_import_provider.update_imports(&params.text_document.uri, &params.text_document.text);
+
         self.validate_document(params.text_document.uri, params.text_document.text).await;
     }
 
@@ -169,6 +219,12 @@ impl LanguageServer for Backend {
 
             // Re-index symbols
             self.symbol_index.index_document(&params.text_document.uri, &event.text);
+
+            // Re-index call hierarchy
+            self.call_hierarchy_index.index_document(&params.text_document.uri, &event.text);
+
+            // Update import cache
+            self.auto_import_provider.update_imports(&params.text_document.uri, &event.text);
 
             self.validate_document(params.text_document.uri, event.text).await;
         }
@@ -349,6 +405,19 @@ impl LanguageServer for Backend {
             }
         }
 
+        // Add context-aware snippets
+        if let Some(doc_ref) = self.document_map.get(uri.as_str()) {
+            let doc = doc_ref.value();
+            let snippet_provider = self.snippet_provider.lock().await;
+            let context = snippet_provider.detect_context(doc, position);
+
+            // Get the word being typed (for prefix matching)
+            let prefix = self.get_word_at_position_prefix(doc, position);
+
+            let snippet_completions = snippet_provider.get_completions(&prefix, context);
+            items.extend(snippet_completions);
+        }
+
         let is_contract_context = if let Some(doc_ref) = self.document_map.get(uri.as_str()) {
             self.is_typing_contract(&doc_ref, position)
         } else {
@@ -451,7 +520,7 @@ impl LanguageServer for Backend {
             ..Default::default()
         });
 
-        // Basic Static Completion (keywords, builtins)
+        // Basic Static Completion (keywords)
         let keywords = vec![
             // Keywords
             ("fn", CompletionItemKind::KEYWORD, "Function definition"),
@@ -467,17 +536,8 @@ impl LanguageServer for Backend {
             ("false", CompletionItemKind::KEYWORD, "Boolean false"),
             ("null", CompletionItemKind::KEYWORD, "Null value"),
 
-            // Builtins & Constants
+            // Constants
             ("DEFAULT_MAX_ITER", CompletionItemKind::CONSTANT, "Safety constant (1,000,000)"),
-            ("print", CompletionItemKind::FUNCTION, "Print value(s)"),
-            ("len", CompletionItemKind::FUNCTION, "Get length of array/string"),
-            ("to_int", CompletionItemKind::FUNCTION, "Convert to integer"),
-            ("slice", CompletionItemKind::FUNCTION, "Slice array"),
-            ("append", CompletionItemKind::FUNCTION, "Append to array"),
-            ("type", CompletionItemKind::FUNCTION, "Get value type"),
-            ("read_file", CompletionItemKind::FUNCTION, "Read file content"),
-            ("http_request", CompletionItemKind::FUNCTION, "Make HTTP request"),
-            ("json_parse", CompletionItemKind::FUNCTION, "Parse JSON string"),
         ];
 
         for (label, kind, detail) in keywords {
@@ -485,6 +545,26 @@ impl LanguageServer for Backend {
                 label: label.to_string(),
                 kind: Some(kind),
                 detail: Some(detail.to_string()),
+                ..Default::default()
+            });
+        }
+
+        // P0 Enhancement: Dynamic builtin function completion from registry
+        for sig in self.builtin_registry.all() {
+            items.push(CompletionItem {
+                label: sig.name.to_string(),
+                kind: Some(CompletionItemKind::FUNCTION),
+                detail: Some(sig.format_signature()),
+                documentation: if sig.example.is_some() {
+                    Some(Documentation::MarkupContent(MarkupContent {
+                        kind: MarkupKind::Markdown,
+                        value: sig.format_documentation(),
+                    }))
+                } else {
+                    Some(Documentation::String(sig.description.to_string()))
+                },
+                insert_text: Some(format!("{}($0)", sig.name)),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
                 ..Default::default()
             });
         }
@@ -524,21 +604,24 @@ impl LanguageServer for Backend {
                     }
                 }
 
-                // Known symbols
+                // P0 Enhancement: Check builtin registry first
+                if let Some(sig) = self.builtin_registry.get(&word) {
+                    return Ok(Some(Hover {
+                        contents: HoverContents::Markup(MarkupContent {
+                            kind: MarkupKind::Markdown,
+                            value: sig.format_documentation(),
+                        }),
+                        range: None,
+                    }));
+                }
+
+                // Known keywords and constants
                 let hover_text = match word.as_str() {
                     "fn" => "## Function Definition\n`fn name(args) { ... }`",
                     "let" => "## Variable Declaration\n`let name = value;`",
                     "if" => "## Conditional\n`if (cond) { ... } else { ... }`",
                     "loop" => "## Loop Construct\n`loop (condition, max_iter) { ... }`\n\n**Note:** Use `DEFAULT_MAX_ITER` for the bound.",
                     "DEFAULT_MAX_ITER" => "## Safety Constant\nValue: `1,000,000`\n\nUse this for all loops to ensure termination.",
-                    "to_int" => "## Builtin: to_int\n`to_int(value) -> int`\n\nConverts a value to an integer (truncates floats).",
-                    "len" => "## Builtin: len\n`len(container) -> int`\n\nReturns the length of a string, array, or object.",
-                    "print" => "## Builtin: print\n`print(val)`\n\nPrints a value to stdout.",
-                    "append" => "## Builtin: append\n`append(array, item) -> array`\n\nReturns a new array with the item appended.",
-                    "slice" => "## Builtin: slice\n`slice(array, start, len) -> array`\n\nReturns a slice of the array.",
-                    "type" => "## Builtin: type\n`type(val) -> string`\n\nReturns the type name of the value.",
-                    "http_request" => "## Builtin: http_request\n`http_request(method, url, body, headers) -> Response`\n\nMakes an HTTP request. Returns object with status, body, headers.",
-                    "json_parse" => "## Builtin: json_parse\n`json_parse(json_string) -> Value`\n\nParses a JSON string into an HLX value.",
                     _ => return Ok(None),
                 };
 
@@ -585,6 +668,29 @@ impl LanguageServer for Backend {
             if context.diagnostics.len() > 1 {
                 if let Some(fix_all) = self.quick_fix_generator.generate_fix_all(&uri, &context.diagnostics, &doc) {
                     all_actions.push(CodeActionOrCommand::CodeAction(fix_all));
+                }
+            }
+
+            // 0b. Auto-import suggestions for undefined symbols
+            for diagnostic in &context.diagnostics {
+                if self.ranges_overlap(&diagnostic.range, &range) {
+                    // Check if this is an "undefined" error
+                    if diagnostic.message.contains("undefined") || diagnostic.message.contains("not found") {
+                        // Try to extract the symbol name from the diagnostic message
+                        if let Some(symbol) = self.extract_symbol_from_diagnostic(&diagnostic.message) {
+                            // Generate auto-import suggestions
+                            let import_actions = self.auto_import_provider.generate_code_actions(
+                                &symbol,
+                                &uri,
+                                &doc,
+                                range.start,
+                            );
+
+                            for action in import_actions {
+                                all_actions.push(action);
+                            }
+                        }
+                    }
                 }
             }
 
@@ -755,6 +861,10 @@ impl LanguageServer for Backend {
                 .map(|hint| self.type_lens.create_inlay_hint(hint))
                 .collect();
             all_hints.extend(type_inlay_hints);
+
+            // P0 Enhancement: Magic number hints for SDL constants
+            let magic_number_hints = self.generate_magic_number_hints(&doc, &params.range);
+            all_hints.extend(magic_number_hints);
         }
 
         if !all_hints.is_empty() {
@@ -815,6 +925,90 @@ impl LanguageServer for Backend {
                 }))),
                 None => Ok(None),
             }
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params.text_document.uri;
+
+        let doc_ref = self.document_map.get(uri.as_str());
+        if let Some(doc) = doc_ref {
+            Ok(self.formatter.format_document(&doc))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn range_formatting(
+        &self,
+        params: DocumentRangeFormattingParams,
+    ) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params.text_document.uri;
+        let range = params.range;
+
+        let doc_ref = self.document_map.get(uri.as_str());
+        if let Some(doc) = doc_ref {
+            Ok(self.formatter.format_range(&doc, range))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn prepare_call_hierarchy(
+        &self,
+        params: CallHierarchyPrepareParams,
+    ) -> Result<Option<Vec<CallHierarchyItem>>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let doc_ref = self.document_map.get(uri.as_str());
+        if let Some(doc) = doc_ref {
+            if let Some(item) = self.call_hierarchy_index.prepare(&uri, position, &doc) {
+                Ok(Some(vec![item]))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn incoming_calls(
+        &self,
+        params: CallHierarchyIncomingCallsParams,
+    ) -> Result<Option<Vec<CallHierarchyIncomingCall>>> {
+        let function_name = &params.item.name;
+        let calls = self.call_hierarchy_index.get_incoming_calls(function_name);
+
+        if calls.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(calls))
+        }
+    }
+
+    async fn outgoing_calls(
+        &self,
+        params: CallHierarchyOutgoingCallsParams,
+    ) -> Result<Option<Vec<CallHierarchyOutgoingCall>>> {
+        let function_name = &params.item.name;
+        let calls = self.call_hierarchy_index.get_outgoing_calls(function_name);
+
+        if calls.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(calls))
+        }
+    }
+
+    async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
+        let uri = params.text_document.uri;
+
+        let doc_ref = self.document_map.get(uri.as_str());
+        if let Some(doc) = doc_ref {
+            Ok(self.folding_ranges_provider.provide_folding_ranges(&doc))
         } else {
             Ok(None)
         }
@@ -934,6 +1128,54 @@ impl Backend {
             eprintln!("✓ Runtime capabilities loaded");
         }
 
+        // Create formatter
+        let formatter = Arc::new(HlxFormatter::with_default());
+        eprintln!("✓ Document formatter ready");
+
+        // Create call hierarchy index
+        let call_hierarchy_index = Arc::new(CallHierarchyIndex::new());
+        eprintln!("✓ Call hierarchy index ready");
+
+        // Create folding ranges provider
+        let folding_ranges_provider = Arc::new(FoldingRangesProvider::new());
+        eprintln!("✓ Folding ranges provider ready");
+
+        // Create auto-import provider
+        let auto_import_provider = Arc::new(AutoImportProvider::new(symbol_index.clone()));
+        eprintln!("✓ Auto-import provider ready");
+
+        // Create snippet provider
+        let snippet_provider = Arc::new(tokio::sync::Mutex::new(SnippetProvider::new()));
+        eprintln!("✓ Snippet provider ready ({} snippets)", {
+            let provider = SnippetProvider::new();
+            provider.count()
+        });
+
+        // Create enhanced type inference
+        let enhanced_type_inference = Arc::new(tokio::sync::Mutex::new(EnhancedTypeInference::new()));
+        eprintln!("✓ Enhanced type inference ready");
+
+        // Phase 8: AI-Native Features
+        let ai_context_generator = Arc::new(AIContextGenerator::new());
+        eprintln!("✓ AI context generator ready");
+
+        let contract_synthesizer = Arc::new(ContractSynthesizer::new());
+        eprintln!("✓ Contract synthesizer ready");
+
+        let pattern_learner = Arc::new(tokio::sync::Mutex::new(PatternLearner::new()));
+        eprintln!("✓ Pattern learner ready");
+
+        let intent_detector = Arc::new(tokio::sync::Mutex::new(IntentDetector::new()));
+        eprintln!("✓ Intent detector ready");
+
+        // Phase 6: Testing & Validation
+        let test_runner = Arc::new(tokio::sync::Mutex::new(TestRunnerProvider::new()));
+        eprintln!("✓ Test runner ready");
+
+        // Phase 7: Workspace Intelligence
+        let import_organizer = Arc::new(ImportOrganizer::new());
+        eprintln!("✓ Import organizer ready");
+
         Self {
             client,
             document_map: DashMap::new(),
@@ -959,6 +1201,18 @@ impl Backend {
             module_support,
             shader_contract_cache,
             capability_validator,
+            formatter,
+            call_hierarchy_index,
+            folding_ranges_provider,
+            auto_import_provider,
+            snippet_provider,
+            enhanced_type_inference,
+            ai_context_generator,
+            contract_synthesizer,
+            pattern_learner,
+            intent_detector,
+            test_runner,
+            import_organizer,
         }
     }
 
@@ -1081,6 +1335,9 @@ impl Backend {
                         character: pos.character + 1
                     };
 
+                    // P0 Enhancement: Add "did you mean?" suggestions for function not found errors
+                    let enhanced_message = self.enhance_error_message(&msg);
+
                     diags.push(Diagnostic {
                         range: Range {
                             start: pos,
@@ -1090,7 +1347,7 @@ impl Backend {
                         code: None,
                         code_description: None,
                         source: Some("hlx".to_string()),
-                        message: msg,
+                        message: enhanced_message,
                         related_information: None,
                         tags: None,
                         data: None,
@@ -1394,6 +1651,29 @@ impl Backend {
         }
     }
 
+    /// Get the word prefix at the cursor position (for snippet completion)
+    fn get_word_at_position_prefix(&self, text: &str, pos: Position) -> String {
+        let line = match text.lines().nth(pos.line as usize) {
+            Some(l) => l,
+            None => return String::new(),
+        };
+
+        let char_idx = pos.character as usize;
+
+        if char_idx > line.len() {
+            return String::new();
+        }
+
+        // Extract word characters before the cursor
+        let before = &line[..char_idx];
+        let word_start = before
+            .rfind(|c: char| !c.is_alphanumeric() && c != '_' && c != '@')
+            .map(|i| i + 1)
+            .unwrap_or(0);
+
+        before[word_start..].to_string()
+    }
+
     fn is_typing_contract(&self, text: &str, pos: Position) -> bool {
         if let Some(line) = text.lines().nth(pos.line as usize) {
             let char_idx = pos.character as usize;
@@ -1489,6 +1769,42 @@ impl Backend {
                         return Some(comment.to_string());
                     }
                 }
+            }
+        }
+
+        None
+    }
+
+    /// Extract symbol name from diagnostic message
+    /// Handles patterns like: "undefined symbol 'foo'", "symbol foo not found", etc.
+    fn extract_symbol_from_diagnostic(&self, message: &str) -> Option<String> {
+        // Try different patterns for extracting symbol names
+
+        // Pattern: "undefined symbol 'foo'"
+        if let Some(start) = message.find("'") {
+            if let Some(end) = message[start + 1..].find("'") {
+                let symbol = &message[start + 1..start + 1 + end];
+                if !symbol.is_empty() {
+                    return Some(symbol.to_string());
+                }
+            }
+        }
+
+        // Pattern: "undefined symbol `foo`"
+        if let Some(start) = message.find("`") {
+            if let Some(end) = message[start + 1..].find("`") {
+                let symbol = &message[start + 1..start + 1 + end];
+                if !symbol.is_empty() {
+                    return Some(symbol.to_string());
+                }
+            }
+        }
+
+        // Pattern: "Undefined function helper"
+        if message.contains("Undefined function") {
+            let parts: Vec<&str> = message.split_whitespace().collect();
+            if let Some(last) = parts.last() {
+                return Some(last.to_string());
             }
         }
 
@@ -2119,6 +2435,171 @@ impl Backend {
         }
 
         diagnostics
+    }
+
+    /// P0 Enhancement: Generate inlay hints for magic numbers (SDL constants, key codes)
+    fn generate_magic_number_hints(&self, doc: &str, range: &Range) -> Vec<InlayHint> {
+        let mut hints = Vec::new();
+
+        // SDL constant registry
+        let sdl_constants: HashMap<i64, &str> = [
+            // SDL Events
+            (256, "SDL_QUIT"),
+            (768, "SDL_KEYDOWN"),
+            (769, "SDL_KEYUP"),
+            (770, "SDL_TEXTEDITING"),
+            (771, "SDL_TEXTINPUT"),
+            (1024, "SDL_MOUSEMOTION"),
+            (1025, "SDL_MOUSEBUTTONDOWN"),
+            (1026, "SDL_MOUSEBUTTONUP"),
+            (1027, "SDL_MOUSEWHEEL"),
+
+            // SDL Key Codes (common)
+            (8, "BACKSPACE"),
+            (9, "TAB"),
+            (13, "RETURN"),
+            (27, "ESCAPE"),
+            (32, "SPACE"),
+            (127, "DELETE"),
+            (1073741881, "SDLK_CAPSLOCK"),
+            (1073741882, "SDLK_F1"),
+            (1073741883, "SDLK_F2"),
+            (1073741884, "SDLK_F3"),
+            (1073741885, "SDLK_F4"),
+            (1073741886, "SDLK_F5"),
+            (1073741887, "SDLK_F6"),
+            (1073741888, "SDLK_F7"),
+            (1073741889, "SDLK_F8"),
+            (1073741890, "SDLK_F9"),
+            (1073741891, "SDLK_F10"),
+            (1073741892, "SDLK_F11"),
+            (1073741893, "SDLK_F12"),
+            (1073741903, "SDLK_RIGHT"),
+            (1073741904, "SDLK_LEFT"),
+            (1073741905, "SDLK_DOWN"),
+            (1073741906, "SDLK_UP"),
+            (1073741907, "SDLK_NUMLOCK"),
+            (1073741920, "SDLK_LCTRL"),
+            (1073741921, "SDLK_LSHIFT"),
+            (1073741922, "SDLK_LALT"),
+            (1073741923, "SDLK_LGUI"),
+            (1073741924, "SDLK_RCTRL"),
+            (1073741925, "SDLK_RSHIFT"),
+            (1073741926, "SDLK_RALT"),
+        ].iter().cloned().collect();
+
+        // Parse document for integer literals
+        let lines: Vec<&str> = doc.lines().collect();
+        for (line_idx, line) in lines.iter().enumerate() {
+            let line_num = line_idx as u32;
+
+            // Skip if line is outside requested range
+            if line_num < range.start.line || line_num > range.end.line {
+                continue;
+            }
+
+            // Simple regex-like parsing for integer literals
+            let mut chars = line.char_indices().peekable();
+            while let Some((idx, ch)) = chars.next() {
+                if ch.is_ascii_digit() {
+                    // Found start of number
+                    let start_idx = idx;
+                    let mut num_str = String::from(ch);
+
+                    // Collect all digits
+                    while let Some(&(_, next_ch)) = chars.peek() {
+                        if next_ch.is_ascii_digit() {
+                            num_str.push(next_ch);
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // Try to parse as integer
+                    if let Ok(value) = num_str.parse::<i64>() {
+                        // Check if it's a known constant
+                        if let Some(const_name) = sdl_constants.get(&value) {
+                            hints.push(InlayHint {
+                                position: Position {
+                                    line: line_num,
+                                    character: (start_idx + num_str.len()) as u32,
+                                },
+                                label: InlayHintLabel::String(format!(" /* {} */", const_name)),
+                                kind: Some(InlayHintKind::TYPE),
+                                text_edits: None,
+                                tooltip: Some(InlayHintTooltip::String(format!(
+                                    "Known constant: {}\nValue: {}",
+                                    const_name, value
+                                ))),
+                                padding_left: Some(true),
+                                padding_right: Some(false),
+                                data: None,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        hints
+    }
+
+    /// P0 Enhancement: Enhance error messages with suggestions
+    fn enhance_error_message(&self, msg: &str) -> String {
+        // Check if this is a "function not found" error
+        // Common patterns: "Unknown function: foo", "Undefined function 'foo'", etc.
+        if let Some(func_name) = self.extract_function_name_from_error(msg) {
+            // Try to find similar functions
+            let similar = self.builtin_registry.find_similar(&func_name, 3);
+
+            if !similar.is_empty() {
+                // Add suggestions
+                let mut enhanced = msg.to_string();
+                enhanced.push_str("\n\nDid you mean: ");
+                enhanced.push_str(&similar.join(", "));
+                enhanced.push_str("?");
+
+                // Show related functions
+                let category_matches = self.builtin_registry.get_by_category(&func_name);
+                if !category_matches.is_empty() && category_matches.len() <= 5 {
+                    enhanced.push_str("\n\nRelated functions:\n");
+                    for sig in category_matches.iter().take(5) {
+                        enhanced.push_str(&format!("  • {} - {}\n", sig.name, sig.description));
+                    }
+                }
+
+                return enhanced;
+            }
+        }
+
+        // No enhancement needed, return original
+        msg.to_string()
+    }
+
+    /// Extract function name from error message
+    fn extract_function_name_from_error(&self, msg: &str) -> Option<String> {
+        // Try to extract function name from various error formats
+        // "Unknown function: foo" → "foo"
+        // "Undefined function 'foo'" → "foo"
+        // "Function 'foo' not found" → "foo"
+
+        if let Some(idx) = msg.find("function") {
+            let after = &msg[idx..];
+            // Look for quoted name
+            if let Some(start) = after.find('\'') {
+                if let Some(end) = after[start + 1..].find('\'') {
+                    return Some(after[start + 1..start + 1 + end].to_string());
+                }
+            }
+            // Look for name after colon
+            if let Some(colon) = after.find(':') {
+                let name = after[colon + 1..].trim().split_whitespace().next()?;
+                return Some(name.to_string());
+            }
+        }
+
+        None
     }
 }
 
