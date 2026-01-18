@@ -2,6 +2,8 @@
 
 HLX-Scale (HLX-S) adds deterministic speculative parallelization to HLX, enabling quantum-inspired multi-agent swarm execution while preserving all four axioms (A1-A4).
 
+**New to HLX-Scale?** Start with the [2-minute Quick Start →](HLX-SCALE-QUICKSTART.md)
+
 ## Quick Start
 
 Add the `@scale` pragma to your main function to enable parallel speculation:

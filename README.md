@@ -164,6 +164,35 @@ HLX's LSP goes beyond traditional IDE features with AI-powered capabilities:
 - Analyze dependencies, contracts, patterns
 - Integrate with AI workflows
 
+### ✅ HLX-Scale: Parallel Execution with Determinism Guarantees
+
+Enable parallel speculation on deterministic code while preserving all axioms (A1-A4):
+
+```hlx
+@scale(size=8)
+fn main() -> Int {
+    let step1 = expensive_compute();
+    barrier("checkpoint1");      // Verify 8 agents agree
+    let step2 = process(step1);
+    barrier("checkpoint2");      // Another verification point
+    return finalize(step2);
+}
+```
+
+**Phase 1B Features:**
+- ✅ **8-agent swarm execution** - Parallel speculation with hash verification
+- ✅ **Multi-barrier synchronization** - Verify consensus at checkpoints
+- ✅ **Automatic serial fallback** - If agents diverge, re-run serially for correctness
+- ✅ **Determinism guaranteed** - A1 axiom preserved (same input → same output)
+- ✅ **Fork bomb prevention** - Thread-local state prevents infinite recursion
+
+**Phase 2+ Roadmap:**
+- 🔜 Multi-function speculation (remove main-only restriction)
+- 🔜 Substrate-aware execution (CPU/GPU/QPU routing)
+- 🔜 Adaptive performance tuning
+
+**[Full HLX-Scale documentation →](hlx/HLX-SCALE.md)**
+
 ### ✅ Enterprise Code Generation (HLX CodeGen)
 
 Generate safety-critical, certified-ready code automatically:
@@ -696,7 +725,7 @@ fn summarize(data: Tensor) -> Float {
 ### 🔶 Beta
 
 - **GPU Backend Optimization** - Works reliably, still optimizing performance
-- **HLX-Scale** - Parallel execution framework
+- **HLX-Scale** - See [full documentation](hlx/HLX-SCALE.md) for Phase 1B features and Phase 2+ roadmap
 
 ### 🔷 Alpha / Experimental
 
