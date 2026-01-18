@@ -1,0 +1,25 @@
+program test_ffi {
+    #[no_mangle]
+    #[export]
+    fn add(a: int, b: int) -> int {
+        let c = a + b;
+        return c;
+    }
+
+    #[export]
+    fn multiply(x: int, y: int) -> int {
+        let result = x * y;
+        return result;
+    }
+
+    fn internal_helper(n: int) -> int {
+        return n + 1;
+    }
+
+    fn main() {
+        let x = add(5, 3);
+        let y = multiply(x, 2);
+        let z = internal_helper(y);
+        return z;
+    }
+}

@@ -164,9 +164,9 @@ HLX's LSP goes beyond traditional IDE features with AI-powered capabilities:
 - Analyze dependencies, contracts, patterns
 - Integrate with AI workflows
 
-### ✅ HLX-Scale: Parallel Execution with Determinism Guarantees
+### 🔷 HLX-Scale: Parallel Execution (Experimental)
 
-Enable parallel speculation on deterministic code while preserving all axioms (A1-A4):
+Enable parallel speculation on deterministic code while preserving axioms (A1-A4):
 
 ```hlx
 @scale(size=8)
@@ -179,12 +179,14 @@ fn main() -> Int {
 }
 ```
 
-**Phase 1B Features:**
+**Phase 1B Implementation (Tested Locally):**
 - ✅ **8-agent swarm execution** - Parallel speculation with hash verification
 - ✅ **Multi-barrier synchronization** - Verify consensus at checkpoints
 - ✅ **Automatic serial fallback** - If agents diverge, re-run serially for correctness
-- ✅ **Determinism guaranteed** - A1 axiom preserved (same input → same output)
+- ✅ **Determinism preserved** - A1 axiom verified locally (same input → same output)
 - ✅ **Fork bomb prevention** - Thread-local state prevents infinite recursion
+
+**Note:** HLX-Scale Phase 1B works on tested hardware. Cross-platform behavior unconfirmed.
 
 **Phase 2+ Roadmap:**
 - 🔜 Multi-function speculation (remove main-only restriction)
@@ -193,43 +195,45 @@ fn main() -> Int {
 
 **[Full HLX-Scale documentation →](hlx/HLX-SCALE.md)**
 
-### ✅ Enterprise Code Generation (HLX CodeGen)
+### 🔷 Code Generation (Experimental)
 
-Generate safety-critical, certified-ready code automatically:
+Generate aerospace-pattern code (proof of concept):
 
 ```bash
 $ hlx-codegen aerospace --demo
-✅ Generated 557 lines of DO-178C DAL-A compliant code
-✅ Triple Modular Redundancy (TMR)
-✅ Safety analysis documentation
-✅ Test procedures
-💰 Time: 6 months → 3 minutes
-💰 Cost: $800K → $60K (review only)
+✅ Generated 557 lines of aerospace-pattern code
+✅ Triple Modular Redundancy (TMR) pattern
+✅ Documentation structure
+✅ Test procedure templates
 ```
 
+**Status:** Demonstration-quality code generation. Syntactically correct, architecturally sound pattern generation. **Not certified for actual aerospace or safety-critical use** — code must be reviewed and certified by qualified domain engineers before any real-world application.
+
 **Domains:**
-- ✅ **Aerospace** (DO-178C, DO-254) - Production ready
-- 🔜 **Medical** (IEC 62304) - Q1 2026
-- 🔜 **Automotive** (ISO 26262) - Q2 2026
+- 🔷 **Aerospace** - Proof of concept (not certified)
+- 🔜 **Medical** - Planned
+- 🔜 **Automotive** - Planned
 
-### ✅ Deterministic GPU/CPU Compute
-- Same input → Same output (bit-identical)
-- Works on any platform (no floating-point surprises)
-- Enables reliable AI iteration loops
+### ✅ Deterministic Compute (Tested Locally)
+- Same input → Same output (bit-identical on tested hardware)
+- GPU (Vulkan) and CPU backends
+- Enables reproducible AI iteration loops
 
-### ✅ Universal GPU Support via Vulkan
-- **Vulkan** - Works on all GPUs (NVIDIA, AMD, Intel, Apple via MoltenVK)
-- **CPU** - Always-available fallback for testing and compatibility
-- **Auto-selection** - Tries GPU, gracefully falls back to CPU if needed
+### ✅ GPU Support via Vulkan (Tested; Other Platforms Unconfirmed)
+- **Vulkan** - Tested and working on our setup
+- **CPU** - Tested and working (LLVM backend)
+- **Auto-selection** - Tries GPU, falls back to CPU if unavailable
+- **Cross-platform support** - Theoretical support for NVIDIA, AMD, Intel, Apple via MoltenVK, but unconfirmed outside our testing environment
 
-### ✅ Production-Ready IDE Experience
+### ✅ Fully Functional IDE Experience (Tested Locally)
 - **Autocomplete** - Context-aware, learns your style
 - **Diagnostics** - Real-time error checking with suggestions
 - **Hover** - Type info, documentation, contract details
 - **Refactoring** - Extract function, rename symbol, organize imports
 - **Testing** - Test discovery, CodeLens integration, result tracking
 - **Call Hierarchy** - Navigate callers/callees
-- **95%+ feature parity** with Rust/Python LSPs
+- **95%+ feature coverage** with Rust/Python LSP standards
+- **Tested on:** Docker, LLVM CPU, Vulkan backends. Cross-platform behavior unconfirmed.
 
 ### ✅ Image Processing (GPU-Accelerated)
 - `grayscale()`, `threshold()`, `brightness()`, `contrast()`
@@ -662,62 +666,64 @@ fn summarize(data: Tensor) -> Float {
 
 ---
 
-## Determinism Guarantee
+## Determinism (Tested & Verified Locally)
 
-**Core Property:** For any HLX program and any inputs, the result is **bit-identical** across:
+**Design Goal:** For any HLX program and any inputs, the result is bit-identical across platforms and execution modes.
 
-- ✅ Linux, macOS, Windows
-- ✅ x86-64, ARM, other architectures
-- ✅ Different CPUs, GPUs, accelerators
-- ✅ Different compiler versions
-- ✅ Parallel vs sequential execution
+**Verified on tested hardware:**
+- ✅ Linux, macOS (tested)
+- ✅ x86-64, ARM (tested)
+- ✅ Parallel vs sequential execution (tested locally)
+
+**Theoretical across:** Windows, other architectures, different accelerators (unconfirmed)
 
 **Why This Matters:**
 
-1. **AI reproducibility** - Training pipeline gives identical results
-2. **Science reproducibility** - Experiments replicate across labs
-3. **Verification** - Prove code behavior without running it
-4. **Trust** - Users can verify they got what they expect
+1. **AI reproducibility** - Enables consistent iteration loops
+2. **Science reproducibility** - Results replicate on same hardware
+3. **Verification** - Enables formal reasoning about code
+4. **Transparency** - Users can audit behavior
 
 ---
 
 ## Current Status (January 2026)
 
-**Production Ready** - HLX has production-grade tooling that rivals established languages. The compiler is self-hosting, the LSP achieves 95%+ feature parity with Rust/Python IDEs, and all 128 tests pass on every commit across Linux, macOS, and Windows.
+**Tested and Working Locally** - HLX compiler is self-hosting with 128/128 tests passing locally. The LSP achieves 95%+ feature parity with Rust/Python IDEs. GPU and CPU backends work on tested hardware. Code generation produces syntactically correct output. **Cross-platform testing and external validation in progress.**
 
-### ✅ Production Ready
+### ✅ Tested & Working
 
 **Language & Compiler:**
 - ✅ Self-hosting compiler (compiles itself)
-- ✅ 128/128 tests passing on all platforms
+- ✅ 128/128 tests passing locally
 - ✅ LLVM backend (optimized machine code)
 - ✅ LC-B bytecode (portable intermediate representation)
 - ✅ Type system with full inference
-- ✅ Deterministic execution (bit-identical across platforms)
+- ✅ Deterministic execution (verified on tested hardware)
 
 **Runtime:**
-- ✅ **CPU Runtime** - Stable, deterministic
-- ✅ **GPU Runtime (Vulkan)** - Production ready
-  - Works on NVIDIA, AMD, Intel, Apple (via MoltenVK)
-  - Automatic fallback to CPU if GPU unavailable
-  - 10-100x faster than CPU for image/tensor operations
+- ✅ **CPU Runtime** - Works, tested locally
+- ✅ **GPU Runtime (Vulkan)** - Works on tested hardware
+  - Tested and working locally
+  - Theoretical cross-vendor support (unconfirmed)
+  - Automatic fallback to CPU
+  - 10-100x faster than CPU for image/tensor operations on tested setup
 
 **Developer Tooling:**
-- ✅ **Language Server Protocol** - 95%+ feature parity with rust-analyzer/Pylance
+- ✅ **Language Server Protocol** - 95%+ feature coverage with Rust/Python IDEs
   - Standard features: autocomplete, diagnostics, hover, refactoring, formatting, call hierarchy
-  - **AI-native features (industry first!):** contract synthesis, intent detection, pattern learning, AI context export
+  - **AI-native features:** contract synthesis, intent detection, pattern learning, AI context export
 - ✅ **VS Code Extension** - Syntax highlighting, full LSP integration
-- ✅ **CI/CD** - Automated testing on Linux, macOS, Windows (every commit)
+- ✅ **CI/CD** - Automated testing on GitHub (Linux, macOS, Windows)
 - ✅ **FFI** - C, Python, Node.js, Rust, Java, Ada/SPARK bindings
 
-**Enterprise Tools:**
-- ✅ **HLX CodeGen** - Generate safety-critical code
-  - Aerospace (DO-178C, DO-254) - Production ready
-  - Medical (IEC 62304) - Coming Q1 2026
-  - Automotive (ISO 26262) - Coming Q2 2026
+**Code Generation:**
+- ✅ **HLX CodeGen** - Generates syntactically correct pattern code
+  - Aerospace (proof of concept, not certified)
+  - Medical (planned)
+  - Automotive (planned)
 
 **Operations:**
-- ✅ Image processing (8 GPU-accelerated operations)
+- ✅ Image processing (8 GPU-accelerated operations, tested on Vulkan)
 - ✅ Tensor operations (creation, manipulation, reductions)
 - ✅ File I/O (JSON, CSV, images, raw files)
 - ✅ Math operations (full suite)
@@ -781,7 +787,7 @@ A: Types catch structural errors ("expected string, got int"). Contracts catch *
 A: HLX's LSP has capabilities traditional IDEs don't: **contract synthesis** (natural language → code), **intent detection** (understands what you're building), **pattern learning** (adapts to your style), and **AI context export** (for Claude/GPT integration). These make HLX uniquely learnable by AI systems.
 
 **Q: Is this production-ready?**
-A: **Yes.** The compiler is self-hosting, 128/128 tests pass on all platforms, the LSP rivals Rust/Python IDEs (95%+ feature parity), and HLX CodeGen generates certified-ready aerospace code. GPU runtime is production-ready (Vulkan backend). Contracts and LSTX are alpha (core works, expanding features).
+A: The compiler is self-hosting with 128/128 tests passing locally. The LSP is fully functional with 95%+ feature parity to Rust/Python IDEs. GPU runtime (Vulkan backend) works on tested hardware. However: GPU backend is unconfirmed on hardware outside our testing environment. HLX CodeGen generates syntactically correct aerospace-pattern code (proof of concept, not certified). Contracts and LSTX are alpha (core works, expanding features). Not recommended for safety-critical systems without external review.
 
 **Q: Why is determinism so important?**
 A: For AI systems to self-improve through iteration, they need reliable feedback. Non-determinism breaks this loop. For safety-critical systems, determinism is required for certification (DO-178C, ISO 26262). For science, it enables reproducibility.
@@ -796,7 +802,7 @@ A: HLX is 10-100x **faster** than CPU alternatives for GPU work. Compared to han
 A: Three audiences: (1) **Developers** building AI systems that need reliable GPU compute. (2) **Enterprises** in aerospace/medical/automotive needing certified code generation. (3) **AI researchers** wanting AI-native language primitives (LSTX, contracts as ground truth).
 
 **Q: Can I use HLX today?**
-A: Yes. Clone the repo, build with Cargo, write HLX code. The LSP works in VS Code/Neovim/Emacs. The compiler is stable. GPU runtime is production-ready. If you're building safety-critical systems, HLX CodeGen generates DO-178C aerospace code today.
+A: Yes for experimentation. Clone the repo, build with Cargo, write HLX code. The LSP works in VS Code/Neovim/Emacs on tested configurations. The compiler works locally. GPU runtime works on tested hardware. Not recommended for safety-critical systems — HLX CodeGen is a proof-of-concept demonstration, not certified for aerospace or other safety-critical applications.
 
 ---
 
@@ -829,9 +835,9 @@ Apache License 2.0 - See LICENSE file
 
 **Early Adopters:**
 - Building AI systems that need deterministic GPU compute
-- Working on safety-critical systems (aerospace, medical, automotive)
-- Need certified code generation (DO-178C, IEC 62304, ISO 26262)
-- Integrating AI-native primitives (LSTX, contracts)
+- Interested in exploring HLX CodeGen for reference implementations (not certified for production use)
+- Exploring AI-native primitives (LSTX, contracts)
+- Interested in deterministic programming models
 
 **Contributors:**
 - AI researchers (benchmark HLX on code generation tasks)

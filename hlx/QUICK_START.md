@@ -196,4 +196,4 @@ Include in PR:
 
 ---
 
-**HLX is production-ready. Build with confidence.** 🚀
+**HLX works locally. Experiment, explore, and share feedback.** 🚀

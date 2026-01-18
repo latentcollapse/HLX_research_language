@@ -157,10 +157,11 @@ fn test_my_feature() {
 ### 3. Runtime & Executor
 
 **Opportunities:**
+- GPU backend testing on diverse hardware (NVIDIA, AMD, Intel, Apple)
 - GPU backend optimization (Vulkan performance)
 - New GPU operations (image filters, tensor ops)
-- CPU SIMD optimizations
-- Memory safety improvements
+- CPU optimizations
+- Cross-platform compatibility testing
 
 ### 4. Language Features
 

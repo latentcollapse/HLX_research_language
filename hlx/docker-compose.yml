@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # ==============================================================================
+  # HLX Compiler Service
+  # ==============================================================================
+  hlx-compiler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hlx-compiler:latest
+    container_name: hlx-compiler
+    volumes:
+      # Mount your HLX source files here
+      - ./examples:/workspace/examples:ro
+      - ./output:/workspace/output
+    working_dir: /workspace
+    command: ["hlx", "--help"]
+    restart: unless-stopped
+
+  # ==============================================================================
+  # HLX LSP Server Service
+  # ==============================================================================
+  hlx-lsp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hlx-compiler:latest
+    container_name: hlx-lsp
+    ports:
+      # LSP typically uses stdio, but expose port for TCP mode
+      - "9257:9257"
+    volumes:
+      # Mount workspace for LSP to analyze
+      - ./examples:/workspace:ro
+      - hlx-lsp-cache:/home/hlx/.hlx
+    working_dir: /workspace
+    command: ["hlx_lsp"]
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+  # ==============================================================================
+  # Development Container (for interactive work)
+  # ==============================================================================
+  hlx-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hlx-compiler:latest
+    container_name: hlx-dev
+    volumes:
+      # Mount your entire project for development
+      - .:/workspace
+      - hlx-dev-cache:/home/hlx/.hlx
+      - hlx-cargo-cache:/home/hlx/.cargo
+    working_dir: /workspace
+    command: ["bash"]
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+volumes:
+  # Persistent volumes for caches
+  hlx-lsp-cache:
+    driver: local
+  hlx-dev-cache:
+    driver: local
+  hlx-cargo-cache:
+    driver: local
+
+networks:
+  default:
+    name: hlx-network

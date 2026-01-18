@@ -72,21 +72,21 @@ This document outlines HLX's development phases and current status. Our philosop
 - ✅ [HLX-SCALE-QUICKSTART.md](hlx/HLX-SCALE-QUICKSTART.md) - 2-minute introduction
 - ✅ [HLX_SCALE_PHASE1A_COMPLETE.md](hlx/HLX_SCALE_PHASE1A_COMPLETE.md) - Implementation details
 
-### HLX CodeGen (Enterprise)
+### HLX CodeGen (Code Generation)
 
-**Aerospace (DO-178C) - Production Ready:**
-- ✅ Generate 557+ lines of certified-ready code in 3 minutes
-- ✅ Triple Modular Redundancy (TMR)
-- ✅ Safety analysis documentation
-- ✅ Test procedures
-- ✅ Formal verification ready
+**Aerospace - Proof of Concept:**
+- ✅ Generate 557+ lines of aerospace-pattern code in 3 minutes
+- ✅ Triple Modular Redundancy (TMR) pattern
+- ✅ Documentation structure
+- ✅ Test procedure templates
+- ⚠️ **Not certified. Not for production safety-critical use. Demonstration quality.**
 
 **Roadmap:**
-- 🔜 Medical (IEC 62304) - Q1 2026
-- 🔜 Automotive (ISO 26262) - Q2 2026
+- 🔜 Medical - Planned
+- 🔜 Automotive - Planned
 
 ### Status
-**Production Ready** — HLX-Scale is fully implemented with comprehensive tests and documentation. Multi-agent execution, barrier synchronization, and determinism guarantees are all verified.
+**Phase 1B Complete (Tested Locally)** — HLX-Scale is implemented with comprehensive tests and documentation passing locally. Multi-agent execution, barrier synchronization, and determinism verified on tested hardware. Cross-platform behavior unconfirmed.
 
 ---
 
@@ -255,11 +255,11 @@ This document outlines HLX's development phases and current status. Our philosop
 
 | Feature | Phase | Status | Notes |
 |---------|-------|--------|-------|
-| CodeGen (Aerospace) | 1B | ✅ Complete | DO-178C DAL-A, production ready |
-| CodeGen (Medical) | 2 | 🔜 Planned | IEC 62304, Q1 2026 |
-| CodeGen (Automotive) | 2 | 🔜 Planned | ISO 26262, Q2 2026 |
+| CodeGen (Aerospace) | 1B | 🔷 Proof of Concept | Syntactically correct code (not certified) |
+| CodeGen (Medical) | 2 | 🔜 Planned | Planned |
+| CodeGen (Automotive) | 2 | 🔜 Planned | Planned |
 | Formal verification | 3 | 🔮 Future | Rocq/Coq integration |
-| Safety analysis | 1B | ✅ Complete | In CodeGen output |
+| Safety analysis | 1B | 🔷 Structural | Template generation (not verified) |
 
 ---
 
@@ -271,10 +271,10 @@ HLX is built on four axioms (A1-A4) that define its correctness guarantees.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Compiler | ✅ Complete | AST-hash based decisions |
-| CPU runtime | ✅ Complete | LLVM generates deterministic code |
-| GPU runtime (Vulkan) | ✅ Complete | Deterministic floating-point |
-| HLX-Scale (Phase 1B) | ✅ Complete | BLAKE3 hash verification |
+| Compiler | ✅ Verified | AST-hash based decisions, tested locally |
+| CPU runtime | ✅ Verified | LLVM generates deterministic code, tested locally |
+| GPU runtime (Vulkan) | ✅ Verified locally | Deterministic floating-point on tested hardware |
+| HLX-Scale (Phase 1B) | ✅ Verified locally | BLAKE3 hash verification on tested hardware |
 | Multi-function @scale | 🔜 Planned | Will maintain A1 |
 | Quantum execution | 🔮 Future | New axiom extensions needed |
 
@@ -291,17 +291,17 @@ HLX is built on four axioms (A1-A4) that define its correctness guarantees.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Value type | ✅ Complete | Canonical representation |
-| Serialization | ✅ Complete | Lossless encoding |
-| HLX-Scale | ✅ Complete | Agent states isolated |
+| Value type | ✅ Verified | Canonical representation, tested locally |
+| Serialization | ✅ Verified | Lossless encoding, tested locally |
+| HLX-Scale | ✅ Verified locally | Agent states isolated on tested hardware |
 
 ### A4: Universal Value (All agents use same Value type)
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Runtime | ✅ Complete | Single Value enum type |
-| CPU/GPU | ✅ Complete | Same representation |
-| HLX-Scale | ✅ Complete | All agents same Value |
+| Runtime | ✅ Verified | Single Value enum type, tested locally |
+| CPU/GPU | ✅ Verified | Same representation on tested hardware |
+| HLX-Scale | ✅ Verified locally | All agents same Value on tested hardware |
 | Distributed (future) | 🔮 Planned | Network encoding needed |
 
 ---

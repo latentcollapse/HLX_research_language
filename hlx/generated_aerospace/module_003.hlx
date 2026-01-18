@@ -1,0 +1,66 @@
+//! aileron_left Actuator Interface
+//!
+//! DO-178C Compliance: DAL-A
+//! Safety Analysis: FMEA-2024-ACT-074
+//!
+//! This module provides a safety-critical interface to the aileron_left actuator
+//! with command validation and monitoring.
+
+import std.aerospace;
+import std.safety;
+
+/// Command aileron_left actuator
+///
+/// Safety: Command range limited and validated
+/// Compliance: DO-178C Section 6.3.5
+fn command_aileron_left(position) {
+    // Validate command
+    @contract validation {
+        value: position,
+        rules: [
+            "range_check:-30:30",
+            "rate_limit:100",           // Max 100 units/sec
+            "command_sanity_check"
+        ]
+    }
+
+    // Execute command
+    set_aileron_left_position(position);
+
+    // Verify execution
+    let actual = read_aileron_left_position();
+    let error = abs(position - actual);
+
+    if error > 0.1 {
+        trigger_safety_alarm("AILERON_LEFT_POSITION_ERROR");
+        return Error("aileron_left command verification failed");
+    }
+
+    @audit_log {
+        event: "aileron_left_command",
+        timestamp: now(),
+        commanded: position,
+        actual: actual,
+        error: error,
+        status: "nominal"
+    }
+
+    return Ok(actual);
+}
+
+/// Emergency stop aileron_left
+///
+/// Safety: Immediate stop regardless of current state
+fn emergency_stop_aileron_left() {
+    set_aileron_left_position(0.0);
+    disable_aileron_left_power();
+
+    @audit_log {
+        event: "aileron_left_emergency_stop",
+        timestamp: now(),
+        status: "executed"
+    }
+
+    return Ok(true);
+}
+
