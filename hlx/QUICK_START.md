@@ -172,7 +172,7 @@ chmod +x benchmark.sh
 3. **Complex example**: `showcase_math.hlxa`
 4. **Real application**: `HLX_Training_Examples/Synthetic_Vault/scripts/generator.hlxa`
 5. **Performance tuning**: Read `PERFORMANCE_GUIDE.md`
-6. **Deep dive**: Read `HLX_SOLIDIFIED.md`
+6. **Parallel execution**: Read `HLX-SCALE-QUICKSTART.md` (HLX-Scale Phase 1B)
 
 ## Getting Help
 
@@ -196,4 +196,4 @@ Include in PR:
 
 ---
 
-**HLX is production-ready. Build cool shit.** 🚀
+**HLX is production-ready. Build with confidence.** 🚀
