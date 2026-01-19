@@ -598,6 +598,81 @@ fn analyze_stmt(state: [i64], scope: [i64], stmt_node: [i64]) -> [i64] {
 }
 
 // ============================================================================
+// MAX_DEPTH ATTRIBUTE VALIDATION (Phase 8b: Bootstrap Recursion)
+// ============================================================================
+
+// Extract max_depth from attributes array
+// Returns [max_depth_value, 0] if found and valid, [1000, 0] for default, [-1, error_msg_ptr] on error
+fn extract_and_validate_max_depth(attributes: [i64]) -> [i64] {
+    let result = [0, 0];
+    let default_depth = 1000;  // DEFAULT_MAX_DEPTH
+
+    if (array_len(attributes) == 0) {
+        result = set_at(result, 0, default_depth);
+        return result;
+    }
+
+    let i = 0;
+    loop(i < array_len(attributes), 100) {
+        let attr_ptr = get_at(attributes, i);
+        let attr_str = int_to_ptr(attr_ptr);
+
+        // Check if this attribute starts with "max_depth"
+        if (starts_with(attr_str, "max_depth")) {
+            // Look for opening parenthesis
+            let paren_idx = index_of(attr_str, "(");
+            if (paren_idx < 0) {
+                // Missing opening parenthesis
+                let error_msg = "Malformed max_depth attribute: missing '('";
+                result = set_at(result, 0, -1);
+                result = set_at(result, 1, ptr_to_int(error_msg));
+                return result;
+            }
+
+            // Look for closing parenthesis
+            let close_idx = index_of(attr_str, ")");
+            if (close_idx < 0) {
+                // Missing closing parenthesis
+                let error_msg = "Malformed max_depth attribute: missing ')'";
+                result = set_at(result, 0, -1);
+                result = set_at(result, 1, ptr_to_int(error_msg));
+                return result;
+            }
+
+            if (close_idx <= paren_idx) {
+                // Invalid parenthesis order
+                let error_msg = "Malformed max_depth attribute: invalid parentheses";
+                result = set_at(result, 0, -1);
+                result = set_at(result, 1, ptr_to_int(error_msg));
+                return result;
+            }
+
+            // Extract the number between parentheses
+            let num_str = substring(attr_str, paren_idx + 1, close_idx);
+            let parsed_depth = to_int(num_str);
+
+            // Validate it's a positive number
+            if (parsed_depth <= 0) {
+                let error_msg = "max_depth must be a positive integer";
+                result = set_at(result, 0, -1);
+                result = set_at(result, 1, ptr_to_int(error_msg));
+                return result;
+            }
+
+            // Valid max_depth found
+            result = set_at(result, 0, parsed_depth);
+            return result;
+        }
+
+        i += 1;
+    }
+
+    // No max_depth attribute found, use default
+    result = set_at(result, 0, default_depth);
+    return result;
+}
+
+// ============================================================================
 // FUNCTION ANALYSIS
 // ============================================================================
 
@@ -606,6 +681,23 @@ fn analyze_func(state: [i64], global_scope: [i64], func_node: [i64]) -> [i64] {
     let func_name = int_to_ptr(func_name_ptr);
     let params = int_to_ptr(get_at(func_node, 2));
     let body = int_to_ptr(get_at(func_node, 3));
+
+    // Validate max_depth attribute if present (Phase 8b)
+    let attributes = [];
+    if (array_len(func_node) > 4) {
+        attributes = int_to_ptr(get_at(func_node, 4));
+    }
+
+    let validation_result = extract_and_validate_max_depth(attributes);
+    let max_depth = get_at(validation_result, 0);
+
+    if (max_depth < 0) {
+        // Validation error
+        let error_msg = int_to_ptr(get_at(validation_result, 1));
+        let error = make_error("E_INVALID_MAX_DEPTH", error_msg, 0, 0);
+        state = add_error_to_state(state, error);
+        return state;
+    }
 
     let func_scope = make_scope(1, ptr_to_int(global_scope));
 

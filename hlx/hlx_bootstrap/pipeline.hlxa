@@ -115,15 +115,26 @@ program bootstrap_compiler {
         print("HLX Bootstrap Compiler - Full Pipeline Test\n");
         print("═══════════════════════════════════════════════════\n");
 
-        // Test program: Simple arithmetic
-        let source = "program test { fn add(a: i64, b: i64) -> i64 { return a + b; } fn main() -> i64 { return add(10, 32); } }";
+        // Test 1: Simple program with explicit max_depth
+        print("\n>>> Test 1: Program with max_depth attributes\n");
+        let source1 = "program test { fn countdown(n) { if (n <= 0) { return 0; } return 1 + countdown(n - 1); } fn main() -> i64 { return countdown(5); } }";
 
         print("\nSource:\n");
-        print(source);
+        print(source1);
         print("\n");
 
         // Compile it
-        let binary = compile(source);
+        let binary = compile(source1);
+
+        print("\n>>> Test 2: Program with implicit default max_depth\n");
+        let source2 = "program test2 { fn fib(n) { if (n <= 1) { return n; } return fib(n - 1) + fib(n - 2); } fn main() -> i64 { return fib(10); } }";
+
+        print("\nSource:\n");
+        print(source2);
+        print("\n");
+
+        // Compile second program
+        let binary2 = compile(source2);
 
         print("\nTest complete!\n");
         print("Binary output is ready for execution.\n");

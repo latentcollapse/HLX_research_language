@@ -378,12 +378,13 @@ fn make_inst_continue() -> [i64] {
     return inst;
 }
 
-fn make_inst_funcdef(name: String, params: [i64], body_pc: i64) -> [i64] {
-    let inst = [0, 0, 0, 0];
+fn make_inst_funcdef(name: String, params: [i64], body_pc: i64, max_depth: i64) -> [i64] {
+    let inst = [0, 0, 0, 0, 0];
     inst = set_at(inst, 0, INST_FUNCDEF());
     inst = set_at(inst, 1, ptr_to_int(name));
     inst = set_at(inst, 2, ptr_to_int(params));
     inst = set_at(inst, 3, body_pc);
+    inst = set_at(inst, 4, max_depth);  // NEW: max_depth field
     return inst;
 }
 
@@ -817,12 +818,44 @@ fn lower_function(state: [i64], func_node: [i64]) -> [i64] {
     let params = int_to_ptr(get_at(func_node, 2));
     let body = int_to_ptr(get_at(func_node, 3));
 
+    // Extract attributes (new field at index 4)
+    let attributes = [];
+    if (array_len(func_node) > 4) {
+        attributes = int_to_ptr(get_at(func_node, 4));
+    }
+
+    // Extract max_depth from attributes
+    // Look for "max_depth(N)" in attributes array
+    let max_depth = 1000;  // DEFAULT_MAX_DEPTH
+    let i = 0;
+    loop(i < array_len(attributes), 10) {
+        let attr_str = int_to_ptr(get_at(attributes, i));
+        // Check if starts with "max_depth"
+        if (starts_with(attr_str, "max_depth")) {
+            // Extract the number between ( and )
+            // For simplicity, find the opening parenthesis
+            let paren_idx = index_of(attr_str, "(");
+            if (paren_idx >= 0) {
+                let close_idx = index_of(attr_str, ")");
+                if (close_idx > paren_idx) {
+                    let num_str = substring(attr_str, paren_idx + 1, close_idx);
+                    // Try to parse as integer
+                    let parsed = to_int(num_str);
+                    if (parsed > 0) {
+                        max_depth = parsed;
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+
     // Register function at current PC
     let func_start = get_pc(state);
     state = register_function(state, name, func_start);
 
-    // Emit FuncDef instruction
-    let funcdef = make_inst_funcdef(name, params, func_start + 1);
+    // Emit FuncDef instruction with max_depth
+    let funcdef = make_inst_funcdef(name, params, func_start + 1, max_depth);
     state = emit(state, funcdef);
 
     // Bind parameters to registers

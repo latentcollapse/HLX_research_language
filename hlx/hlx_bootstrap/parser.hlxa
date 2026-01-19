@@ -273,12 +273,13 @@ fn make_stmt_export(item: [i64]) -> [i64] {
     return node;
 }
 
-fn make_function(name: String, params: [i64], body: [i64]) -> [i64] {
-    let node = [0, 0, 0, 0];
+fn make_function(name: String, params: [i64], body: [i64], attributes: [i64]) -> [i64] {
+    let node = [0, 0, 0, 0, 0];
     node = set_at(node, 0, NODE_FUNCTION());
     node = set_at(node, 1, ptr_to_int(name));
     node = set_at(node, 2, ptr_to_int(params));
     node = set_at(node, 3, ptr_to_int(body));
+    node = set_at(node, 4, ptr_to_int(attributes));  // NEW: attributes array
     return node;
 }
 
@@ -1002,7 +1003,69 @@ fn parse_statement(state: [i64]) -> [i64] {
 // Function and Program Parsing
 // ============================================================================
 
+// Parse attributes like #[max_depth(50)]
+// Returns [attributes_array, updated_state]
+fn parse_attributes(state: [i64]) -> [i64] {
+    let attributes = [];
+
+    // Parse all #[...] blocks before function
+    loop(peek_kind(state) == TOK_LBRACKET(), 10) {
+        state = expect(state, TOK_LBRACKET());
+
+        // Get attribute content as string
+        // For now, collect tokens until ]
+        let attr_tokens = [];
+        loop(peek_kind(state) != TOK_RBRACKET(), 10) {
+            let tok = current_token(state);
+            let kind = get_at(tok, 0);
+
+            // Convert token to string representation
+            if (kind == TOK_IDENT()) {
+                let name_ptr = get_at(tok, 1);
+                attr_tokens = push(attr_tokens, name_ptr);
+            } else if (kind == TOK_INT()) {
+                let val = get_at(tok, 1);
+                // Convert integer to string
+                let num_str = [0, 0];
+                num_str = set_at(num_str, 0, val);
+                attr_tokens = push(attr_tokens, ptr_to_int(num_str));
+            }
+            state = advance(state);
+        }
+
+        state = expect(state, TOK_RBRACKET());
+
+        // Build attribute string from tokens
+        if (array_len(attr_tokens) > 0) {
+            // Simple case: collect identifier and value
+            // e.g., max_depth(50) → "max_depth(50)"
+            let first = int_to_ptr(get_at(attr_tokens, 0));
+            let attr_str = first;
+
+            // If we have more tokens (e.g., "50"), append them
+            if (array_len(attr_tokens) > 1) {
+                let second = int_to_ptr(get_at(attr_tokens, 1));
+                attr_str = concat(attr_str, "(");
+                attr_str = concat(attr_str, second);
+                attr_str = concat(attr_str, ")");
+            }
+
+            attributes = push(attributes, ptr_to_int(attr_str));
+        }
+    }
+
+    let result = [0, 0];
+    result = set_at(result, 0, ptr_to_int(attributes));
+    result = set_at(result, 1, ptr_to_int(state));
+    return result;
+}
+
 fn parse_function(state: [i64]) -> [i64] {
+    // Parse attributes before function keyword
+    let attr_result = parse_attributes(state);
+    let attributes = int_to_ptr(get_at(attr_result, 0));
+    state = int_to_ptr(get_at(attr_result, 1));
+
     state = expect(state, TOK_FN());
     state = expect(state, TOK_IDENT());
 
@@ -1058,7 +1121,7 @@ fn parse_function(state: [i64]) -> [i64] {
 
     state = expect(state, TOK_RBRACE());
 
-    let func = make_function(name, params, body);
+    let func = make_function(name, params, body, attributes);
     let ret = [0, 0];
     ret = set_at(ret, 0, ptr_to_int(func));
     ret = set_at(ret, 1, ptr_to_int(state));

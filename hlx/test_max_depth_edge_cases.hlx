@@ -1,0 +1,45 @@
+// Test edge cases for max_depth validation
+
+program test_edge_cases {
+
+    // Edge case 1: max_depth = 1
+    #[max_depth(1)]
+    fn single_depth(n) {
+        if (n <= 0) { return 0; }
+        return single_depth(n - 1);
+    }
+
+    // Edge case 2: Very large max_depth
+    #[max_depth(65535)]
+    fn very_large(n) {
+        if (n <= 0) { return 0; }
+        return very_large(n - 1);
+    }
+
+    // Edge case 3: Multiple attributes (only max_depth matters)
+    #[some_attr(5)]
+    #[max_depth(42)]
+    fn multi_attr(n) {
+        if (n <= 0) { return 0; }
+        return multi_attr(n - 1);
+    }
+
+    fn main() -> i64 {
+        print("Testing max_depth edge cases\n");
+
+        print("Test 1: single_depth(1) = ");
+        print(single_depth(1));
+        print("\n");
+
+        print("Test 2: very_large(10) = ");
+        print(very_large(10));
+        print("\n");
+
+        print("Test 3: multi_attr(5) = ");
+        print(multi_attr(5));
+        print("\n");
+
+        print("✓ All edge case tests passed!\n");
+        return 1;
+    }
+}

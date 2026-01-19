@@ -1,0 +1,77 @@
+// Test bootstrap semantic validator with max_depth validation
+// Tests Phase 8b: max_depth attribute validation
+
+program test_bootstrap_semantic_max_depth {
+
+    // Test 1: Valid explicit max_depth
+    #[max_depth(50)]
+    fn valid_explicit(n) {
+        if (n <= 0) { return 0; }
+        return 1 + valid_explicit(n - 1);
+    }
+
+    // Test 2: Another valid max_depth
+    #[max_depth(100)]
+    fn another_valid(n) {
+        if (n <= 0) { return n; }
+        return another_valid(n - 1) + 1;
+    }
+
+    // Test 3: No max_depth attribute (should use default 1000)
+    fn implicit_default(n) {
+        if (n <= 0) { return 0; }
+        return implicit_default(n - 1) + 1;
+    }
+
+    // Test 4: Edge case - max_depth of 1
+    #[max_depth(1)]
+    fn minimal_depth(n) {
+        if (n <= 1) { return 1; }
+        return minimal_depth(n - 1);
+    }
+
+    // Test 5: Large max_depth value
+    #[max_depth(10000)]
+    fn large_depth(n) {
+        if (n <= 0) { return 0; }
+        return large_depth(n - 1) + 1;
+    }
+
+    fn main() -> i64 {
+        print("Testing bootstrap semantic max_depth validation\n");
+        print("================================================\n\n");
+
+        print("Test 1: Calling valid_explicit(5)...\n");
+        let result1 = valid_explicit(5);
+        print("Result: ");
+        print(result1);
+        print(" (expected: 5)\n\n");
+
+        print("Test 2: Calling another_valid(10)...\n");
+        let result2 = another_valid(10);
+        print("Result: ");
+        print(result2);
+        print(" (expected: 10)\n\n");
+
+        print("Test 3: Calling implicit_default(20)...\n");
+        let result3 = implicit_default(20);
+        print("Result: ");
+        print(result3);
+        print(" (expected: 20)\n\n");
+
+        print("Test 4: Calling minimal_depth(1)...\n");
+        let result4 = minimal_depth(1);
+        print("Result: ");
+        print(result4);
+        print(" (expected: 1)\n\n");
+
+        print("Test 5: Calling large_depth(100)...\n");
+        let result5 = large_depth(100);
+        print("Result: ");
+        print(result5);
+        print(" (expected: 100)\n\n");
+
+        print("✓ All semantic validation tests completed!\n");
+        return 1;
+    }
+}
