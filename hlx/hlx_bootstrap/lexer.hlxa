@@ -160,7 +160,7 @@ program hlx_lexer {
                 if c == "_" { is_ident_start = 1; }
 
                 if is_ident_start == 1 {
-                    let start = pos + 0;  // Force a copy (HLX aliasing issue)
+                    let start = pos;  // Now properly copies due to aliasing fix
 
                     loop(pos < len, 10000) {
                         let id_c = char_at(source, pos);
@@ -204,7 +204,7 @@ program hlx_lexer {
                 }
 
                 if is_digit_start == 1 {
-                    let start = pos + 0;  // Force a copy (HLX aliasing issue)
+                    let start = pos;  // Now properly copies due to aliasing fix
 
                     loop(pos < len, 10000) {
                         let num_c = char_at(source, pos);
@@ -231,7 +231,7 @@ program hlx_lexer {
             // String literals: "..."
             if handled == 0 {
                 if c == "\"" {
-                    let start = pos + 0;  // Force a copy (HLX aliasing issue)
+                    let start = pos;  // Now properly copies due to aliasing fix
                     pos = pos + 1;  // Skip opening quote
                     col = col + 1;
 

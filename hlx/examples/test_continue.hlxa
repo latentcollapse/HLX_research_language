@@ -1,0 +1,45 @@
+// Test continue statement in nested loops
+
+program test_continue {
+    fn main() -> i64 {
+        print("Testing continue in nested loops:");
+        print("");
+
+        // Test 1: Continue in outer loop
+        let outer_count = 0;
+        let i = 0;
+        loop(i < 5, 100) {
+            i = i + 1;
+            if i == 3 {
+                print("Skipping i=3 in outer loop");
+                continue;  // Should skip to next iteration of outer loop
+            }
+            outer_count = outer_count + 1;
+        }
+        print("Outer count (should be 4):");
+        print(outer_count);
+
+        print("");
+
+        // Test 2: Continue in inner loop
+        let total = 0;
+        let j = 0;
+        loop(j < 3, 100) {
+            let k = 0;
+            loop(k < 3, 100) {
+                k = k + 1;
+                if k == 2 {
+                    continue;  // Should skip to next iteration of INNER loop only
+                }
+                total = total + 1;
+            }
+            j = j + 1;
+        }
+        print("Total (should be 6: 3 outer * 2 inner):");
+        print(total);
+
+        print("");
+        print("Continue tests passed!");
+        return 0;
+    }
+}

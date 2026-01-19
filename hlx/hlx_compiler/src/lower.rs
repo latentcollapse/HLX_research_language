@@ -328,7 +328,12 @@ impl LoweringContext {
                 // Clear expected type after lowering
                 self.expected_type = None;
 
-                self.bind(name, val_reg);
+                // Allocate a fresh register and copy the value to avoid aliasing
+                // Without this, `let x = y` would make x and y aliases to the same register
+                let new_reg = self.alloc_reg();
+                self.emit(Instruction::Move { out: new_reg, src: val_reg });
+                self.bind(name, new_reg);
+
                 // Store type annotation if present
                 if let Some(typ) = type_annotation {
                     self.type_annotations.insert(name.clone(), typ.clone());
