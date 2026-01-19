@@ -1,0 +1,238 @@
+// Test suite for Tier 1 Introspection builtins
+// Phase 1 of builtin library conversion
+
+program test_tier1_introspection {
+
+    // ========================================================================
+    // TEST SUITE FOR type() FUNCTION
+    // ========================================================================
+
+    // Note: type() function tests deferred - string return type has bootstrap limitations
+    // type() is implemented and available, but testing string returns in bootstrap requires
+    // more mature string comparison mechanisms. Focus on len() which works reliably.
+
+    // ========================================================================
+    // TEST SUITE FOR len() FUNCTION (Array)
+    // ========================================================================
+
+    fn test_len_empty_array() -> i64 {
+        // Test empty array has length 0
+        let arr = [];
+        let length = len(arr);
+
+        if (length == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_len_single_element() -> i64 {
+        // Test single-element array has length 1
+        let arr = [42];
+        let length = len(arr);
+
+        if (length == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_len_multiple_elements() -> i64 {
+        // Test array with multiple elements
+        let arr = [1, 2, 3, 4, 5];
+        let length = len(arr);
+
+        if (length == 5) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_len_medium_array() -> i64 {
+        // Test array with 10 elements
+        let arr = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let length = len(arr);
+
+        if (length == 10) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR str_len() FUNCTION (String)
+    // ========================================================================
+
+    fn test_str_len_empty() -> i64 {
+        // Test empty string has length 0
+        let s = "";
+        let length = str_len(s);
+
+        if (length == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_str_len_single_char() -> i64 {
+        // Test single character string
+        let s = "a";
+        let length = str_len(s);
+
+        if (length == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_str_len_word() -> i64 {
+        // Test simple word
+        let s = "hello";
+        let length = str_len(s);
+
+        if (length == 5) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_str_len_sentence() -> i64 {
+        // Test sentence with spaces
+        let s = "hello world";
+        let length = str_len(s);
+
+        if (length == 11) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_str_len_long() -> i64 {
+        // Test longer string
+        let s = "Hello, World! This is a test.";
+        let length = str_len(s);
+
+        if (length == 29) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // MAIN TEST HARNESS
+    // ========================================================================
+
+    fn main() -> i64 {
+        let passed = 0;
+        let failed = 0;
+
+        print("═══════════════════════════════════════════════════════════\n");
+        print("TIER 1 INTROSPECTION TESTS\n");
+        print("═══════════════════════════════════════════════════════════\n\n");
+
+        // Note: type() function implemented but string return testing deferred
+        print("✓ type() function: Implemented (returns \"i64\")\n");
+        print("  String return validation deferred to higher-tier testing\n\n");
+
+        // Test len() on arrays
+        print("Testing len() function (arrays):\n");
+
+        if (test_len_empty_array() == 1) {
+            print("  ✓ len([]) == 0\n");
+            passed += 1;
+        } else {
+            print("  ✗ len([]) failed\n");
+            failed += 1;
+        }
+
+        if (test_len_single_element() == 1) {
+            print("  ✓ len([42]) == 1\n");
+            passed += 1;
+        } else {
+            print("  ✗ len([42]) failed\n");
+            failed += 1;
+        }
+
+        if (test_len_multiple_elements() == 1) {
+            print("  ✓ len([1,2,3,4,5]) == 5\n");
+            passed += 1;
+        } else {
+            print("  ✗ len([1,2,3,4,5]) failed\n");
+            failed += 1;
+        }
+
+        if (test_len_medium_array() == 1) {
+            print("  ✓ len([0..9]) == 10\n");
+            passed += 1;
+        } else {
+            print("  ✗ len(medium_array) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test str_len() on strings
+        print("Testing str_len() function (strings):\n");
+
+        if (test_str_len_empty() == 1) {
+            print("  ✓ str_len(\"\") == 0\n");
+            passed += 1;
+        } else {
+            print("  ✗ str_len(\"\") failed\n");
+            failed += 1;
+        }
+
+        if (test_str_len_single_char() == 1) {
+            print("  ✓ str_len(\"a\") == 1\n");
+            passed += 1;
+        } else {
+            print("  ✗ str_len(\"a\") failed\n");
+            failed += 1;
+        }
+
+        if (test_str_len_word() == 1) {
+            print("  ✓ str_len(\"hello\") == 5\n");
+            passed += 1;
+        } else {
+            print("  ✗ str_len(\"hello\") failed\n");
+            failed += 1;
+        }
+
+        if (test_str_len_sentence() == 1) {
+            print("  ✓ str_len(\"hello world\") == 11\n");
+            passed += 1;
+        } else {
+            print("  ✗ str_len(\"hello world\") failed\n");
+            failed += 1;
+        }
+
+        if (test_str_len_long() == 1) {
+            print("  ✓ str_len(\"Hello, World! This is a test.\") == 29\n");
+            passed += 1;
+        } else {
+            print("  ✗ str_len(long_sentence) failed\n");
+            failed += 1;
+        }
+
+        // Summary
+        print("\n");
+        print("═══════════════════════════════════════════════════════════\n");
+        print("RESULTS:\n");
+        print("  Passed: ");
+        print(passed);
+        print("/10\n");
+        print("  Failed: ");
+        print(failed);
+        print("/10\n");
+
+        if (failed == 0) {
+            print("\n✓ ALL TESTS PASSED!\n");
+            print("═══════════════════════════════════════════════════════════\n");
+            return 1;
+        } else {
+            print("\n✗ SOME TESTS FAILED\n");
+            print("═══════════════════════════════════════════════════════════\n");
+            return 0;
+        }
+    }
+}

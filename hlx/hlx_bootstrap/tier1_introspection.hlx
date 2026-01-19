@@ -1,0 +1,32 @@
+// HLX Builtin Library - Tier 1: Type Introspection
+// Phase 1 of Builtin Conversion: type() and len() functions
+// These are foundational introspection operations needed by all other builtins
+
+module tier1_introspection {
+
+// ============================================================================
+// TYPE INTROSPECTION
+// ============================================================================
+
+// Get the type name of a value as a string
+// Returns: "i64" (in bootstrap, only i64 is available)
+// Note: In full HLX, this would return "String", "Array", "Function", "Null", etc.
+export fn type(value: i64) -> String {
+    // In bootstrap HLX tier1, everything is i64
+    // Full type introspection comes with the full type system
+    return "i64";
+}
+
+// Get the length of a collection
+// Works with arrays
+// Returns: length of array
+export fn len(arr: [i64]) -> i64 {
+    return array_len(arr);
+}
+
+// Get length of a string
+export fn str_len(s: String) -> i64 {
+    return strlen(s);
+}
+
+}
