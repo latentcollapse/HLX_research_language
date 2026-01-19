@@ -69,6 +69,9 @@ module hlx_lexer {
         if word == "break" { return 16; }
         if word == "continue" { return 17; }
         if word == "program" { return 18; }
+        if word == "module" { return 57; }
+        if word == "import" { return 58; }
+        if word == "export" { return 59; }
         return 1;  // TOK_IDENT
     }
 
@@ -303,11 +306,7 @@ module hlx_lexer {
                 if c == ";" { single_kind = 26; }
                 if c == "," { single_kind = 27; }
                 if c == ":" { single_kind = 28; }
-                if c == "+" { single_kind = 30; }
-                // Note: '-' handled separately for arrow operator
-                if c == "*" { single_kind = 32; }
-                if c == "/" { single_kind = 33; }
-                if c == "%" { single_kind = 34; }
+                // Note: +, -, *, /, % handled separately for compound assignments
                 if c == "#" { single_kind = 45; }
                 if c == "." { single_kind = 46; }
 
@@ -317,6 +316,98 @@ module hlx_lexer {
                     pos = pos + 1;
                     col = col + 1;
                     handled = 1;
+                }
+            }
+
+            // Plus or PlusEq: + or +=
+            if handled == 0 {
+                if c == "+" {
+                    if pos + 1 < len {
+                        let next = char_at(source, pos + 1);
+                        if next == "=" {
+                            let token = [51, pos, 2, line, col];  // TOK_PLUS_EQ (+=)
+                            tokens = push(tokens, token);
+                            pos = pos + 2;
+                            col = col + 2;
+                            handled = 1;
+                        }
+                    }
+                    if handled == 0 {
+                        let token = [30, pos, 1, line, col];  // TOK_PLUS (+)
+                        tokens = push(tokens, token);
+                        pos = pos + 1;
+                        col = col + 1;
+                        handled = 1;
+                    }
+                }
+            }
+
+            // Star or StarEq: * or *=
+            if handled == 0 {
+                if c == "*" {
+                    if pos + 1 < len {
+                        let next = char_at(source, pos + 1);
+                        if next == "=" {
+                            let token = [53, pos, 2, line, col];  // TOK_STAR_EQ (*=)
+                            tokens = push(tokens, token);
+                            pos = pos + 2;
+                            col = col + 2;
+                            handled = 1;
+                        }
+                    }
+                    if handled == 0 {
+                        let token = [32, pos, 1, line, col];  // TOK_STAR (*)
+                        tokens = push(tokens, token);
+                        pos = pos + 1;
+                        col = col + 1;
+                        handled = 1;
+                    }
+                }
+            }
+
+            // Slash or SlashEq: / or /=
+            if handled == 0 {
+                if c == "/" {
+                    if pos + 1 < len {
+                        let next = char_at(source, pos + 1);
+                        if next == "=" {
+                            let token = [54, pos, 2, line, col];  // TOK_SLASH_EQ (/=)
+                            tokens = push(tokens, token);
+                            pos = pos + 2;
+                            col = col + 2;
+                            handled = 1;
+                        }
+                    }
+                    if handled == 0 {
+                        let token = [33, pos, 1, line, col];  // TOK_SLASH (/)
+                        tokens = push(tokens, token);
+                        pos = pos + 1;
+                        col = col + 1;
+                        handled = 1;
+                    }
+                }
+            }
+
+            // Percent or PercentEq: % or %=
+            if handled == 0 {
+                if c == "%" {
+                    if pos + 1 < len {
+                        let next = char_at(source, pos + 1);
+                        if next == "=" {
+                            let token = [55, pos, 2, line, col];  // TOK_PERCENT_EQ (%=)
+                            tokens = push(tokens, token);
+                            pos = pos + 2;
+                            col = col + 2;
+                            handled = 1;
+                        }
+                    }
+                    if handled == 0 {
+                        let token = [34, pos, 1, line, col];  // TOK_PERCENT (%)
+                        tokens = push(tokens, token);
+                        pos = pos + 1;
+                        col = col + 1;
+                        handled = 1;
+                    }
                 }
             }
 
@@ -356,7 +447,7 @@ module hlx_lexer {
                         }
                     }
                     if handled == 0 {
-                        let token = [44, pos, 1, line, col];  // TOK_NOT
+                        let token = [56, pos, 1, line, col];  // TOK_NOT (!)
                         tokens = push(tokens, token);
                         pos = pos + 1;
                         col = col + 1;
@@ -369,16 +460,25 @@ module hlx_lexer {
                 if c == "<" {
                     if pos + 1 < len {
                         let next = char_at(source, pos + 1);
-                        if next == "=" {
-                            let token = [39, pos, 2, line, col];  // TOK_LE
+                        if next == "<" {
+                            let token = [49, pos, 2, line, col];  // TOK_SHL (<<)
                             tokens = push(tokens, token);
                             pos = pos + 2;
                             col = col + 2;
                             handled = 1;
                         }
+                        if next == "=" {
+                            if handled == 0 {
+                                let token = [39, pos, 2, line, col];  // TOK_LE (<=)
+                                tokens = push(tokens, token);
+                                pos = pos + 2;
+                                col = col + 2;
+                                handled = 1;
+                            }
+                        }
                     }
                     if handled == 0 {
-                        let token = [38, pos, 1, line, col];  // TOK_LT
+                        let token = [38, pos, 1, line, col];  // TOK_LT (<)
                         tokens = push(tokens, token);
                         pos = pos + 1;
                         col = col + 1;
@@ -391,16 +491,25 @@ module hlx_lexer {
                 if c == ">" {
                     if pos + 1 < len {
                         let next = char_at(source, pos + 1);
-                        if next == "=" {
-                            let token = [41, pos, 2, line, col];  // TOK_GE
+                        if next == ">" {
+                            let token = [50, pos, 2, line, col];  // TOK_SHR (>>)
                             tokens = push(tokens, token);
                             pos = pos + 2;
                             col = col + 2;
                             handled = 1;
                         }
+                        if next == "=" {
+                            if handled == 0 {
+                                let token = [41, pos, 2, line, col];  // TOK_GE (>=)
+                                tokens = push(tokens, token);
+                                pos = pos + 2;
+                                col = col + 2;
+                                handled = 1;
+                            }
+                        }
                     }
                     if handled == 0 {
-                        let token = [40, pos, 1, line, col];  // TOK_GT
+                        let token = [40, pos, 1, line, col];  // TOK_GT (>)
                         tokens = push(tokens, token);
                         pos = pos + 1;
                         col = col + 1;
@@ -414,12 +523,20 @@ module hlx_lexer {
                     if pos + 1 < len {
                         let next = char_at(source, pos + 1);
                         if next == "&" {
-                            let token = [42, pos, 2, line, col];  // TOK_AND
+                            let token = [42, pos, 2, line, col];  // TOK_AND (&&)
                             tokens = push(tokens, token);
                             pos = pos + 2;
                             col = col + 2;
                             handled = 1;
                         }
+                    }
+                    // Single & for bitwise AND
+                    if handled == 0 {
+                        let token = [45, pos, 1, line, col];  // TOK_AMP (&)
+                        tokens = push(tokens, token);
+                        pos = pos + 1;
+                        col = col + 1;
+                        handled = 1;
                     }
                 }
             }
@@ -429,32 +546,71 @@ module hlx_lexer {
                     if pos + 1 < len {
                         let next = char_at(source, pos + 1);
                         if next == "|" {
-                            let token = [43, pos, 2, line, col];  // TOK_OR
+                            let token = [43, pos, 2, line, col];  // TOK_OR (||)
                             tokens = push(tokens, token);
                             pos = pos + 2;
                             col = col + 2;
                             handled = 1;
                         }
                     }
+                    // Single | for bitwise OR
+                    if handled == 0 {
+                        let token = [46, pos, 1, line, col];  // TOK_PIPE (|)
+                        tokens = push(tokens, token);
+                        pos = pos + 1;
+                        col = col + 1;
+                        handled = 1;
+                    }
                 }
             }
 
-            // Minus or Arrow operator: - or ->
+            // Bitwise XOR: ^
+            if handled == 0 {
+                if c == "^" {
+                    let token = [47, pos, 1, line, col];  // TOK_CARET (^)
+                    tokens = push(tokens, token);
+                    pos = pos + 1;
+                    col = col + 1;
+                    handled = 1;
+                }
+            }
+
+            // Bitwise NOT: ~
+            if handled == 0 {
+                if c == "~" {
+                    let token = [48, pos, 1, line, col];  // TOK_TILDE (~)
+                    tokens = push(tokens, token);
+                    pos = pos + 1;
+                    col = col + 1;
+                    handled = 1;
+                }
+            }
+
+            // Minus, MinusEq, or Arrow: -, -=, or ->
             if handled == 0 {
                 if c == "-" {
                     if pos + 1 < len {
                         let next = char_at(source, pos + 1);
                         if next == ">" {
-                            let token = [44, pos, 2, line, col];  // TOK_ARROW
+                            let token = [44, pos, 2, line, col];  // TOK_ARROW (->)
                             tokens = push(tokens, token);
                             pos = pos + 2;
                             col = col + 2;
                             handled = 1;
                         }
+                        if next == "=" {
+                            if handled == 0 {
+                                let token = [52, pos, 2, line, col];  // TOK_MINUS_EQ (-=)
+                                tokens = push(tokens, token);
+                                pos = pos + 2;
+                                col = col + 2;
+                                handled = 1;
+                            }
+                        }
                     }
-                    // Fall back to single minus if not arrow
+                    // Fall back to single minus
                     if handled == 0 {
-                        let token = [31, pos, 1, line, col];  // TOK_MINUS
+                        let token = [31, pos, 1, line, col];  // TOK_MINUS (-)
                         tokens = push(tokens, token);
                         pos = pos + 1;
                         col = col + 1;

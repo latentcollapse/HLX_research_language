@@ -22,6 +22,12 @@ fn INST_GT() -> i64 { return 24; }
 fn INST_GE() -> i64 { return 25; }
 fn INST_AND() -> i64 { return 30; }
 fn INST_OR() -> i64 { return 31; }
+fn INST_BIT_AND() -> i64 { return 32; }
+fn INST_BIT_OR() -> i64 { return 33; }
+fn INST_BIT_XOR() -> i64 { return 34; }
+fn INST_SHL() -> i64 { return 35; }
+fn INST_SHR() -> i64 { return 36; }
+fn INST_NOT() -> i64 { return 37; }
 fn INST_IF() -> i64 { return 40; }
 fn INST_JUMP() -> i64 { return 41; }
 fn INST_CALL() -> i64 { return 50; }
@@ -311,6 +317,14 @@ fn make_inst_binop(opcode: i64, out: i64, lhs: i64, rhs: i64) -> [i64] {
     return inst;
 }
 
+fn make_inst_unary(opcode: i64, out: i64, operand: i64) -> [i64] {
+    let inst = [0, 0, 0];
+    inst = set_at(inst, 0, opcode);
+    inst = set_at(inst, 1, out);
+    inst = set_at(inst, 2, operand);
+    return inst;
+}
+
 fn make_inst_if(cond: i64, then_pc: i64, else_pc: i64) -> [i64] {
     let inst = [0, 0, 0, 0];
     inst = set_at(inst, 0, INST_IF());
@@ -456,6 +470,11 @@ fn lower_expr(state: [i64], expr_node: [i64]) -> [i64] {
                 40 => { opcode = INST_GE(); },   // OP_GE
                 41 => { opcode = INST_AND(); },  // OP_AND
                 42 => { opcode = INST_OR(); },   // OP_OR
+                45 => { opcode = INST_BIT_AND(); },  // OP_BIT_AND
+                46 => { opcode = INST_BIT_OR(); },   // OP_BIT_OR
+                47 => { opcode = INST_BIT_XOR(); },  // OP_BIT_XOR
+                49 => { opcode = INST_SHL(); },      // OP_SHL
+                50 => { opcode = INST_SHR(); },      // OP_SHR
                 _ => {
                     print("Error: unknown operator ");
                     print_int(op);
@@ -518,6 +537,32 @@ fn lower_expr(state: [i64], expr_node: [i64]) -> [i64] {
             state = int_to_ptr(get_at(alloc_result, 1));
 
             let inst = make_inst_get_element(out_reg, array_reg, index_reg);
+            state = emit(state, inst);
+        },
+        8 => {  // EXPR_UNARY
+            let op = get_at(expr_node, 1);
+            let operand_node = int_to_ptr(get_at(expr_node, 2));
+
+            let operand_result = lower_expr(state, operand_node);
+            let operand_reg = get_at(operand_result, 0);
+            state = int_to_ptr(get_at(operand_result, 1));
+
+            let alloc_result = alloc_reg(state);
+            out_reg = get_at(alloc_result, 0);
+            state = int_to_ptr(get_at(alloc_result, 1));
+
+            // Map operator to instruction
+            let opcode = 0;
+            switch op {
+                56 => { opcode = INST_NOT(); },  // OP_NOT
+                _ => {
+                    print("Error: unknown unary operator ");
+                    print_int(op);
+                    print("\n");
+                },
+            }
+
+            let inst = make_inst_unary(opcode, out_reg, operand_reg);
             state = emit(state, inst);
         },
         _ => {
@@ -728,6 +773,30 @@ fn lower_stmt(state: [i64], stmt_node: [i64]) -> [i64] {
             let continue_target = get_at(loop_entry, 0);
             let inst = make_inst_jump(continue_target);
             state = emit(state, inst);
+        },
+        18 => {  // STMT_MODULE
+            let name = int_to_ptr(get_at(stmt_node, 1));
+            let body = int_to_ptr(get_at(stmt_node, 2));
+
+            // Lower module body statements
+            let i = 0;
+            let body_len = array_len(body);
+            loop(i < body_len, 1000) {
+                let stmt = int_to_ptr(get_at(body, i));
+                state = lower_stmt(state, stmt);
+                i += 1;
+            }
+        },
+        19 => {  // STMT_IMPORT
+            // Import statements are markers for future linking
+            // For now, they don't emit any instructions
+        },
+        20 => {  // STMT_EXPORT
+            let item_node = int_to_ptr(get_at(stmt_node, 1));
+
+            // Lower the exported item (typically a function declaration)
+            // The item itself handles the lowering
+            state = lower_stmt(state, item_node);
         },
         _ => {
             print("Error: unknown statement type ");

@@ -1,0 +1,101 @@
+// Test file for new bootstrap compiler features (without module syntax)
+// Tests: bitwise operators, compound assignments, else-if, unary NOT
+
+program test_features {
+
+    // Test bitwise operators
+    fn test_bitwise() -> i64 {
+        let a = 12;  // 1100 in binary
+        let b = 10;  // 1010 in binary
+
+        // Bitwise AND: 1100 & 1010 = 1000 (8)
+        let and_result = bit_and(a, b);
+
+        // Bitwise OR: 1100 | 1010 = 1110 (14)
+        let or_result = bit_or(a, b);
+
+        // Bitwise XOR: 1100 ^ 1010 = 0110 (6)
+        let xor_result = bit_xor(a, b);
+
+        // Left shift: 12 << 2 = 48
+        let shl_result = bit_shl(a, 2);
+
+        // Right shift: 12 >> 2 = 3
+        let shr_result = bit_shr(a, 2);
+
+        // Return sum to verify all operations
+        return and_result + or_result + xor_result + shl_result + shr_result;
+        // Expected: 8 + 14 + 6 + 48 + 3 = 79
+    }
+
+    // Test compound assignments
+    fn test_compound() -> i64 {
+        let x = 10;
+
+        x += 5;   // x = 15
+        x -= 3;   // x = 12
+        x *= 2;   // x = 24
+        x /= 4;   // x = 6
+        x %= 5;   // x = 1
+
+        return x;  // Expected: 1
+    }
+
+    // Test else-if chains
+    fn test_else_if(n: i64) -> i64 {
+        if (n < 0) {
+            return 0 - 1;  // -1 for negative
+        } else if (n == 0) {
+            return 0;  // 0 for zero
+        } else if (n < 10) {
+            return 1;  // 1 for small positive
+        } else if (n < 100) {
+            return 2;  // 2 for medium positive
+        } else {
+            return 3;  // 3 for large positive
+        }
+    }
+
+    // Test unary NOT operator
+    fn test_not() -> i64 {
+        let flag = 0;
+
+        if (!flag) {
+            return 42;  // Should take this branch
+        } else {
+            return 0;
+        }
+    }
+
+    // Test combined features
+    fn test_combined() -> i64 {
+        let result = 0;
+
+        // Use bitwise with compound assignment
+        result += 8;
+        result = bit_shl(result, 1);  // result = 16
+
+        // Use else-if with NOT
+        let test = 5;
+        if (!(test > 10)) {
+            result += 10;  // Should execute, result = 26
+        } else if (test == 5) {
+            result += 100;  // Shouldn't execute
+        }
+
+        return result;  // Expected: 26
+    }
+
+    fn main() -> i64 {
+        let bitwise_result = test_bitwise();    // 79
+        let compound_result = test_compound();  // 1
+        let else_if_result = test_else_if(15);  // 2
+        let not_result = test_not();            // 42
+        let combined_result = test_combined();  // 26
+
+        // Sum all results
+        return bitwise_result + compound_result + else_if_result + not_result + combined_result;
+        // Expected: 79 + 1 + 2 + 42 + 26 = 150
+    }
+
+}
