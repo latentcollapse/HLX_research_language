@@ -1,7 +1,7 @@
 # HLX: The AI-Native Programming Language
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Status: Production Ready](https://img.shields.io/badge/Status-Production%20Ready-green.svg)](https://github.com/latentcollapse/hlx-compiler)
+
 [![CI](https://github.com/latentcollapse/hlx-compiler/workflows/CI/badge.svg)](https://github.com/latentcollapse/hlx-compiler/actions)
 
 **NOTE: The entire thing was prototyped in Rust first to make sure it would even work. Development has begun into ditching Rust and achieving true self-hosting**
