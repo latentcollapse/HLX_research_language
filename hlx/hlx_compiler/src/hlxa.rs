@@ -321,50 +321,245 @@ fn unary_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
     ))(input)
 }
 
-fn bin_op(input: &str) -> ParseResult<'_, BinOp> {
-    preceded(ws, alt((
-        // Order matters! Longer operators must come before shorter ones
-        value(BinOp::Eq, tag("==")),
-        value(BinOp::Ne, tag("!=")),
-        value(BinOp::Shl, tag("<<")),
-        value(BinOp::Shr, tag(">>")),
-        value(BinOp::Le, tag("<=")),
-        value(BinOp::Ge, tag(">=")),
-        value(BinOp::And, tag("and")),
-        value(BinOp::Or, tag("or")),
-        value(BinOp::Add, char('+')),
-        value(BinOp::Sub, char('-')),
-        value(BinOp::Mul, char('*')),
-        value(BinOp::Div, char('/')),
-        value(BinOp::Mod, char('%')),
-        value(BinOp::Lt, char('<')),
-        value(BinOp::Gt, char('>')),
-        value(BinOp::BitAnd, char('&')),
-        value(BinOp::BitOr, char('|')),
-        value(BinOp::BitXor, char('^')),
-    )))(input)
-}
+// Operator precedence hierarchy (lowest to highest):
+// 1. Logical OR (or, ||)
+// 2. Logical AND (and, &&)
+// 3. Equality (==, !=)
+// 4. Comparison (<, <=, >, >=)
+// 5. Bitwise OR (|)
+// 6. Bitwise XOR (^)
+// 7. Bitwise AND (&)
+// 8. Shift (<<, >>)
+// 9. Additive (+, -)
+// 10. Multiplicative (*, /, %)
+// 11. Unary (-, !, ~)
+// 12. Primary (literals, identifiers, calls, parens)
 
 fn expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
-    let start_input = input;
-    let (input, lhs) = unary_expr(original, input)?;
-    let lhs_span = compute_span(original, start_input, input);
-    let (input, op_opt) = opt(bin_op)(input)?;
+    or_expr(original, input)
+}
 
-    if let Some(op) = op_opt {
-        let start_rhs = input;
-        let (input, rhs) = expr(original, input)?;
-        let rhs_span = compute_span(original, start_rhs, input);
-        // Enforce no operator precedence: if RHS is a BinOp, it MUST be parenthesized
-        // (Our recursive call to expr will handle nested BinOps, but we want to
-        // discourage this in the future or enforce it via the parser's structure)
-        Ok((input, Expr::BinOp {
-            op,
-            lhs: Box::new(Spanned::new(lhs, lhs_span)),
-            rhs: Box::new(Spanned::new(rhs, rhs_span))
-        }))
-    } else {
-        Ok((input, lhs))
+fn or_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
+    let start_input = input;
+    let (input, mut lhs) = and_expr(original, input)?;
+    let mut current_input = input;
+
+    loop {
+        let lhs_span = compute_span(original, start_input, current_input);
+        let (input, op_opt) = opt(preceded(ws, alt((
+            value(BinOp::Or, tag("or")),
+            value(BinOp::BitOr, char('|')),
+        ))))(current_input)?;
+
+        if let Some(op) = op_opt {
+            let start_rhs = input;
+            let (input, rhs) = and_expr(original, input)?;
+            let rhs_span = compute_span(original, start_rhs, input);
+            lhs = Expr::BinOp {
+                op,
+                lhs: Box::new(Spanned::new(lhs, lhs_span)),
+                rhs: Box::new(Spanned::new(rhs, rhs_span)),
+            };
+            current_input = input;
+        } else {
+            return Ok((current_input, lhs));
+        }
+    }
+}
+
+fn and_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
+    let start_input = input;
+    let (input, mut lhs) = equality_expr(original, input)?;
+    let mut current_input = input;
+
+    loop {
+        let lhs_span = compute_span(original, start_input, current_input);
+        let (input, op_opt) = opt(preceded(ws, alt((
+            value(BinOp::And, tag("and")),
+            value(BinOp::BitAnd, char('&')),
+        ))))(current_input)?;
+
+        if let Some(op) = op_opt {
+            let start_rhs = input;
+            let (input, rhs) = equality_expr(original, input)?;
+            let rhs_span = compute_span(original, start_rhs, input);
+            lhs = Expr::BinOp {
+                op,
+                lhs: Box::new(Spanned::new(lhs, lhs_span)),
+                rhs: Box::new(Spanned::new(rhs, rhs_span)),
+            };
+            current_input = input;
+        } else {
+            return Ok((current_input, lhs));
+        }
+    }
+}
+
+fn equality_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
+    let start_input = input;
+    let (input, mut lhs) = comparison_expr(original, input)?;
+    let mut current_input = input;
+
+    loop {
+        let lhs_span = compute_span(original, start_input, current_input);
+        let (input, op_opt) = opt(preceded(ws, alt((
+            value(BinOp::Eq, tag("==")),
+            value(BinOp::Ne, tag("!=")),
+        ))))(current_input)?;
+
+        if let Some(op) = op_opt {
+            let start_rhs = input;
+            let (input, rhs) = comparison_expr(original, input)?;
+            let rhs_span = compute_span(original, start_rhs, input);
+            lhs = Expr::BinOp {
+                op,
+                lhs: Box::new(Spanned::new(lhs, lhs_span)),
+                rhs: Box::new(Spanned::new(rhs, rhs_span)),
+            };
+            current_input = input;
+        } else {
+            return Ok((current_input, lhs));
+        }
+    }
+}
+
+fn comparison_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
+    let start_input = input;
+    let (input, mut lhs) = shift_expr(original, input)?;
+    let mut current_input = input;
+
+    loop {
+        let lhs_span = compute_span(original, start_input, current_input);
+        let (input, op_opt) = opt(preceded(ws, alt((
+            value(BinOp::Le, tag("<=")),
+            value(BinOp::Ge, tag(">=")),
+            value(BinOp::Lt, char('<')),
+            value(BinOp::Gt, char('>')),
+        ))))(current_input)?;
+
+        if let Some(op) = op_opt {
+            let start_rhs = input;
+            let (input, rhs) = shift_expr(original, input)?;
+            let rhs_span = compute_span(original, start_rhs, input);
+            lhs = Expr::BinOp {
+                op,
+                lhs: Box::new(Spanned::new(lhs, lhs_span)),
+                rhs: Box::new(Spanned::new(rhs, rhs_span)),
+            };
+            current_input = input;
+        } else {
+            return Ok((current_input, lhs));
+        }
+    }
+}
+
+fn shift_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
+    let start_input = input;
+    let (input, mut lhs) = bitxor_expr(original, input)?;
+    let mut current_input = input;
+
+    loop {
+        let lhs_span = compute_span(original, start_input, current_input);
+        let (input, op_opt) = opt(preceded(ws, alt((
+            value(BinOp::Shl, tag("<<")),
+            value(BinOp::Shr, tag(">>")),
+        ))))(current_input)?;
+
+        if let Some(op) = op_opt {
+            let start_rhs = input;
+            let (input, rhs) = bitxor_expr(original, input)?;
+            let rhs_span = compute_span(original, start_rhs, input);
+            lhs = Expr::BinOp {
+                op,
+                lhs: Box::new(Spanned::new(lhs, lhs_span)),
+                rhs: Box::new(Spanned::new(rhs, rhs_span)),
+            };
+            current_input = input;
+        } else {
+            return Ok((current_input, lhs));
+        }
+    }
+}
+
+fn bitxor_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
+    let start_input = input;
+    let (input, mut lhs) = additive_expr(original, input)?;
+    let mut current_input = input;
+
+    loop {
+        let lhs_span = compute_span(original, start_input, current_input);
+        let (input, op_opt) = opt(preceded(ws, value(BinOp::BitXor, char('^'))))(current_input)?;
+
+        if let Some(op) = op_opt {
+            let start_rhs = input;
+            let (input, rhs) = additive_expr(original, input)?;
+            let rhs_span = compute_span(original, start_rhs, input);
+            lhs = Expr::BinOp {
+                op,
+                lhs: Box::new(Spanned::new(lhs, lhs_span)),
+                rhs: Box::new(Spanned::new(rhs, rhs_span)),
+            };
+            current_input = input;
+        } else {
+            return Ok((current_input, lhs));
+        }
+    }
+}
+
+fn additive_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
+    let start_input = input;
+    let (input, mut lhs) = multiplicative_expr(original, input)?;
+    let mut current_input = input;
+
+    loop {
+        let lhs_span = compute_span(original, start_input, current_input);
+        let (input, op_opt) = opt(preceded(ws, alt((
+            value(BinOp::Add, char('+')),
+            value(BinOp::Sub, char('-')),
+        ))))(current_input)?;
+
+        if let Some(op) = op_opt {
+            let start_rhs = input;
+            let (input, rhs) = multiplicative_expr(original, input)?;
+            let rhs_span = compute_span(original, start_rhs, input);
+            lhs = Expr::BinOp {
+                op,
+                lhs: Box::new(Spanned::new(lhs, lhs_span)),
+                rhs: Box::new(Spanned::new(rhs, rhs_span)),
+            };
+            current_input = input;
+        } else {
+            return Ok((current_input, lhs));
+        }
+    }
+}
+
+fn multiplicative_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Expr> {
+    let start_input = input;
+    let (input, mut lhs) = unary_expr(original, input)?;
+    let mut current_input = input;
+
+    loop {
+        let lhs_span = compute_span(original, start_input, current_input);
+        let (input, op_opt) = opt(preceded(ws, alt((
+            value(BinOp::Mul, char('*')),
+            value(BinOp::Div, char('/')),
+            value(BinOp::Mod, char('%')),
+        ))))(current_input)?;
+
+        if let Some(op) = op_opt {
+            let start_rhs = input;
+            let (input, rhs) = unary_expr(original, input)?;
+            let rhs_span = compute_span(original, start_rhs, input);
+            lhs = Expr::BinOp {
+                op,
+                lhs: Box::new(Spanned::new(lhs, lhs_span)),
+                rhs: Box::new(Spanned::new(rhs, rhs_span)),
+            };
+            current_input = input;
+        } else {
+            return Ok((current_input, lhs));
+        }
     }
 }
 

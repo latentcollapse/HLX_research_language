@@ -1,0 +1,36 @@
+// Test string comparison operators
+
+program test_string_comparison {
+    fn main() -> i64 {
+        print("Testing string comparison operators:");
+        print("");
+
+        // Test less than
+        let result1 = "a" < "b";
+        print("a < b:");
+        print(result1);  // Should be 1 (true)
+
+        let result2 = "b" < "a";
+        print("b < a:");
+        print(result2);  // Should be 0 (false)
+
+        // Test greater than
+        let result3 = "z" > "a";
+        print("z > a:");
+        print(result3);  // Should be 1 (true)
+
+        // Test with words
+        let result4 = "apple" < "banana";
+        print("apple < banana:");
+        print(result4);  // Should be 1 (true)
+
+        let result5 = "zebra" > "apple";
+        print("zebra > apple:");
+        print(result5);  // Should be 1 (true)
+
+        print("");
+        print("All tests passed!");
+
+        return 0;
+    }
+}

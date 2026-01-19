@@ -249,6 +249,7 @@ impl Value {
             (Value::Float(x), Value::Float(y)) => Ok(x < y),
             (Value::Integer(x), Value::Float(y)) => Ok((*x as f64) < *y),
             (Value::Float(x), Value::Integer(y)) => Ok(*x < (*y as f64)),
+            (Value::String(x), Value::String(y)) => Ok(x < y),  // Lexicographic comparison
             _ => Err(HlxError::TypeError {
                 expected: "comparable".to_string(),
                 got: format!("{} < {}", self.type_name(), other.type_name()),
@@ -262,6 +263,7 @@ impl Value {
             (Value::Float(x), Value::Float(y)) => Ok(x <= y),
             (Value::Integer(x), Value::Float(y)) => Ok((*x as f64) <= *y),
             (Value::Float(x), Value::Integer(y)) => Ok(*x <= (*y as f64)),
+            (Value::String(x), Value::String(y)) => Ok(x <= y),  // Lexicographic comparison
             _ => Err(HlxError::TypeError {
                 expected: "comparable".to_string(),
                 got: format!("{} <= {}", self.type_name(), other.type_name()),

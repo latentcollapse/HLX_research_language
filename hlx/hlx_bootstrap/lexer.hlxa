@@ -97,6 +97,14 @@ program hlx_lexer {
         let len = strlen(source);
 
         loop(pos < len, 100000) {
+            // Check bounds before accessing character
+            if pos >= len {
+                break;
+            }
+
+            // Track whether we handled this character
+            let handled = 0;
+
             // Get current character
             let c = char_at(source, pos);
 
@@ -118,264 +126,296 @@ program hlx_lexer {
                     col = col + 1;
                 }
                 pos = pos + 1;
-                continue;
+                handled = 1;
             }
 
             // Skip comments: //
-            if c == "/" {
-                if pos + 1 < len {
-                    let next = char_at(source, pos + 1);
-                    if next == "/" {
-                        // Skip until newline
-                        pos = pos + 2;
-                        loop(pos < len, 1000) {
-                            let comment_c = char_at(source, pos);
-                            if comment_c == "\n" { break; }
-                            pos = pos + 1;
+            if handled == 0 {
+                if c == "/" {
+                    if pos + 1 < len {
+                        let next = char_at(source, pos + 1);
+                        if next == "/" {
+                            // Skip until newline
+                            pos = pos + 2;
+                            loop(pos < len, 10000) {
+                                let comment_c = char_at(source, pos);
+                                if comment_c == "\n" { break; }
+                                pos = pos + 1;
+                            }
+                            handled = 1;
                         }
-                        continue;
                     }
                 }
             }
 
             // Identifiers and keywords (check if starts with letter or _)
-            let is_ident_start = 0;
-            if c >= "a" {
-                if c <= "z" { is_ident_start = 1; }
-            }
-            if c >= "A" {
-                if c <= "Z" { is_ident_start = 1; }
-            }
-            if c == "_" { is_ident_start = 1; }
-
-            if is_ident_start == 1 {
-                let start = pos;
-
-                loop(pos < len, 1000) {
-                    let id_c = char_at(source, pos);
-                    let is_ident_char = 0;
-
-                    if id_c >= "a" {
-                        if id_c <= "z" { is_ident_char = 1; }
-                    }
-                    if id_c >= "A" {
-                        if id_c <= "Z" { is_ident_char = 1; }
-                    }
-                    if id_c >= "0" {
-                        if id_c <= "9" { is_ident_char = 1; }
-                    }
-                    if id_c == "_" { is_ident_char = 1; }
-
-                    if is_ident_char == 1 {
-                        pos = pos + 1;
-                    } else {
-                        break;
-                    }
+            if handled == 0 {
+                let is_ident_start = 0;
+                if c >= "a" {
+                    if c <= "z" { is_ident_start = 1; }
                 }
+                if c >= "A" {
+                    if c <= "Z" { is_ident_start = 1; }
+                }
+                if c == "_" { is_ident_start = 1; }
 
-                let ident_len = pos - start;
-                let word = substring(source, start, ident_len);
-                let kind = keyword_kind(word);
+                if is_ident_start == 1 {
+                    let start = pos + 0;  // Force a copy (HLX aliasing issue)
 
-                // Token: [kind, start, length, line, col]
-                let token = [kind, start, ident_len, line, col];
-                tokens = arr_push(tokens, token);
-                col = col + ident_len;
-                continue;
+                    loop(pos < len, 10000) {
+                        let id_c = char_at(source, pos);
+                        let is_ident_char = 0;
+
+                        if id_c >= "a" {
+                            if id_c <= "z" { is_ident_char = 1; }
+                        }
+                        if id_c >= "A" {
+                            if id_c <= "Z" { is_ident_char = 1; }
+                        }
+                        if id_c >= "0" {
+                            if id_c <= "9" { is_ident_char = 1; }
+                        }
+                        if id_c == "_" { is_ident_char = 1; }
+
+                        if is_ident_char == 1 {
+                            pos = pos + 1;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    let ident_len = pos - start;
+                    let word = substring(source, start, ident_len);
+                    let kind = keyword_kind(word);
+
+                    // Token: [kind, start, length, line, col]
+                    let token = [kind, start, ident_len, line, col];
+                    tokens = push(tokens, token);
+                    col = col + ident_len;
+                    handled = 1;
+                }
             }
 
             // Numbers (check if starts with digit)
-            let is_digit_start = 0;
-            if c >= "0" {
-                if c <= "9" { is_digit_start = 1; }
-            }
-
-            if is_digit_start == 1 {
-                let start = pos;
-
-                loop(pos < len, 1000) {
-                    let num_c = char_at(source, pos);
-                    let is_digit_char = 0;
-                    if num_c >= "0" {
-                        if num_c <= "9" { is_digit_char = 1; }
-                    }
-
-                    if is_digit_char == 1 {
-                        pos = pos + 1;
-                    } else {
-                        break;
-                    }
+            if handled == 0 {
+                let is_digit_start = 0;
+                if c >= "0" {
+                    if c <= "9" { is_digit_start = 1; }
                 }
 
-                let num_len = pos - start;
-                let token = [2, start, num_len, line, col];  // TOK_NUMBER=2
-                tokens = arr_push(tokens, token);
-                col = col + num_len;
-                continue;
+                if is_digit_start == 1 {
+                    let start = pos + 0;  // Force a copy (HLX aliasing issue)
+
+                    loop(pos < len, 10000) {
+                        let num_c = char_at(source, pos);
+                        let is_digit_char = 0;
+                        if num_c >= "0" {
+                            if num_c <= "9" { is_digit_char = 1; }
+                        }
+
+                        if is_digit_char == 1 {
+                            pos = pos + 1;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    let num_len = pos - start;
+                    let token = [2, start, num_len, line, col];  // TOK_NUMBER=2
+                    tokens = push(tokens, token);
+                    col = col + num_len;
+                    handled = 1;
+                }
             }
 
             // String literals: "..."
-            if c == "\"" {
-                let start = pos;
-                pos = pos + 1;  // Skip opening quote
-                col = col + 1;
+            if handled == 0 {
+                if c == "\"" {
+                    let start = pos + 0;  // Force a copy (HLX aliasing issue)
+                    pos = pos + 1;  // Skip opening quote
+                    col = col + 1;
 
-                loop(pos < len, 10000) {
-                    let str_c = char_at(source, pos);
-                    if str_c == "\"" {
-                        pos = pos + 1;  // Skip closing quote
-                        break;
+                    loop(pos < len, 10000) {
+                        let str_c = char_at(source, pos);
+                        if str_c == "\"" {
+                            pos = pos + 1;  // Skip closing quote
+                            break;
+                        }
+                        if str_c == "\\" {
+                            pos = pos + 2;  // Skip escape sequence
+                            col = col + 2;
+                        } else {
+                            pos = pos + 1;
+                            col = col + 1;
+                        }
                     }
-                    if str_c == "\\" {
-                        pos = pos + 2;  // Skip escape sequence
-                        col = col + 2;
-                    } else {
-                        pos = pos + 1;
-                        col = col + 1;
-                    }
+
+                    let str_len = pos - start;
+                    let token = [3, start, str_len, line, col];  // TOK_STRING=3
+                    tokens = push(tokens, token);
+                    handled = 1;
                 }
-
-                let str_len = pos - start;
-                let token = [3, start, str_len, line, col];  // TOK_STRING=3
-                tokens = arr_push(tokens, token);
-                continue;
             }
 
             // Single-character tokens
-            let single_kind = 0 - 1;  // -1 means no match
+            if handled == 0 {
+                let single_kind = 0 - 1;  // -1 means no match
 
-            if c == "(" { single_kind = 20; }
-            if c == ")" { single_kind = 21; }
-            if c == "{" { single_kind = 22; }
-            if c == "}" { single_kind = 23; }
-            if c == "[" { single_kind = 24; }
-            if c == "]" { single_kind = 25; }
-            if c == "," { single_kind = 26; }
-            if c == ";" { single_kind = 27; }
-            if c == ":" { single_kind = 28; }
-            if c == "+" { single_kind = 30; }
-            if c == "-" { single_kind = 31; }
-            if c == "*" { single_kind = 32; }
-            if c == "/" { single_kind = 33; }
-            if c == "%" { single_kind = 34; }
-            if c == "#" { single_kind = 45; }
-            if c == "." { single_kind = 46; }
+                if c == "(" { single_kind = 20; }
+                if c == ")" { single_kind = 21; }
+                if c == "{" { single_kind = 22; }
+                if c == "}" { single_kind = 23; }
+                if c == "[" { single_kind = 24; }
+                if c == "]" { single_kind = 25; }
+                if c == "," { single_kind = 26; }
+                if c == ";" { single_kind = 27; }
+                if c == ":" { single_kind = 28; }
+                if c == "+" { single_kind = 30; }
+                if c == "-" { single_kind = 31; }
+                if c == "*" { single_kind = 32; }
+                if c == "/" { single_kind = 33; }
+                if c == "%" { single_kind = 34; }
+                if c == "#" { single_kind = 45; }
+                if c == "." { single_kind = 46; }
 
-            if single_kind >= 0 {
-                let token = [single_kind, pos, 1, line, col];
-                tokens = arr_push(tokens, token);
-                pos = pos + 1;
-                col = col + 1;
-                continue;
+                if single_kind >= 0 {
+                    let token = [single_kind, pos, 1, line, col];
+                    tokens = push(tokens, token);
+                    pos = pos + 1;
+                    col = col + 1;
+                    handled = 1;
+                }
             }
 
             // Two-character operators
-            if c == "=" {
-                if pos + 1 < len {
-                    let next = char_at(source, pos + 1);
-                    if next == "=" {
-                        let token = [36, pos, 2, line, col];  // TOK_EQEQ
-                        tokens = arr_push(tokens, token);
-                        pos = pos + 2;
-                        col = col + 2;
-                        continue;
+            if handled == 0 {
+                if c == "=" {
+                    if pos + 1 < len {
+                        let next = char_at(source, pos + 1);
+                        if next == "=" {
+                            let token = [36, pos, 2, line, col];  // TOK_EQEQ
+                            tokens = push(tokens, token);
+                            pos = pos + 2;
+                            col = col + 2;
+                            handled = 1;
+                        }
                     }
-                }
-                let token = [35, pos, 1, line, col];  // TOK_EQ
-                tokens = arr_push(tokens, token);
-                pos = pos + 1;
-                col = col + 1;
-                continue;
-            }
-
-            if c == "!" {
-                if pos + 1 < len {
-                    let next = char_at(source, pos + 1);
-                    if next == "=" {
-                        let token = [37, pos, 2, line, col];  // TOK_NE
-                        tokens = arr_push(tokens, token);
-                        pos = pos + 2;
-                        col = col + 2;
-                        continue;
-                    }
-                }
-                let token = [44, pos, 1, line, col];  // TOK_NOT
-                tokens = arr_push(tokens, token);
-                pos = pos + 1;
-                col = col + 1;
-                continue;
-            }
-
-            if c == "<" {
-                if pos + 1 < len {
-                    let next = char_at(source, pos + 1);
-                    if next == "=" {
-                        let token = [39, pos, 2, line, col];  // TOK_LE
-                        tokens = arr_push(tokens, token);
-                        pos = pos + 2;
-                        col = col + 2;
-                        continue;
-                    }
-                }
-                let token = [38, pos, 1, line, col];  // TOK_LT
-                tokens = arr_push(tokens, token);
-                pos = pos + 1;
-                col = col + 1;
-                continue;
-            }
-
-            if c == ">" {
-                if pos + 1 < len {
-                    let next = char_at(source, pos + 1);
-                    if next == "=" {
-                        let token = [41, pos, 2, line, col];  // TOK_GE
-                        tokens = arr_push(tokens, token);
-                        pos = pos + 2;
-                        col = col + 2;
-                        continue;
-                    }
-                }
-                let token = [40, pos, 1, line, col];  // TOK_GT
-                tokens = arr_push(tokens, token);
-                pos = pos + 1;
-                col = col + 1;
-                continue;
-            }
-
-            if c == "&" {
-                if pos + 1 < len {
-                    let next = char_at(source, pos + 1);
-                    if next == "&" {
-                        let token = [42, pos, 2, line, col];  // TOK_AND
-                        tokens = arr_push(tokens, token);
-                        pos = pos + 2;
-                        col = col + 2;
-                        continue;
+                    if handled == 0 {
+                        let token = [35, pos, 1, line, col];  // TOK_EQ
+                        tokens = push(tokens, token);
+                        pos = pos + 1;
+                        col = col + 1;
+                        handled = 1;
                     }
                 }
             }
 
-            if c == "|" {
-                if pos + 1 < len {
-                    let next = char_at(source, pos + 1);
-                    if next == "|" {
-                        let token = [43, pos, 2, line, col];  // TOK_OR
-                        tokens = arr_push(tokens, token);
-                        pos = pos + 2;
-                        col = col + 2;
-                        continue;
+            if handled == 0 {
+                if c == "!" {
+                    if pos + 1 < len {
+                        let next = char_at(source, pos + 1);
+                        if next == "=" {
+                            let token = [37, pos, 2, line, col];  // TOK_NE
+                            tokens = push(tokens, token);
+                            pos = pos + 2;
+                            col = col + 2;
+                            handled = 1;
+                        }
+                    }
+                    if handled == 0 {
+                        let token = [44, pos, 1, line, col];  // TOK_NOT
+                        tokens = push(tokens, token);
+                        pos = pos + 1;
+                        col = col + 1;
+                        handled = 1;
+                    }
+                }
+            }
+
+            if handled == 0 {
+                if c == "<" {
+                    if pos + 1 < len {
+                        let next = char_at(source, pos + 1);
+                        if next == "=" {
+                            let token = [39, pos, 2, line, col];  // TOK_LE
+                            tokens = push(tokens, token);
+                            pos = pos + 2;
+                            col = col + 2;
+                            handled = 1;
+                        }
+                    }
+                    if handled == 0 {
+                        let token = [38, pos, 1, line, col];  // TOK_LT
+                        tokens = push(tokens, token);
+                        pos = pos + 1;
+                        col = col + 1;
+                        handled = 1;
+                    }
+                }
+            }
+
+            if handled == 0 {
+                if c == ">" {
+                    if pos + 1 < len {
+                        let next = char_at(source, pos + 1);
+                        if next == "=" {
+                            let token = [41, pos, 2, line, col];  // TOK_GE
+                            tokens = push(tokens, token);
+                            pos = pos + 2;
+                            col = col + 2;
+                            handled = 1;
+                        }
+                    }
+                    if handled == 0 {
+                        let token = [40, pos, 1, line, col];  // TOK_GT
+                        tokens = push(tokens, token);
+                        pos = pos + 1;
+                        col = col + 1;
+                        handled = 1;
+                    }
+                }
+            }
+
+            if handled == 0 {
+                if c == "&" {
+                    if pos + 1 < len {
+                        let next = char_at(source, pos + 1);
+                        if next == "&" {
+                            let token = [42, pos, 2, line, col];  // TOK_AND
+                            tokens = push(tokens, token);
+                            pos = pos + 2;
+                            col = col + 2;
+                            handled = 1;
+                        }
+                    }
+                }
+            }
+
+            if handled == 0 {
+                if c == "|" {
+                    if pos + 1 < len {
+                        let next = char_at(source, pos + 1);
+                        if next == "|" {
+                            let token = [43, pos, 2, line, col];  // TOK_OR
+                            tokens = push(tokens, token);
+                            pos = pos + 2;
+                            col = col + 2;
+                            handled = 1;
+                        }
                     }
                 }
             }
 
             // Unknown character - skip it
-            pos = pos + 1;
-            col = col + 1;
+            if handled == 0 {
+                pos = pos + 1;
+                col = col + 1;
+            }
         }
 
         // Add EOF token
         let eof_token = [0, pos, 0, line, col];  // TOK_EOF=0
-        tokens = arr_push(tokens, eof_token);
+        tokens = push(tokens, eof_token);
 
         return tokens;
     }
@@ -413,7 +453,7 @@ program hlx_lexer {
         print("");
         print("Tokens:");
         let i = 0;
-        let token_count = arr_len(tokens);
+        let token_count = len(tokens);
 
         loop(i < token_count, 1000) {
             let token = tokens[i];
