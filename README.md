@@ -4,6 +4,8 @@
 [![Status: Production Ready](https://img.shields.io/badge/Status-Production%20Ready-green.svg)](https://github.com/latentcollapse/hlx-compiler)
 [![CI](https://github.com/latentcollapse/hlx-compiler/workflows/CI/badge.svg)](https://github.com/latentcollapse/hlx-compiler/actions)
 
+**NOTE: The entire thing was prototyped in Rust first to make sure it would even work. Development has begun into ditching Rust and achieving true self-hosting**
+
 **HLX** is a programming language designed for the AI era. It combines **contracts as specifications**, **AI-native primitives**, and **deterministic GPU/CPU execution** into a language that both humans and AI systems can understand and verify.
 
 Write once. Run on **any GPU (Vulkan) or CPU**. Get **deterministic results** every time.
