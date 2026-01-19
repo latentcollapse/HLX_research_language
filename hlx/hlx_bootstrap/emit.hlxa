@@ -48,23 +48,23 @@ fn emit_byte(output: [i64], byte: i64) -> [i64] {
 
 fn emit_u32(output: [i64], value: i64) -> [i64] {
     // Emit 32-bit value in little-endian
-    output = push(output, value & 255);
-    output = push(output, (value >> 8) & 255);
-    output = push(output, (value >> 16) & 255);
-    output = push(output, (value >> 24) & 255);
+    output = push(output, bit_and(value, 255));
+    output = push(output, bit_and(bit_shr(value, 8), 255));
+    output = push(output, bit_and(bit_shr(value, 16), 255));
+    output = push(output, bit_and(bit_shr(value, 24), 255));
     return output;
 }
 
 fn emit_u64(output: [i64], value: i64) -> [i64] {
     // Emit 64-bit value in little-endian
-    output = push(output, value & 255);
-    output = push(output, (value >> 8) & 255);
-    output = push(output, (value >> 16) & 255);
-    output = push(output, (value >> 24) & 255);
-    output = push(output, (value >> 32) & 255);
-    output = push(output, (value >> 40) & 255);
-    output = push(output, (value >> 48) & 255);
-    output = push(output, (value >> 56) & 255);
+    output = push(output, bit_and(value, 255));
+    output = push(output, bit_and(bit_shr(value, 8), 255));
+    output = push(output, bit_and(bit_shr(value, 16), 255));
+    output = push(output, bit_and(bit_shr(value, 24), 255));
+    output = push(output, bit_and(bit_shr(value, 32), 255));
+    output = push(output, bit_and(bit_shr(value, 40), 255));
+    output = push(output, bit_and(bit_shr(value, 48), 255));
+    output = push(output, bit_and(bit_shr(value, 56), 255));
     return output;
 }
 
