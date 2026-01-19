@@ -1,0 +1,143 @@
+// Test switch/match statement with various patterns
+
+program test_switch {
+
+fn test_basic_switch() -> i64 {
+    let x = 2;
+    switch x {
+        1 => {
+            return 10;
+        },
+        2 => {
+            return 20;
+        },
+        3 => {
+            return 30;
+        },
+        _ => {
+            return 99;
+        },
+    }
+}
+
+fn test_multiple_patterns() -> i64 {
+    let day = 6;
+    switch day {
+        1 | 2 | 3 | 4 | 5 => {
+            return 1;  // Weekday
+        },
+        6 | 7 => {
+            return 0;  // Weekend
+        },
+        _ => {
+            return -1;  // Invalid
+        },
+    }
+}
+
+fn test_string_switch() -> i64 {
+    let cmd = "start";
+    switch cmd {
+        "start" => {
+            return 100;
+        },
+        "stop" => {
+            return 200;
+        },
+        "pause" => {
+            return 300;
+        },
+        _ => {
+            return 999;
+        },
+    }
+}
+
+fn test_computed_expression() -> i64 {
+    let x = 5;
+    let y = 10;
+    switch x + y {
+        10 => {
+            return 1;
+        },
+        15 => {
+            return 2;
+        },
+        20 => {
+            return 3;
+        },
+        _ => {
+            return 0;
+        },
+    }
+}
+
+fn test_no_wildcard() -> i64 {
+    let x = 1;
+    switch x {
+        1 => {
+            return 42;
+        },
+        2 => {
+            return 43;
+        },
+    }
+    return 0;  // Falls through if no match
+}
+
+fn main() -> i64 {
+    // Test 1: Basic switch
+    let r1 = test_basic_switch();
+    if r1 != 20 {
+        print("FAIL: test_basic_switch expected 20, got ");
+        print_int(r1);
+        print("\n");
+        return 1;
+    }
+    print("PASS: test_basic_switch\n");
+
+    // Test 2: Multiple patterns
+    let r2 = test_multiple_patterns();
+    if r2 != 0 {
+        print("FAIL: test_multiple_patterns expected 0, got ");
+        print_int(r2);
+        print("\n");
+        return 1;
+    }
+    print("PASS: test_multiple_patterns\n");
+
+    // Test 3: String switch
+    let r3 = test_string_switch();
+    if r3 != 100 {
+        print("FAIL: test_string_switch expected 100, got ");
+        print_int(r3);
+        print("\n");
+        return 1;
+    }
+    print("PASS: test_string_switch\n");
+
+    // Test 4: Computed expression
+    let r4 = test_computed_expression();
+    if r4 != 2 {
+        print("FAIL: test_computed_expression expected 2, got ");
+        print_int(r4);
+        print("\n");
+        return 1;
+    }
+    print("PASS: test_computed_expression\n");
+
+    // Test 5: No wildcard
+    let r5 = test_no_wildcard();
+    if r5 != 42 {
+        print("FAIL: test_no_wildcard expected 42, got ");
+        print_int(r5);
+        print("\n");
+        return 1;
+    }
+    print("PASS: test_no_wildcard\n");
+
+    print("All switch tests passed!\n");
+    return 0;
+}
+
+}

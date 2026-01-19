@@ -22,6 +22,14 @@ program bootstrap_compiler {
     //     Returns: AST node for the program
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // IMPORT: Semantic Analyzer (analyze_program function)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // From semantic_complete.hlxa:636
+    // fn analyze_program(ast_functions: [i64]) -> [i64]
+    //     Returns: Semantic state with error tracking
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // IMPORT: Lowerer (lower_program function)
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -38,14 +46,26 @@ program bootstrap_compiler {
     //     Returns: Binary output as array of bytes
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // PIPELINE: Full Compilation
+    // IMPORT: Diagnostic Functions
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // From semantic_complete.hlxa:681
+    // fn print_diagnostics(state: [i64]) -> i64
+    //     Prints errors/warnings from semantic analysis
+
+    // From semantic_complete.hlxa:747
+    // fn error_summary(state: [i64]) -> String
+    //     Returns human-readable error message
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PIPELINE: Full Compilation (with Semantic Analysis)
     // ═══════════════════════════════════════════════════════════════════════════
 
     fn compile(source: String) -> [i64] {
         print("=== HLX Bootstrap Compiler Pipeline ===\n");
 
         // Phase 1: Lexical Analysis
-        print("\n[1/4] Lexing...\n");
+        print("\n[1/5] Lexing...\n");
         let tokens = tokenize(source);
         let token_count = array_len(tokens);
         print("  Generated ");
@@ -53,20 +73,28 @@ program bootstrap_compiler {
         print(" tokens\n");
 
         // Phase 2: Parsing
-        print("\n[2/4] Parsing...\n");
+        print("\n[2/5] Parsing...\n");
         let ast = parse_program(tokens);
         print("  AST constructed\n");
 
-        // Phase 3: Lowering
-        print("\n[3/4] Lowering to bytecode...\n");
+        // Phase 3: Semantic Analysis (NEW)
+        print("\n[3/5] Semantic Analysis...\n");
+        let semantic_state = analyze_program(ast);
+        print("  Type checking and scope validation complete\n");
+
+        // Check for semantic errors
+        print_diagnostics(semantic_state);
+
+        // Phase 4: Lowering
+        print("\n[4/5] Lowering to bytecode...\n");
         let instructions = lower_program(ast);
         let inst_count = array_len(instructions);
         print("  Generated ");
         print(inst_count);
         print(" instructions\n");
 
-        // Phase 4: Emission
-        print("\n[4/4] Emitting binary...\n");
+        // Phase 5: Emission
+        print("\n[5/5] Emitting binary...\n");
         let binary = emit_bytecode(instructions);
         let binary_size = array_len(binary);
         print("  Binary size: ");

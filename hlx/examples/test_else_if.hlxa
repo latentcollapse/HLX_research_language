@@ -1,0 +1,41 @@
+// Test else-if syntax sugar
+
+program test_else_if {
+    fn classify(x: i64) -> String {
+        if x < 0 {
+            return "negative";
+        } else if x == 0 {
+            return "zero";
+        } else if x < 10 {
+            return "small positive";
+        } else if x < 100 {
+            return "medium positive";
+        } else {
+            return "large positive";
+        }
+    }
+
+    fn main() -> i64 {
+        print("Testing else-if chains:");
+        print("");
+
+        print("classify(-5):");
+        print(classify(-5));  // negative
+
+        print("classify(0):");
+        print(classify(0));  // zero
+
+        print("classify(5):");
+        print(classify(5));  // small positive
+
+        print("classify(50):");
+        print(classify(50));  // medium positive
+
+        print("classify(500):");
+        print(classify(500));  // large positive
+
+        print("");
+        print("else-if syntax works!");
+        return 0;
+    }
+}
