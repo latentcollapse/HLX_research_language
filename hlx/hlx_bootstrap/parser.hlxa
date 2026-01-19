@@ -274,6 +274,7 @@ fn TOK_LBRACKET() -> i64 { return 24; }
 fn TOK_RBRACKET() -> i64 { return 25; }
 fn TOK_SEMICOLON() -> i64 { return 26; }
 fn TOK_COMMA() -> i64 { return 27; }
+fn TOK_COLON() -> i64 { return 28; }
 fn TOK_PLUS() -> i64 { return 30; }
 fn TOK_MINUS() -> i64 { return 31; }
 fn TOK_STAR() -> i64 { return 32; }
@@ -596,6 +597,12 @@ fn parse_statement(state: [i64]) -> [i64] {
         let ident_tok = get_at(tokens, pos);
         let name = int_to_ptr(get_at(ident_tok, 1));
 
+        // Optional type annotation: : i64
+        if peek_kind(state) == TOK_COLON() {
+            state = advance(state);  // Skip colon
+            state = expect(state, TOK_IDENT());  // Skip type name (we ignore types for now)
+        }
+
         state = expect(state, TOK_EQ());
         let value_result = parse_expression(state);
         let value = get_at(value_result, 0);
@@ -750,6 +757,12 @@ fn parse_function(state: [i64]) -> [i64] {
         let param_tok = get_at(tokens, param_pos);
         let param_name = get_at(param_tok, 1);
         params = push(params, param_name);
+
+        // Optional type annotation: : i64
+        if peek_kind(state) == TOK_COLON() {
+            state = advance(state);  // Skip colon
+            state = expect(state, TOK_IDENT());  // Skip type name (we ignore types for now)
+        }
 
         if peek_kind(state) == TOK_COMMA() {
             state = advance(state);

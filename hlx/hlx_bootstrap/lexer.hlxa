@@ -60,13 +60,15 @@ module hlx_lexer {
     // ═══════════════════════════════════════════════════════════════════════════
 
     fn keyword_kind(word: String) -> i64 {
-        if word == "program" { return 10; }
+        if word == "let" { return 10; }
         if word == "fn" { return 11; }
-        if word == "let" { return 12; }
-        if word == "return" { return 13; }
-        if word == "if" { return 14; }
+        if word == "return" { return 12; }
+        if word == "if" { return 13; }
+        if word == "else" { return 14; }
         if word == "loop" { return 15; }
-        if word == "const" { return 16; }
+        if word == "break" { return 16; }
+        if word == "continue" { return 17; }
+        if word == "program" { return 18; }
         return 1;  // TOK_IDENT
     }
 
@@ -80,6 +82,19 @@ module hlx_lexer {
         loop(i < length, 10000) {
             let c = char_at(s, start + i);
             result = str(result) + str(c);
+            i = i + 1;
+        }
+        return result;
+    }
+
+    fn parse_int(s: String) -> i64 {
+        let result = 0;
+        let len = str_len(s);
+        let i = 0;
+        loop(i < len, 10000) {
+            let c = char_at(s, i);
+            let digit = char_code(c) - char_code("0");
+            result = result * 10 + digit;
             i = i + 1;
         }
         return result;
@@ -188,8 +203,20 @@ module hlx_lexer {
                     let word = substring(source, start, ident_len);
                     let kind = keyword_kind(word);
 
-                    // Token: [kind, start, length, line, col]
-                    let token = [kind, start, ident_len, line, col];
+                    // Token: [kind, value/start, length, line, col]
+                    // For identifiers (kind=1), store the actual text at index 1
+                    let token = [0, 0, 0, 0, 0];
+                    token = set_at(token, 0, kind);
+                    if kind == 1 {
+                        // TOK_IDENT: store actual identifier text
+                        token = set_at(token, 1, ptr_to_int(word));
+                    } else {
+                        // Keywords: store position (not used, but kept for compatibility)
+                        token = set_at(token, 1, start);
+                    }
+                    token = set_at(token, 2, ident_len);
+                    token = set_at(token, 3, line);
+                    token = set_at(token, 4, col);
                     tokens = push(tokens, token);
                     col = col + ident_len;
                     handled = 1;
@@ -221,7 +248,9 @@ module hlx_lexer {
                     }
 
                     let num_len = pos - start;
-                    let token = [2, start, num_len, line, col];  // TOK_NUMBER=2
+                    let num_str = substring(source, start, num_len);
+                    let num_val = parse_int(num_str);
+                    let token = [2, num_val, num_len, line, col];  // TOK_INT=2, store parsed value
                     tokens = push(tokens, token);
                     col = col + num_len;
                     handled = 1;
@@ -251,7 +280,11 @@ module hlx_lexer {
                     }
 
                     let str_len = pos - start;
-                    let token = [3, start, str_len, line, col];  // TOK_STRING=3
+                    // Extract string content (without quotes)
+                    let content_start = start + 1;
+                    let content_len = str_len - 2;  // Exclude opening and closing quotes
+                    let str_content = substring(source, content_start, content_len);
+                    let token = [3, ptr_to_int(str_content), str_len, line, col];  // TOK_STRING=3, store content
                     tokens = push(tokens, token);
                     handled = 1;
                 }
@@ -267,11 +300,11 @@ module hlx_lexer {
                 if c == "}" { single_kind = 23; }
                 if c == "[" { single_kind = 24; }
                 if c == "]" { single_kind = 25; }
-                if c == "," { single_kind = 26; }
-                if c == ";" { single_kind = 27; }
+                if c == ";" { single_kind = 26; }
+                if c == "," { single_kind = 27; }
                 if c == ":" { single_kind = 28; }
                 if c == "+" { single_kind = 30; }
-                if c == "-" { single_kind = 31; }
+                // Note: '-' handled separately for arrow operator
                 if c == "*" { single_kind = 32; }
                 if c == "/" { single_kind = 33; }
                 if c == "%" { single_kind = 34; }
@@ -402,6 +435,30 @@ module hlx_lexer {
                             col = col + 2;
                             handled = 1;
                         }
+                    }
+                }
+            }
+
+            // Minus or Arrow operator: - or ->
+            if handled == 0 {
+                if c == "-" {
+                    if pos + 1 < len {
+                        let next = char_at(source, pos + 1);
+                        if next == ">" {
+                            let token = [44, pos, 2, line, col];  // TOK_ARROW
+                            tokens = push(tokens, token);
+                            pos = pos + 2;
+                            col = col + 2;
+                            handled = 1;
+                        }
+                    }
+                    // Fall back to single minus if not arrow
+                    if handled == 0 {
+                        let token = [31, pos, 1, line, col];  // TOK_MINUS
+                        tokens = push(tokens, token);
+                        pos = pos + 1;
+                        col = col + 1;
+                        handled = 1;
                     }
                 }
             }
