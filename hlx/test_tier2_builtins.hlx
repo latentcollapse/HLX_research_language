@@ -1,0 +1,347 @@
+// Test Tier 2 String and Array Builtins
+// These are core operations needed for practical HLX programs
+
+program tier2_builtins {
+
+    // ============================================================================
+    // STRING OPERATIONS
+    // ============================================================================
+
+    fn test_concat() -> i64 {
+        let hello = "Hello";
+        let world = "World";
+        let result = concat(hello, world);
+
+        if (strcmp(result, "HelloWorld") == 0) {
+            return 1;  // Pass
+        }
+        return 0;  // Fail
+    }
+
+    fn test_substring() -> i64 {
+        let text = "HelloWorld";
+
+        // substring(str, start, length)
+        let hello_part = substring(text, 0, 5);
+
+        if (strcmp(hello_part, "Hello") == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_trim() -> i64 {
+        let padded = "  hello  ";
+        let trimmed = trim(padded);
+
+        if (strcmp(trimmed, "hello") == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_to_upper() -> i64 {
+        let lower = "hello";
+        let upper = to_upper(lower);
+
+        if (strcmp(upper, "HELLO") == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_to_lower() -> i64 {
+        let upper = "HELLO";
+        let lower = to_lower(upper);
+
+        if (strcmp(lower, "hello") == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_starts_with() -> i64 {
+        let text = "HelloWorld";
+
+        if (starts_with(text, "Hello") == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_ends_with() -> i64 {
+        let text = "HelloWorld";
+
+        if (ends_with(text, "World") == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_contains() -> i64 {
+        let text = "HelloWorld";
+
+        if (contains(text, "low") == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_split() -> i64 {
+        let csv = "apple,banana,cherry";
+        let parts = split(csv, ",");
+
+        // Check array length
+        if (array_len(parts) == 3) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_replace() -> i64 {
+        let text = "hello world";
+        let result = replace(text, "world", "universe");
+
+        if (strcmp(result, "hello universe") == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ============================================================================
+    // ARRAY OPERATIONS
+    // ============================================================================
+
+    fn test_slice() -> i64 {
+        let arr = [1, 2, 3, 4, 5];
+
+        // slice(array, start, length)
+        let sliced = slice(arr, 1, 3);  // Elements at indices 1, 2, 3
+
+        if (array_len(sliced) == 3) {
+            if (get_at(sliced, 0) == 2) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    fn test_reverse() -> i64 {
+        let arr = [1, 2, 3, 4, 5];
+        let rev = reverse(arr);
+
+        if (array_len(rev) == 5) {
+            if (get_at(rev, 0) == 5) {
+                if (get_at(rev, 4) == 1) {
+                    return 1;
+                }
+            }
+        }
+        return 0;
+    }
+
+    fn test_sort() -> i64 {
+        let arr = [5, 2, 8, 1, 9];
+        let sorted = sort(arr);
+
+        if (array_len(sorted) == 5) {
+            if (get_at(sorted, 0) == 1) {
+                if (get_at(sorted, 4) == 9) {
+                    return 1;
+                }
+            }
+        }
+        return 0;
+    }
+
+    fn test_unique() -> i64 {
+        let arr = [1, 2, 2, 3, 3, 3, 4];
+        let uniq = unique(arr);
+
+        // unique should have 4 elements: [1, 2, 3, 4]
+        if (array_len(uniq) == 4) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_range() -> i64 {
+        let arr = range(0, 5);  // [0, 1, 2, 3, 4]
+
+        if (array_len(arr) == 5) {
+            if (get_at(arr, 0) == 0) {
+                if (get_at(arr, 4) == 4) {
+                    return 1;
+                }
+            }
+        }
+        return 0;
+    }
+
+    fn test_arr_concat() -> i64 {
+        let arr1 = [1, 2, 3];
+        let arr2 = [4, 5, 6];
+        let combined = arr_concat(arr1, arr2);
+
+        if (array_len(combined) == 6) {
+            if (get_at(combined, 0) == 1) {
+                if (get_at(combined, 5) == 6) {
+                    return 1;
+                }
+            }
+        }
+        return 0;
+    }
+
+    fn test_arr_pop() -> i64 {
+        let arr = [1, 2, 3, 4, 5];
+        let popped = arr_pop(arr);
+
+        if (array_len(popped) == 4) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ============================================================================
+    // TYPE CONVERSIONS
+    // ============================================================================
+
+    fn test_to_int() -> i64 {
+        let result = to_int("42");
+
+        if (result == 42) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_to_float() -> i64 {
+        let result = to_float(42);
+
+        // Just check it doesn't crash
+        return 1;
+    }
+
+    fn test_type_check() -> i64 {
+        let str_val = "hello";
+        let arr_val = [1, 2, 3];
+        let int_val = 42;
+
+        // These should return appropriate type strings
+        let str_type = type(str_val);
+        let arr_type = type(arr_val);
+        let int_type = type(int_val);
+
+        // Just verify they're non-empty and don't crash
+        if (strlen(str_type) > 0) {
+            if (strlen(arr_type) > 0) {
+                if (strlen(int_type) > 0) {
+                    return 1;
+                }
+            }
+        }
+        return 0;
+    }
+
+    // ============================================================================
+    // COMPREHENSIVE TEST RUNNER
+    // ============================================================================
+
+    fn run_test(name: String, test_fn_result: i64) -> i64 {
+        if (test_fn_result == 1) {
+            print("✓ ");
+            print(name);
+            print(" passed\n");
+            return 1;
+        } else {
+            print("✗ ");
+            print(name);
+            print(" failed\n");
+            return 0;
+        }
+    }
+
+    fn main() -> i64 {
+        print("═══════════════════════════════════════════════════════\n");
+        print("Tier 2 Builtin Functions Test Suite\n");
+        print("═══════════════════════════════════════════════════════\n\n");
+
+        let passed = 0;
+        let total = 0;
+
+        print("STRING OPERATIONS:\n");
+        total += 1;
+        passed += run_test("concat", test_concat());
+
+        total += 1;
+        passed += run_test("substring", test_substring());
+
+        total += 1;
+        passed += run_test("trim", test_trim());
+
+        total += 1;
+        passed += run_test("to_upper", test_to_upper());
+
+        total += 1;
+        passed += run_test("to_lower", test_to_lower());
+
+        total += 1;
+        passed += run_test("starts_with", test_starts_with());
+
+        total += 1;
+        passed += run_test("ends_with", test_ends_with());
+
+        total += 1;
+        passed += run_test("contains", test_contains());
+
+        total += 1;
+        passed += run_test("split", test_split());
+
+        total += 1;
+        passed += run_test("replace", test_replace());
+
+        print("\nARRAY OPERATIONS:\n");
+        total += 1;
+        passed += run_test("slice", test_slice());
+
+        total += 1;
+        passed += run_test("reverse", test_reverse());
+
+        total += 1;
+        passed += run_test("sort", test_sort());
+
+        total += 1;
+        passed += run_test("unique", test_unique());
+
+        total += 1;
+        passed += run_test("range", test_range());
+
+        total += 1;
+        passed += run_test("arr_concat", test_arr_concat());
+
+        total += 1;
+        passed += run_test("arr_pop", test_arr_pop());
+
+        print("\nTYPE CONVERSIONS:\n");
+        total += 1;
+        passed += run_test("to_int", test_to_int());
+
+        total += 1;
+        passed += run_test("to_float", test_to_float());
+
+        total += 1;
+        passed += run_test("type", test_type_check());
+
+        print("\n═══════════════════════════════════════════════════════\n");
+        print("Results: ");
+        print_int(passed);
+        print("/");
+        print_int(total);
+        print(" tests passed\n");
+        print("═══════════════════════════════════════════════════════\n");
+
+        return passed;
+    }
+
+}
