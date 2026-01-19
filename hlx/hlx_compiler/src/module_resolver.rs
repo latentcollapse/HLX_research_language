@@ -118,10 +118,30 @@ impl ModuleResolver {
     }
 
     /// Convert module path to file path
-    /// "std.math" → "std/math.hlxa"
+    /// Supports both dotted notation ("std.math" → "std/math.hlxa")
+    /// and file paths ("./math.hlxa", "../lib/utils.hlxa")
     fn module_path_to_file(&self, module_path: &str) -> Result<PathBuf> {
-        let mut path = PathBuf::new();
+        // If it looks like a file path (contains . / or \), use it directly
+        if module_path.contains("/") || module_path.contains("\\") || module_path.starts_with(".") {
+            let path = PathBuf::from(module_path);
+            // Ensure it has .hlxa extension
+            if path.extension().and_then(|e| e.to_str()) == Some("hlxa") {
+                return Ok(path);
+            } else if path.extension().is_none() {
+                // Add .hlxa extension if missing
+                let mut path_with_ext = path.clone();
+                path_with_ext.set_extension("hlxa");
+                return Ok(path_with_ext);
+            } else {
+                return Err(HlxError::parse(format!(
+                    "Module path must be .hlxa file: {}",
+                    module_path
+                )));
+            }
+        }
 
+        // Otherwise, treat as dotted notation
+        let mut path = PathBuf::new();
         for segment in module_path.split('.') {
             if segment.is_empty() {
                 return Err(HlxError::parse(format!("Invalid module path: {}", module_path)));

@@ -310,7 +310,7 @@ fn main() -> Result<()> {
 fn compile(input: &PathBuf, output: Option<PathBuf>, format: &str) -> Result<()> {
     let source = fs::read_to_string(input)
         .context("Failed to read input file")?;
-    
+
     // Parse source
     let ast = match format {
         "hlxa" | "hlxl" | "hlxc" => {
@@ -324,9 +324,13 @@ fn compile(input: &PathBuf, output: Option<PathBuf>, format: &str) -> Result<()>
         }
         _ => anyhow::bail!("Unknown format: {}", format),
     };
-    
+
+    // Link imported modules
+    let linked_ast = hlx_compiler::link_program(ast, input)
+        .context("Module linking failed")?;
+
     // Lower to crate
-    let krate = lower::lower_to_crate(&ast)
+    let krate = lower::lower_to_crate(&linked_ast)
         .context("Lowering failed")?;
     
     // Determine output path
@@ -376,7 +380,12 @@ fn run(input: &PathBuf, cpu_only: bool, output: Option<PathBuf>, main_input: Opt
         let source = fs::read_to_string(input).context("Failed to read source")?;
         let parser = HlxaParser::new();
         let ast = parser.parse(&source).context("Parse error")?;
-        lower::lower_to_crate(&ast).context("Lowering failed")?
+
+        // Link imported modules
+        let linked_ast = hlx_compiler::link_program(ast, input)
+            .context("Module linking failed")?;
+
+        lower::lower_to_crate(&linked_ast).context("Lowering failed")?
     };
 
     // Execute

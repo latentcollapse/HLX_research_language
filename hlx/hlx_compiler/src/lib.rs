@@ -10,6 +10,7 @@ pub mod hlxa;
 pub mod runic;
 pub mod lift;
 pub mod module_resolver;
+pub mod linker;
 pub mod substrate;
 pub mod substrate_inference;
 
@@ -19,5 +20,6 @@ pub use emitter::Emitter;
 pub use lower::lower_to_crate;
 pub use lift::lift_from_crate;
 pub use module_resolver::ModuleResolver;
+pub use linker::link_program;
 pub use substrate::{Substrate, ScaleConfig, ScaleSize, SubstrateInfo, OperationHints};
 pub use substrate_inference::SubstrateInference;

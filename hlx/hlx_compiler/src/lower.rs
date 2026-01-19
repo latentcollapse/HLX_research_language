@@ -426,6 +426,16 @@ impl LoweringContext {
             Statement::Barrier { name, .. } => {
                 self.emit_with_span(Instruction::Barrier { name: name.clone() }, span);
             }
+            Statement::Switch { expr, arms, .. } => {
+                // Lower switch to nested if-else chain
+                // switch x { 1 => {a}, 2 => {b}, _ => {c} }
+                // becomes: if x == 1 {a} else { if x == 2 {b} else {c} }
+
+                let switch_val_reg = self.lower_expr(&expr.node)?;
+
+                // Build nested if-else chain from arms
+                self.lower_switch_arms(switch_val_reg, arms, span)?;
+            }
             Statement::Asm { template, outputs, inputs, clobbers } => {
                 // Build constraints string from outputs, inputs, and clobbers
                 let mut constraints_parts = Vec::new();
@@ -465,7 +475,92 @@ impl LoweringContext {
         }
         Ok(())
     }
-    
+
+    fn lower_switch_arms(&mut self, switch_val_reg: Register, arms: &[SwitchArm], span: Span) -> Result<()> {
+        if arms.is_empty() {
+            return Ok(());
+        }
+
+        // Process arms recursively, building nested if-else chain
+        self.lower_switch_arm_recursive(switch_val_reg, arms, 0, span)
+    }
+
+    fn lower_switch_arm_recursive(&mut self, switch_val_reg: Register, arms: &[SwitchArm], idx: usize, span: Span) -> Result<()> {
+        if idx >= arms.len() {
+            return Ok(());
+        }
+
+        let arm = &arms[idx];
+        let is_last = idx == arms.len() - 1;
+
+        // Check if this is a wildcard pattern (_)
+        let is_wildcard = arm.patterns.len() == 1 && matches!(arm.patterns[0].node, Expr::Ident(ref s) if s == "_");
+
+        if is_wildcard {
+            // Wildcard: just execute the body
+            for stmt in &arm.body {
+                self.lower_stmt(&stmt.node, stmt.span.clone())?;
+            }
+        } else {
+            // Build condition: switch_val == pattern1 or switch_val == pattern2 or ...
+            let mut cond_reg = None;
+            for pattern in &arm.patterns {
+                let pattern_reg = self.lower_expr(&pattern.node)?;
+                let eq_reg = self.alloc_reg();
+                self.emit(Instruction::Eq { out: eq_reg, lhs: switch_val_reg, rhs: pattern_reg });
+
+                if let Some(prev_cond) = cond_reg {
+                    // OR with previous condition
+                    let new_cond = self.alloc_reg();
+                    self.emit(Instruction::Or { out: new_cond, lhs: prev_cond, rhs: eq_reg });
+                    cond_reg = Some(new_cond);
+                } else {
+                    cond_reg = Some(eq_reg);
+                }
+            }
+
+            let cond = cond_reg.unwrap();
+
+            // Emit if statement
+            let body_start_idx = self.instructions.len() + 1;
+            let then_idx = body_start_idx as u32;
+
+            // Reserve space for If instruction
+            self.emit(Instruction::Nop);
+            let if_idx = self.instructions.len() - 1;
+
+            // Lower arm body
+            for stmt in &arm.body {
+                self.lower_stmt(&stmt.node, stmt.span.clone())?;
+            }
+
+            // Jump past else block
+            let skip_else_idx = self.instructions.len();
+            self.emit(Instruction::Nop);
+
+            let else_idx = self.instructions.len() as u32;
+
+            // Lower remaining arms as else block
+            if !is_last {
+                self.lower_switch_arm_recursive(switch_val_reg, arms, idx + 1, span)?;
+            }
+
+            let exit_idx = self.instructions.len() as u32;
+
+            // Patch If instruction
+            self.instructions[if_idx] = Instruction::If {
+                cond,
+                then_block: then_idx,
+                else_block: else_idx,
+            };
+
+            // Patch skip jump
+            self.instructions[skip_else_idx] = Instruction::Jump { target: exit_idx };
+        }
+
+        Ok(())
+    }
+
     fn lower_expr(&mut self, expr: &Expr) -> Result<Register> {
         match expr {
             Expr::Literal(lit) => {

@@ -231,6 +231,34 @@ impl RunicEmitter {
                 }
                 out.push(';');
             }
+            Statement::Switch { expr, arms, .. } => {
+                out.push_str("switch ");
+                self.emit_expr(&expr.node, out)?;
+                out.push_str(" {\n");
+                for arm in arms {
+                    self.indent += 1;
+                    out.push_str(&self.indent_str());
+                    // Emit patterns
+                    for (i, pattern) in arm.patterns.iter().enumerate() {
+                        if i > 0 {
+                            out.push_str(" | ");
+                        }
+                        self.emit_expr(&pattern.node, out)?;
+                    }
+                    out.push_str(" => {\n");
+                    self.indent += 1;
+                    for stmt in &arm.body {
+                        self.emit_stmt(&stmt.node, out)?;
+                        out.push('\n');
+                    }
+                    self.indent -= 1;
+                    out.push_str(&self.indent_str());
+                    out.push_str("},\n");
+                    self.indent -= 1;
+                }
+                out.push_str(&self.indent_str());
+                out.push('}');
+            }
         }
 
         Ok(())
@@ -609,6 +637,34 @@ impl HlxlEmitter {
                     out.push(')');
                 }
                 out.push(';');
+            }
+            Statement::Switch { expr, arms, .. } => {
+                out.push_str("switch ");
+                self.emit_expr(&expr.node, out)?;
+                out.push_str(" {\n");
+                for arm in arms {
+                    self.indent += 1;
+                    out.push_str(&self.indent_str());
+                    // Emit patterns
+                    for (i, pattern) in arm.patterns.iter().enumerate() {
+                        if i > 0 {
+                            out.push_str(" | ");
+                        }
+                        self.emit_expr(&pattern.node, out)?;
+                    }
+                    out.push_str(" => {\n");
+                    self.indent += 1;
+                    for stmt in &arm.body {
+                        self.emit_stmt(&stmt.node, out)?;
+                        out.push('\n');
+                    }
+                    self.indent -= 1;
+                    out.push_str(&self.indent_str());
+                    out.push_str("},\n");
+                    self.indent -= 1;
+                }
+                out.push_str(&self.indent_str());
+                out.push('}');
             }
         }
 

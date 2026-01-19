@@ -103,7 +103,7 @@ fn ident(input: &str) -> ParseResult<'_, String> {
     let (input, first) = take_while1(is_ident_start)(input)?;
     let (input, rest) = take_while(is_ident_cont)(input)?;
     let id = format!("{}{}", first, rest);
-    let keywords = ["let", "return", "if", "else", "loop", "program", "block", "fn", "null", "true", "false", "and", "or", "not", "break", "continue", "module", "enum", "struct", "const"];
+    let keywords = ["let", "return", "if", "else", "loop", "program", "block", "fn", "null", "true", "false", "and", "or", "not", "break", "continue", "module", "enum", "struct", "const", "import", "export", "from"];
     if keywords.contains(&id.as_str()) {
         return Err(nom::Err::Error(VerboseError {
             errors: vec![(input, nom::error::VerboseErrorKind::Context("keyword"))]
@@ -563,6 +563,53 @@ fn multiplicative_expr<'a>(original: &'a str, input: &'a str) -> ParseResult<'a,
     }
 }
 
+// Helper to parse else/else-if branches
+fn parse_else_branch<'a>(original: &'a str) -> impl Fn(&'a str) -> ParseResult<'a, (Vec<Spanned<Statement>>, Span)> {
+    move |i| {
+        let (i, else_kw_span) = keyword_with_span(original, "else", i)?;
+        // Check for 'else if' - desugar to else { if ... }
+        let (i2, is_else_if) = opt(|inp| keyword_with_span(original, "if", inp))(i)?;
+        if let Some(if_kw_span) = is_else_if {
+            // Parse as a full if statement recursively
+            let (i2, if_stmt) = spanned(original, |i3| {
+                // We already consumed 'if', so parse the rest
+                let (i3, cond) = cut(context("condition", |i4| {
+                    spanned(original, |i5| {
+                        alt((
+                            delimited(preceded(ws, char('(')), |i6| expr(original, i6), preceded(ws, char(')'))),
+                            |i6| expr(original, i6)
+                        ))(i5)
+                    })(i4)
+                }))(i3)?;
+                let (i3, _) = cut(context("'{' after if condition", preceded(ws, char('{'))))(i3)?;
+                let (i3, then_body) = many0(|i4| spanned(original, |i5| statement(original, i5))(i4))(i3)?;
+                let (i3, _) = cut(context("'}' to close if block", preceded(ws, char('}'))))(i3)?;
+                // Recursively handle else/else-if
+                let (i3, nested_else_opt) = opt(parse_else_branch(original))(i3)?;
+                let (nested_else, nested_else_kw_span) = match nested_else_opt {
+                    Some((body, span)) => (Some(body), Some(span)),
+                    None => (None, None),
+                };
+                Ok((i3, Statement::If {
+                    if_keyword_span: Some(if_kw_span),
+                    condition: cond,
+                    then_branch: then_body,
+                    else_keyword_span: nested_else_kw_span,
+                    else_branch: nested_else,
+                }))
+            })(i2)?;
+            // Wrap the if statement in a vec
+            Ok((i2, (vec![if_stmt], else_kw_span)))
+        } else {
+            // Regular else block
+            let (i, _) = preceded(ws, char('{'))(i)?;
+            let (i, body) = many0(|i2| spanned(original, |i3| statement(original, i3))(i2))(i)?;
+            let (i, _) = preceded(ws, char('}'))(i)?;
+            Ok((i, (body, else_kw_span)))
+        }
+    }
+}
+
 fn statement<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Statement> {
     alt((
         // let name = value; or let name: Type = value;
@@ -616,13 +663,7 @@ fn statement<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Statement
                 let (i, _) = cut(context("'{' after if condition", preceded(ws, char('{'))))(i)?;
                 let (i, then_body) = many0(|i2| spanned(original, |i3| statement(original, i3))(i2))(i)?;
                 let (i, _) = cut(context("'}' to close if block", preceded(ws, char('}'))))(i)?;
-                let (i, else_opt) = opt(|i2| {
-                    let (i2, else_kw_span) = keyword_with_span(original, "else", i2)?;
-                    let (i2, _) = preceded(ws, char('{'))(i2)?;
-                    let (i2, body) = many0(|i3| spanned(original, |i4| statement(original, i4))(i3))(i2)?;
-                    let (i2, _) = preceded(ws, char('}'))(i2)?;
-                    Ok((i2, (body, else_kw_span)))
-                })(i)?;
+                let (i, else_opt) = opt(parse_else_branch(original))(i)?;
                 let (els, else_kw_span) = match else_opt {
                     Some((body, span)) => (Some(body), Some(span)),
                     None => (None, None),
@@ -700,14 +741,81 @@ fn statement<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Statement
             }
         ),
 
-        // assignment: lhs = value;
+        // switch statement: switch expr { pattern => body, pattern => body, _ => body }
+        context("switch statement",
+            |i| {
+                let (i, switch_kw_span) = keyword_with_span(original, "switch", i)?;
+                let (i, switch_expr) = cut(context("switch expression", |i2| spanned(original, |i3| expr(original, i3))(i2)))(i)?;
+                let (i, _) = cut(context("'{' after switch expression", preceded(ws, char('{'))))(i)?;
+
+                // Parse arms: pattern | pattern | pattern => { stmts }, ...
+                let (i, arms) = many0(|i2| {
+                    // Parse patterns separated by | (use and_expr to avoid capturing | as BitOr)
+                    let (i2, first_pattern) = preceded(ws, |i3| spanned(original, |i4| and_expr(original, i4))(i3))(i2)?;
+                    let (i2, more_patterns) = many0(preceded(preceded(ws, char('|')), |i3| spanned(original, |i4| and_expr(original, i4))(i3)))(i2)?;
+
+                    let mut patterns = vec![first_pattern];
+                    patterns.extend(more_patterns);
+
+                    let (i2, _) = cut(context("'=>' after pattern", preceded(ws, tag("=>"))))(i2)?;
+                    let (i2, _) = preceded(ws, char('{'))(i2)?;
+                    let (i2, body) = many0(|i3| spanned(original, |i4| statement(original, i4))(i3))(i2)?;
+                    let (i2, _) = cut(context("'}' to close arm", preceded(ws, char('}'))))(i2)?;
+                    let (i2, _) = opt(preceded(ws, char(',')))(i2)?; // Optional trailing comma
+
+                    Ok((i2, SwitchArm { patterns, body }))
+                })(i)?;
+
+                let (i, _) = cut(context("'}' to close switch", preceded(ws, char('}'))))(i)?;
+                Ok((i, Statement::Switch {
+                    keyword_span: Some(switch_kw_span),
+                    expr: switch_expr,
+                    arms,
+                }))
+            }
+        ),
+
+        // assignment: lhs = value; or lhs += value; etc.
         context("assignment",
             |i| {
                 let (i, lhs) = preceded(ws, |i2| spanned(original, |i3| atom_expr(original, i3))(i2))(i)?;
-                let (i, _) = preceded(ws, char('='))(i)?;
-                let (i, v) = cut(context("expression", |i2| spanned(original, |i3| expr(original, i3))(i2)))(i)?;
-                let (i, _) = cut(context("';' after assignment", preceded(ws, char(';'))))(i)?;
-                Ok((i, Statement::Assign { lhs, value: v }))
+                // Check for compound assignment operators (+=, -=, *=, /=, %=)
+                let (i, compound_op) = opt(preceded(ws, alt((
+                    value(BinOp::Add, tag("+=")),
+                    value(BinOp::Sub, tag("-=")),
+                    value(BinOp::Mul, tag("*=")),
+                    value(BinOp::Div, tag("/=")),
+                    value(BinOp::Mod, tag("%=")),
+                ))))(i)?;
+
+                if let Some(op) = compound_op {
+                    // Compound assignment: desugar x += y to x = x + y
+                    let (i, v) = cut(context("expression", |i2| spanned(original, |i3| expr(original, i3))(i2)))(i)?;
+                    let (i, _) = cut(context("';' after assignment", preceded(ws, char(';'))))(i)?;
+
+                    // Create the desugared expression: lhs op rhs
+                    let lhs_span = lhs.span.clone();
+                    let rhs_span = v.span.clone();
+                    let bin_op_expr = Expr::BinOp {
+                        op,
+                        lhs: Box::new(lhs.clone()),
+                        rhs: Box::new(v),
+                    };
+                    // Compute a span that encompasses both operands
+                    let combined_span = Span {
+                        start: lhs_span.start,
+                        end: rhs_span.end,
+                        ..lhs_span
+                    };
+                    let desugared_value = Spanned::new(bin_op_expr, combined_span);
+                    Ok((i, Statement::Assign { lhs, value: desugared_value }))
+                } else {
+                    // Regular assignment: lhs = value
+                    let (i, _) = preceded(ws, char('='))(i)?;
+                    let (i, v) = cut(context("expression", |i2| spanned(original, |i3| expr(original, i3))(i2)))(i)?;
+                    let (i, _) = cut(context("';' after assignment", preceded(ws, char(';'))))(i)?;
+                    Ok((i, Statement::Assign { lhs, value: v }))
+                }
             }
         ),
 
@@ -808,8 +916,14 @@ fn parse_attributes(input: &str) -> ParseResult<'_, Vec<String>> {
     )))(input)
 }
 
-fn block<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Block> {
-    alt((
+/// Parse a block with optional export modifier
+/// Returns (Block, is_export)
+fn block<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, (Block, bool)> {
+    // Check for optional 'export' keyword
+    let (input, is_export) = opt(preceded(ws, tag("export")))(input)?;
+    let is_export = is_export.is_some();
+
+    let (input, block_result) = alt((
         // fn name(params) -> return_type { body }
         context("function definition",
             |i| {
@@ -870,12 +984,50 @@ fn block<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Block> {
                 }))
             }
         ),
-    ))(input)
+    ))(input)?;
+
+    Ok((input, (block_result, is_export)))
+}
+
+/// Parse an import statement
+/// Syntax: import { name1, name2 } from "./path.hlxa";
+fn parse_import<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Import> {
+    let (after_ws, _) = ws(input)?;
+    let start_input = after_ws;
+
+    let (input, _) = context("'import' keyword", tag("import"))(after_ws)?;
+    let (input, _) = preceded(ws, char('{'))(input)?;
+
+    // Parse comma-separated list of imported items
+    let (input, items) = separated_list0(
+        preceded(ws, char(',')),
+        preceded(ws, map(ident, |name| ImportItem {
+            name,
+            alias: None, // TODO: Support "as" aliases in future
+        }))
+    )(input)?;
+
+    let (input, _) = preceded(ws, char('}'))(input)?;
+    let (input, _) = context("'from' keyword", preceded(ws, tag("from")))(input)?;
+    let (input, path) = context("module path string", preceded(ws, parse_string_literal))(input)?;
+    let (input, _) = preceded(ws, char(';'))(input)?;
+
+    let span = compute_span(original, start_input, input);
+
+    Ok((input, Import {
+        path,
+        alias: None,
+        items: Some(items),
+        span,
+    }))
 }
 
 fn parse_program(input: &str) -> ParseResult<'_, Program> {
     let original = input; // Save original for position tracking
-    
+
+    // Parse imports first (they must come before program/module)
+    let (input, imports) = many0(preceded(ws, |i| parse_import(original, i)))(input)?;
+
     // Check if this is a standalone module by looking for the 'module' keyword
     let (after_ws, _) = ws(input)?;
     if let Ok((_, _)) = tag::<_, _, VerboseError<&str>>("module")(after_ws) {
@@ -883,20 +1035,24 @@ fn parse_program(input: &str) -> ParseResult<'_, Program> {
         let (remaining, module) = parse_module(original, input)?;
         return Ok((remaining, Program {
             name: module.name.clone(),
-            imports: vec![],
+            imports,
             modules: vec![module],
             blocks: vec![],
         }));
     }
-    
+
     // Otherwise, parse as a full program
     let (input, _) = context("'program' keyword", preceded(ws, tag("program")))(input)?;
     let (input, name) = cut(context("program name", preceded(ws, ident)))(input)?;
     let (input, _) = cut(context("'{' to start program", preceded(ws, char('{'))))(input)?;
     let (input, modules) = many0(preceded(ws, |i| parse_module(original, i)))(input)?;
-    let (input, blocks) = many0(preceded(ws, |i| block(original, i)))(input)?;
+    let (input, blocks_with_export) = many0(preceded(ws, |i| block(original, i)))(input)?;
     let (input, _) = cut(context("'}' to close program", preceded(ws, char('}'))))(input)?;
-    Ok((input, Program { name, imports: vec![], modules, blocks }))
+
+    // Extract just the blocks (ignore export flags at program level for now)
+    let blocks = blocks_with_export.into_iter().map(|(b, _)| b).collect();
+
+    Ok((input, Program { name, imports, modules, blocks }))
 }
 
 fn parse_module<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Module> {
@@ -918,28 +1074,34 @@ fn parse_module<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Module
         Constant(Constant),
         Struct(StructDef),
         Enum(EnumDef),
-        Block(Block),
+        Block(Block, bool), // Block with is_export flag
     }
 
     let (input, items) = many0(preceded(ws, alt((
         map(|i| parse_constant(original, i), ModuleItem::Constant),
         map(|i| parse_struct_def(original, i), ModuleItem::Struct),
         map(|i| parse_enum_def(original, i), ModuleItem::Enum),
-        map(|i| block(original, i), ModuleItem::Block),
+        map(|i| block(original, i), |(b, is_export)| ModuleItem::Block(b, is_export)),
     ))))(input)?;
 
-    // Separate items by type
+    // Separate items by type and collect exports
     let mut constants = Vec::new();
     let mut structs = Vec::new();
     let mut enums = Vec::new();
     let mut blocks = Vec::new();
+    let mut exports = Vec::new();
 
     for item in items {
         match item {
             ModuleItem::Constant(c) => constants.push(c),
             ModuleItem::Struct(s) => structs.push(s),
             ModuleItem::Enum(e) => enums.push(e),
-            ModuleItem::Block(b) => blocks.push(b),
+            ModuleItem::Block(b, is_export) => {
+                if is_export {
+                    exports.push(ExportKind::Function(b.name.clone()));
+                }
+                blocks.push(b);
+            }
         }
     }
 
@@ -949,7 +1111,7 @@ fn parse_module<'a>(original: &'a str, input: &'a str) -> ParseResult<'a, Module
         name,
         capabilities: capabilities.unwrap_or_default(),
         imports: vec![],
-        exports: vec![],
+        exports,
         constants,
         structs,
         enums,

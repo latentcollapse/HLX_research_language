@@ -210,6 +210,15 @@ impl Type {
     }
 }
 
+/// A single arm of a switch statement
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SwitchArm {
+    /// One or more patterns (for `10 | 11 | 12` syntax)
+    pub patterns: Vec<Spanned<Expr>>,
+    /// Body statements to execute if pattern matches
+    pub body: Vec<Spanned<Statement>>,
+}
+
 /// Statements
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Statement {
@@ -292,6 +301,18 @@ pub enum Statement {
         /// Span of "barrier" keyword
         #[serde(skip_serializing_if = "Option::is_none")]
         keyword_span: Option<Span>,
+    },
+
+    /// Switch statement for pattern matching
+    /// Syntax: switch expr { pattern => body, ... }
+    Switch {
+        /// Span of "switch" keyword
+        #[serde(skip_serializing_if = "Option::is_none")]
+        keyword_span: Option<Span>,
+        /// Expression to match against
+        expr: Spanned<Expr>,
+        /// List of match arms
+        arms: Vec<SwitchArm>,
     },
 }
 

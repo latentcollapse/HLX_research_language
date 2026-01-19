@@ -2125,6 +2125,14 @@ impl ExecutionContext {
                 }
                 Ok(Value::Null)
             }
+            "print_int" => {
+                // Alias for print (bootstrap compatibility)
+                for arg in args {
+                    let v = self.get_reg(*arg)?;
+                    println!("{}", v);
+                }
+                Ok(Value::Null)
+            }
             "type" => {
                 if args.len() != 1 {
                     return Err(HlxError::ValidationFail {
@@ -2189,7 +2197,7 @@ impl ExecutionContext {
                 let arr_reg = args[0];
                 let item = self.get_reg(args[1])?.clone();
                 let arr_val = self.get_reg(arr_reg)?.clone();
-                
+
                 if let Value::Array(arr) = arr_val {
                     let mut new_arr = arr.clone();
                     new_arr.push_back(item);
@@ -2201,6 +2209,192 @@ impl ExecutionContext {
                     })
                 }
             }
+
+            // === Bootstrap Compiler Builtins ===
+            "push" => {
+                // Alias for append (bootstrap compatibility)
+                if args.len() != 2 {
+                    return Err(HlxError::ValidationFail {
+                        message: "push() takes exactly 2 arguments (array, item)".to_string(),
+                    });
+                }
+                let arr_reg = args[0];
+                let item = self.get_reg(args[1])?.clone();
+                let arr_val = self.get_reg(arr_reg)?.clone();
+
+                if let Value::Array(arr) = arr_val {
+                    let mut new_arr = arr.clone();
+                    new_arr.push_back(item);
+                    Ok(Value::Array(new_arr))
+                } else {
+                     Err(HlxError::TypeError {
+                        expected: "array".to_string(),
+                        got: arr_val.type_name().to_string(),
+                    })
+                }
+            }
+            "array_len" => {
+                // Alias for len (bootstrap compatibility)
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "array_len() takes exactly 1 argument".to_string(),
+                    });
+                }
+                let v = self.get_reg(args[0])?;
+                match v {
+                    Value::Array(a) => Ok(Value::Integer(a.len() as i64)),
+                    Value::String(s) => Ok(Value::Integer(s.len() as i64)),
+                    Value::Object(o) => Ok(Value::Integer(o.len() as i64)),
+                    _ => Err(HlxError::TypeError {
+                        expected: "array, string, or object".to_string(),
+                        got: v.type_name().to_string(),
+                    }),
+                }
+            }
+            "get_at" => {
+                // Array indexing: get_at(arr, index)
+                if args.len() != 2 {
+                    return Err(HlxError::ValidationFail {
+                        message: "get_at() takes exactly 2 arguments (array, index)".to_string(),
+                    });
+                }
+                let arr_val = self.get_reg(args[0])?;
+                let idx_val = self.get_reg(args[1])?;
+
+                match (arr_val, idx_val) {
+                    (Value::Array(a), Value::Integer(i)) => {
+                        let idx = *i as usize;
+                        if idx < a.len() {
+                            Ok(a[idx].clone())
+                        } else {
+                            Ok(Value::Null)
+                        }
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "array and integer".to_string(),
+                        got: format!("{} and {}", arr_val.type_name(), idx_val.type_name()),
+                    })
+                }
+            }
+            "set_at" => {
+                // Array mutation: set_at(arr, index, value) -> new array
+                if args.len() != 3 {
+                    return Err(HlxError::ValidationFail {
+                        message: "set_at() takes exactly 3 arguments (array, index, value)".to_string(),
+                    });
+                }
+                let arr_val = self.get_reg(args[0])?.clone();
+                let idx_val = self.get_reg(args[1])?;
+                let new_val = self.get_reg(args[2])?.clone();
+
+                match (arr_val, idx_val) {
+                    (Value::Array(mut a), Value::Integer(i)) => {
+                        let idx = *i as usize;
+                        if idx < a.len() {
+                            a.set(idx, new_val);
+                        }
+                        Ok(Value::Array(a))
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "array and integer".to_string(),
+                        got: "other types".to_string(),
+                    })
+                }
+            }
+            "char_code" => {
+                // Get ASCII/Unicode code of first character
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "char_code() takes exactly 1 argument".to_string(),
+                    });
+                }
+                let val = self.get_reg(args[0])?;
+                match val {
+                    Value::String(s) => {
+                        let code = s.chars().next().unwrap_or('\0') as i64;
+                        Ok(Value::Integer(code))
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "string".to_string(),
+                        got: val.type_name().to_string(),
+                    })
+                }
+            }
+            "is_digit" => {
+                // Check if string contains a digit
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "is_digit() takes exactly 1 argument".to_string(),
+                    });
+                }
+                let val = self.get_reg(args[0])?;
+                match val {
+                    Value::String(s) => {
+                        let is_digit = s.chars().next().unwrap_or(' ').is_ascii_digit();
+                        Ok(Value::Boolean(is_digit))
+                    }
+                    _ => Ok(Value::Boolean(false))
+                }
+            }
+            "is_whitespace" => {
+                // Check if string contains whitespace
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "is_whitespace() takes exactly 1 argument".to_string(),
+                    });
+                }
+                let val = self.get_reg(args[0])?;
+                match val {
+                    Value::String(s) => {
+                        let is_ws = s.chars().next().unwrap_or(' ').is_whitespace();
+                        Ok(Value::Boolean(is_ws))
+                    }
+                    _ => Ok(Value::Boolean(false))
+                }
+            }
+            "ptr_to_int" => {
+                // Bootstrap: identity function (values already heap-allocated)
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "ptr_to_int() takes exactly 1 argument".to_string(),
+                    });
+                }
+                Ok(self.get_reg(args[0])?.clone())
+            }
+            "int_to_ptr" => {
+                // Bootstrap: identity function (values already heap-allocated)
+                if args.len() != 1 {
+                    return Err(HlxError::ValidationFail {
+                        message: "int_to_ptr() takes exactly 1 argument".to_string(),
+                    });
+                }
+                Ok(self.get_reg(args[0])?.clone())
+            }
+            "strcmp" => {
+                // String comparison: returns -1, 0, or 1
+                if args.len() != 2 {
+                    return Err(HlxError::ValidationFail {
+                        message: "strcmp() takes exactly 2 arguments".to_string(),
+                    });
+                }
+                let a = self.get_reg(args[0])?;
+                let b = self.get_reg(args[1])?;
+                match (a, b) {
+                    (Value::String(a), Value::String(b)) => {
+                        let cmp = match a.cmp(b) {
+                            std::cmp::Ordering::Less => -1,
+                            std::cmp::Ordering::Equal => 0,
+                            std::cmp::Ordering::Greater => 1,
+                        };
+                        Ok(Value::Integer(cmp))
+                    }
+                    _ => Err(HlxError::TypeError {
+                        expected: "two strings".to_string(),
+                        got: format!("{} and {}", a.type_name(), b.type_name()),
+                    })
+                }
+            }
+
             "ord" => {
                 if args.len() != 1 {
                     return Err(HlxError::ValidationFail {

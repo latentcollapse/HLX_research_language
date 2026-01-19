@@ -400,6 +400,31 @@ impl HlxFormatter {
                 output.push_str(";\n");
                 output
             }
+            Statement::Switch { expr, arms, .. } => {
+                let mut output = indent_str;
+                output.push_str("switch ");
+                output.push_str(&self.format_expr(&expr.node));
+                output.push_str(" {\n");
+                for arm in arms {
+                    output.push_str(&self.indent(indent + 1));
+                    // Format patterns
+                    for (i, pattern) in arm.patterns.iter().enumerate() {
+                        if i > 0 {
+                            output.push_str(" | ");
+                        }
+                        output.push_str(&self.format_expr(&pattern.node));
+                    }
+                    output.push_str(" => {\n");
+                    for stmt in &arm.body {
+                        output.push_str(&self.format_statement(&stmt.node, indent + 2));
+                    }
+                    output.push_str(&self.indent(indent + 1));
+                    output.push_str("},\n");
+                }
+                output.push_str(&self.indent(indent));
+                output.push_str("}\n");
+                output
+            }
         }
     }
 

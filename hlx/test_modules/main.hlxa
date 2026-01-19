@@ -1,0 +1,21 @@
+// Test program that imports and uses math functions
+
+import { add, multiply } from "./math.hlxa";
+
+program test_imports {
+    fn main() -> i64 {
+        print("Testing module imports:\n");
+
+        let sum = add(10, 32);
+        print("add(10, 32) = ");
+        print(sum);
+        print("\n");
+
+        let product = multiply(6, 7);
+        print("multiply(6, 7) = ");
+        print(product);
+        print("\n");
+
+        return sum + product;  // Should return 42 + 42 = 84
+    }
+}

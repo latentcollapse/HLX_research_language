@@ -1,0 +1,105 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// HLX BOOTSTRAP COMPILER - FULL PIPELINE
+// Connects lexer → parser → lower → emit into a complete compilation pipeline
+// ═══════════════════════════════════════════════════════════════════════════════
+
+program bootstrap_compiler {
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // IMPORT: Lexer (tokenize function)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // From lexer.hlxa:92
+    // fn tokenize(source: String) -> [i64]
+    //     Returns: Array of tokens, each token is [kind, start, length, line, col]
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // IMPORT: Parser (parse_program function)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // From parser.hlxa:788
+    // fn parse_program(tokens: [i64]) -> [i64]
+    //     Returns: AST node for the program
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // IMPORT: Lowerer (lower_program function)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // From lower.hlxa:792
+    // fn lower_program(program_node: [i64]) -> [i64]
+    //     Returns: Array of bytecode instructions
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // IMPORT: Emitter (emit_bytecode function)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // From emit.hlxa:244
+    // fn emit_bytecode(instructions: [i64]) -> [i64]
+    //     Returns: Binary output as array of bytes
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // PIPELINE: Full Compilation
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    fn compile(source: String) -> [i64] {
+        print("=== HLX Bootstrap Compiler Pipeline ===\n");
+
+        // Phase 1: Lexical Analysis
+        print("\n[1/4] Lexing...\n");
+        let tokens = tokenize(source);
+        let token_count = array_len(tokens);
+        print("  Generated ");
+        print(token_count);
+        print(" tokens\n");
+
+        // Phase 2: Parsing
+        print("\n[2/4] Parsing...\n");
+        let ast = parse_program(tokens);
+        print("  AST constructed\n");
+
+        // Phase 3: Lowering
+        print("\n[3/4] Lowering to bytecode...\n");
+        let instructions = lower_program(ast);
+        let inst_count = array_len(instructions);
+        print("  Generated ");
+        print(inst_count);
+        print(" instructions\n");
+
+        // Phase 4: Emission
+        print("\n[4/4] Emitting binary...\n");
+        let binary = emit_bytecode(instructions);
+        let binary_size = array_len(binary);
+        print("  Binary size: ");
+        print(binary_size);
+        print(" bytes\n");
+
+        print("\n=== Compilation Complete ===\n");
+
+        return binary;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TEST HARNESS: Simple Program
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    fn main() -> i64 {
+        print("═══════════════════════════════════════════════════\n");
+        print("HLX Bootstrap Compiler - Full Pipeline Test\n");
+        print("═══════════════════════════════════════════════════\n");
+
+        // Test program: Simple arithmetic
+        let source = "program test { fn add(a: i64, b: i64) -> i64 { return a + b; } fn main() -> i64 { return add(10, 32); } }";
+
+        print("\nSource:\n");
+        print(source);
+        print("\n");
+
+        // Compile it
+        let binary = compile(source);
+
+        print("\nTest complete!\n");
+        print("Binary output is ready for execution.\n");
+
+        return 0;
+    }
+}

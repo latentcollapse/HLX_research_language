@@ -3,7 +3,7 @@
 // Converts HLX source code into a stream of tokens
 // ═══════════════════════════════════════════════════════════════════════════════
 
-program hlx_lexer {
+module hlx_lexer {
     // ═══════════════════════════════════════════════════════════════════════════
     // TOKEN KINDS (as helper functions to avoid const)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -89,7 +89,7 @@ program hlx_lexer {
     // MAIN LEXER
     // ═══════════════════════════════════════════════════════════════════════════
 
-    fn tokenize(source: String) -> [i64] {
+    export fn tokenize(source: String) -> [i64] {
         let tokens = [];
         let pos = 0;
         let line = 1;
