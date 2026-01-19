@@ -724,7 +724,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         // 3. COMPILE: Build CFG and compile each function
         for inst in &krate.instructions {
-            if let Instruction::FuncDef { name, params, body } = inst {
+            if let Instruction::FuncDef { name, params, body, .. } = inst {
                 self.compile_function(name, params, *body, &krate.instructions)?;
             }
         }

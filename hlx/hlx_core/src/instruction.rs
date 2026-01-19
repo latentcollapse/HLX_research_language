@@ -661,7 +661,8 @@ pub enum Instruction {
     FuncDef {
         name: String,
         params: Vec<Register>,
-        body: u32, // Capsule index
+        body: u32,         // Capsule index
+        max_depth: u32,    // Recursion depth limit (from #[max_depth(N)] or DEFAULT)
     },
 
     /// Define a module (metadata instruction, usually at top level)

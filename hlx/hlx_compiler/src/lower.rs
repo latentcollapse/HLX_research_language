@@ -140,11 +140,16 @@ pub fn lower_to_crate(program: &Program) -> Result<HlxCrate> {
     for block in &program.blocks {
         let func_start = ctx.instructions.len() as u32;
         let params = ctx.lower_block(block)?;
-        
+        let max_depth = ctx.function_depths
+            .get(&block.name)
+            .copied()
+            .unwrap_or(DEFAULT_MAX_DEPTH);
+
         ctx.instructions.push(Instruction::FuncDef {
             name: block.name.clone(),
             params,
             body: func_start,
+            max_depth,
         });
     }
     

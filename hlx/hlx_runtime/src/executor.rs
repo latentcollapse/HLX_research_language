@@ -95,7 +95,7 @@ impl Executor {
 
         // Scan for function definitions first
         for inst in krate.instructions.iter() {
-            if let Instruction::FuncDef { name, params, body } = inst {
+            if let Instruction::FuncDef { name, params, body, .. } = inst {
                 if self.config.debug { println!("Registered function: {}", name); }
                 ctx.functions.insert(name.clone(), (*body, params.clone()));
             }

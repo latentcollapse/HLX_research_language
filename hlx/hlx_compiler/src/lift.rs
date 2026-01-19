@@ -60,8 +60,8 @@ impl<'a> Lifter<'a> {
         // First pass: collect function metadata (FuncDef instructions come AFTER the body)
         let mut func_defs = Vec::new();
         for (idx, inst) in self.krate.instructions.iter().enumerate() {
-            if let Instruction::FuncDef { name, params, body } = inst {
-                func_defs.push((idx, name.clone(), params.clone(), *body as usize));
+            if let Instruction::FuncDef { name, params, body, max_depth } = inst {
+                func_defs.push((idx, name.clone(), params.clone(), *body as usize, *max_depth));
             }
         }
 
@@ -72,12 +72,12 @@ impl<'a> Lifter<'a> {
             self.blocks.push(block);
         } else {
             // Lift each function
-            for (func_def_idx, name, params, body_start) in func_defs {
+            for (func_def_idx, name, params, body_start, max_depth) in func_defs {
                 // Find the end of this function (where FuncDef is)
                 let body_end = func_def_idx;
                 self.ip = body_start;
 
-                let block = self.lift_function_range(name, params, body_start, body_end)?;
+                let block = self.lift_function_range(name, params, body_start, body_end, max_depth)?;
                 self.blocks.push(block);
             }
         }
@@ -111,7 +111,14 @@ impl<'a> Lifter<'a> {
     }
 
     /// Lift a function with known range
-    fn lift_function_range(&mut self, name: String, params: Vec<Register>, start: usize, end: usize) -> HlxResult<Block> {
+    fn lift_function_range(&mut self, name: String, params: Vec<Register>, start: usize, end: usize, max_depth: u32) -> HlxResult<Block> {
+        // Build attributes from max_depth if non-default
+        const DEFAULT_MAX_DEPTH: u32 = 1000;
+        let mut attributes = Vec::new();
+        if max_depth != DEFAULT_MAX_DEPTH {
+            attributes.push(format!("max_depth({})", max_depth));
+        }
+
         // Convert parameter registers to names
         let param_names: Vec<_> = params.iter()
             .map(|&reg| {
@@ -147,7 +154,7 @@ impl<'a> Lifter<'a> {
 
         Ok(Block {
             name,
-            attributes: Vec::new(),
+            attributes,  // Use reconstructed attributes (e.g., #[max_depth(N)])
             name_span: None,
             fn_keyword_span: None,
             params: param_names,
