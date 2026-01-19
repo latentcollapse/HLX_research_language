@@ -590,13 +590,25 @@ fn parse_attributes(input: &str) -> ParseResult<'_, Vec<String>> {
             // Return as "name(content)" format
             Ok((i, format!("{}({})", pragma_name, content)))
         },
-        // Traditional attributes: #[name]
+        // Traditional attributes: #[name] or #[name(value)]
         |i| {
             let (i, _) = preceded(ws, char('#'))(i)?;
             let (i, _) = preceded(ws, char('['))(i)?;
             let (i, attr_name) = preceded(ws, ident)(i)?;
+            // Check for optional parameters: (...)
+            let (i, params_opt) = opt(|i2| {
+                let (i2, _) = preceded(ws, char('('))(i2)?;
+                let (i2, content) = take_while(|c| c != ')')(i2)?;
+                let (i2, _) = char(')')(i2)?;
+                Ok((i2, content))
+            })(i)?;
             let (i, _) = preceded(ws, char(']'))(i)?;
-            Ok((i, attr_name))
+            let attr_str = if let Some(params) = params_opt {
+                format!("{}({})", attr_name, params)
+            } else {
+                attr_name
+            };
+            Ok((i, attr_str))
         }
     )))(input)
 }

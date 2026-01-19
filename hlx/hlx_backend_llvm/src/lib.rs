@@ -1406,7 +1406,7 @@ impl<'ctx> CodeGen<'ctx> {
                 let ext = self.builder.build_int_z_extend(res, self.context.i64_type(), "bool_ext")?;
                 self.store_reg(*out, ext.into(), ValueType::Int)?;
             }
-            Instruction::Call { out, func, args } => {
+            Instruction::Call { out, func, args, max_depth: _ } => {
                 // DEBUG: Check function name
                 if func.contains("to_int") {
                      println!("DEBUG: Call func='{}' len={} out={:?}", func, func.len(), out);

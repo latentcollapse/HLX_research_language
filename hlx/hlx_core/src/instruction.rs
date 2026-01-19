@@ -678,6 +678,7 @@ pub enum Instruction {
         out: Register,
         func: String,
         args: Vec<Register>,
+        max_depth: u32,  // Recursion depth limit
     },
 
     /// Return a value

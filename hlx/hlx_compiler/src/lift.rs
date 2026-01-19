@@ -364,7 +364,7 @@ impl<'a> Lifter<'a> {
             }
 
             // Function calls
-            Instruction::Call { out, func, args } => {
+            Instruction::Call { out, func, args, max_depth: _ } => {
                 let var_name = self.register_name(*out);
                 let arg_exprs: Vec<_> = args.iter()
                     .map(|&reg| Spanned::dummy(Expr::Ident(self.register_name(reg))))

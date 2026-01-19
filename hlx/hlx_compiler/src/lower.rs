@@ -10,11 +10,36 @@ use hlx_core::{
 };
 use std::collections::HashMap;
 
+const DEFAULT_MAX_DEPTH: u32 = 1000;
+
+/// Extract max_depth from block attributes
+fn extract_max_depth(attributes: &[String]) -> u32 {
+    for attr in attributes {
+        if attr.starts_with("max_depth(") && attr.ends_with(")") {
+            let inner = &attr[10..attr.len()-1];  // Extract "N" from "max_depth(N)"
+            if let Ok(depth) = inner.parse::<u32>() {
+                return depth;
+            }
+        }
+    }
+    DEFAULT_MAX_DEPTH
+}
+
 /// Lower an AST Program to a Crate
 pub fn lower_to_crate(program: &Program) -> Result<HlxCrate> {
     let mut ctx = LoweringContext::new();
     let mut signatures = HashMap::new();
     let mut ffi_exports = HashMap::new();
+
+    // Populate function_depths from block attributes
+    for block in &program.blocks {
+        ctx.function_depths.insert(block.name.clone(), extract_max_depth(&block.attributes));
+    }
+    for module in &program.modules {
+        for block in &module.blocks {
+            ctx.function_depths.insert(block.name.clone(), extract_max_depth(&block.attributes));
+        }
+    }
 
     // First pass: collect signatures and FFI attributes for blocks
     for block in &program.blocks {
@@ -201,6 +226,8 @@ struct LoweringContext {
     expected_type: Option<Type>,
     /// Source location map: parallel vector to instructions
     source_map: Vec<Option<Span>>,
+    /// Track max_depth per function
+    function_depths: HashMap<String, u32>,
 }
 
 impl LoweringContext {
@@ -212,6 +239,7 @@ impl LoweringContext {
             type_annotations: HashMap::new(),
             expected_type: None,
             source_map: Vec::new(),
+            function_depths: HashMap::new(),
         }
     }
     
@@ -636,106 +664,106 @@ impl LoweringContext {
                         return Err(HlxError::ValidationFail { message: "strlen takes exactly 1 argument".to_string() });
                     }
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "strlen".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "strlen".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "str" || name == "to_string" {
                     if arg_regs.len() != 1 {
                         return Err(HlxError::ValidationFail { message: "str/to_string takes exactly 1 argument".to_string() });
                     }
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "str".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "str".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "verify_parity" {
                     if arg_regs.len() != 1 {
                         return Err(HlxError::ValidationFail { message: "verify_parity takes exactly 1 argument".to_string() });
                     }
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "verify_parity".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "verify_parity".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "hash_logic" {
                     if arg_regs.len() != 1 {
                         return Err(HlxError::ValidationFail { message: "hash_logic takes exactly 1 argument".to_string() });
                     }
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "hash_logic".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "hash_logic".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "fopen" {
                     if arg_regs.len() != 2 {
                         return Err(HlxError::ValidationFail { message: "fopen takes 2 arguments".to_string() });
                     }
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "fopen".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "fopen".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "fclose" {
                     if arg_regs.len() != 1 {
                         return Err(HlxError::ValidationFail { message: "fclose takes 1 argument".to_string() });
                     }
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "fclose".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "fclose".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "fwrite" {
                     if arg_regs.len() != 4 {
                         return Err(HlxError::ValidationFail { message: "fwrite takes 4 arguments".to_string() });
                     }
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "fwrite".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "fwrite".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "fread" {
                     if arg_regs.len() != 4 {
                         return Err(HlxError::ValidationFail { message: "fread takes 4 arguments".to_string() });
                     }
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "fread".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "fread".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "fseek" {
                     if arg_regs.len() != 3 {
                         return Err(HlxError::ValidationFail { message: "fseek takes 3 arguments".to_string() });
                     }
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "fseek".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "fseek".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "ftell" {
                     if arg_regs.len() != 1 {
                         return Err(HlxError::ValidationFail { message: "ftell takes 1 argument".to_string() });
                     }
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "ftell".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "ftell".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "sdl_init" {
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "SDL_Init".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "SDL_Init".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "sdl_create_window" {
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "SDL_CreateWindow".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "SDL_CreateWindow".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "sdl_create_renderer" {
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "SDL_CreateRenderer".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "SDL_CreateRenderer".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "sdl_set_color" {
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "SDL_SetRenderDrawColor".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "SDL_SetRenderDrawColor".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "sdl_clear" {
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "SDL_RenderClear".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "SDL_RenderClear".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "sdl_present" {
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "SDL_RenderPresent".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "SDL_RenderPresent".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "sdl_poll" {
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "SDL_PollEvent".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "SDL_PollEvent".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "sdl_delay" {
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "SDL_Delay".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "SDL_Delay".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "sdl_quit" {
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "SDL_Quit".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "SDL_Quit".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "tensor_new_2d" {
                     // Expect 2 args: rows, cols (must be literals for now for TensorCreate)
@@ -766,7 +794,7 @@ impl LoweringContext {
                     
                     if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "tensor_new_2d takes 2 args".to_string() }); }
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "__hlx_tensor_create".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "__hlx_tensor_create".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "tensor_matmul" {
                     if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "tensor_matmul takes 2 args".to_string() }); }
@@ -776,12 +804,12 @@ impl LoweringContext {
                 } else if name == "tensor_add" {
                     if arg_regs.len() != 2 { return Err(HlxError::ValidationFail { message: "tensor_add takes 2 args".to_string() }); }
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "__hlx_tensor_add".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "__hlx_tensor_add".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "tensor_transpose" {
                     if arg_regs.len() != 1 { return Err(HlxError::ValidationFail { message: "tensor_transpose takes 1 arg".to_string() }); }
                     let out = self.alloc_reg();
-                    self.emit(Instruction::Call { out, func: "__hlx_tensor_transpose".to_string(), args: arg_regs });
+                    self.emit(Instruction::Call { out, func: "__hlx_tensor_transpose".to_string(), args: arg_regs, max_depth: DEFAULT_MAX_DEPTH });
                     Ok(out)
                 } else if name == "alloc_array" {
                     if arg_regs.len() != 1 {
@@ -1143,7 +1171,11 @@ impl LoweringContext {
                     Ok(out)
                                 } else {
                                     let out = self.alloc_reg();
-                                    self.emit(Instruction::Call { out, func: name, args: arg_regs });
+                                    let max_depth = self.function_depths
+                                        .get(&name)
+                                        .copied()
+                                        .unwrap_or(DEFAULT_MAX_DEPTH);
+                                    self.emit(Instruction::Call { out, func: name, args: arg_regs, max_depth });
                                     Ok(out)
                                 }
                             }

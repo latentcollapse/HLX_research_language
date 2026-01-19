@@ -113,6 +113,8 @@ impl Executor {
                         out_register: 0,
                         registers: new_registers,
                         loop_counters: HashMap::new(),
+                        func_name: "main".to_string(),
+                        recursion_depth: 1,
                     });
                 }
             }
@@ -171,6 +173,10 @@ struct StackFrame {
     registers: HashMap<u32, Value>,
     /// Loop counters (PC -> count) for DLB within this frame
     loop_counters: HashMap<u32, u32>,
+    /// Name of the function this frame is for
+    func_name: String,
+    /// Recursion depth counter for this function
+    recursion_depth: u32,
 }
 
 use std::collections::VecDeque;
@@ -223,6 +229,8 @@ impl ExecutionContext {
                 out_register: 0,
                 registers: HashMap::new(),
                 loop_counters: HashMap::new(),
+                func_name: "".to_string(),
+                recursion_depth: 0,
             }],
             tensors: HashMap::new(),
             cas: ValueStore::new(),
@@ -355,7 +363,7 @@ impl ExecutionContext {
                 return Ok(ControlFlow::Continue);
             }
 
-            Instruction::Call { out, func, args } => {
+            Instruction::Call { out, func, args, max_depth } => {
                 if self.config.debug {
                     // println!("    Call {} with {} args", func, args.len());
                 }
@@ -365,24 +373,41 @@ impl ExecutionContext {
                             message: format!("Function {} expects {} args, got {}", func, param_regs.len(), args.len()),
                         });
                     }
-                    
+
+                    // Check recursion depth for this function
+                    let current_depth = self.call_stack
+                        .iter()
+                        .filter(|frame| &frame.func_name == func)
+                        .count() as u32;
+
+                    if current_depth >= *max_depth {
+                        return Err(HlxError::ValidationFail {
+                            message: format!(
+                                "Recursion depth for function '{}' exceeded (max: {})",
+                                func, max_depth
+                            ),
+                        });
+                    }
+
                     let mut arg_values = Vec::new();
                     for &arg_reg in args {
                         arg_values.push(self.get_reg(arg_reg)?.clone());
                     }
-                    
+
                     let mut new_registers = HashMap::new();
                     for (val, &param_reg) in arg_values.into_iter().zip(param_regs.iter()) {
                         new_registers.insert(param_reg, val);
                     }
-                    
+
                     self.call_stack.push(StackFrame {
                         return_pc: pc + 1,
                         out_register: *out,
                         registers: new_registers,
                         loop_counters: HashMap::new(),
+                        func_name: func.clone(),
+                        recursion_depth: current_depth + 1,
                     });
-                    
+
                     return Ok(ControlFlow::Jump(*start_pc));
                 } else {
                     let res = self.call_builtin(func, args, backend)?;

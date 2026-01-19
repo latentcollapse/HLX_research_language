@@ -1,0 +1,94 @@
+// Test bounded recursion with max_depth attribute
+
+program test_recursion_depth {
+    // Test 1: Basic recursion within bounds
+    #[max_depth(10)]
+    fn countdown(n) {
+        if n <= 0 {
+            return 0;
+        }
+        return 1 + countdown(n - 1);
+    }
+
+    // Test 2: Tail recursion
+    #[max_depth(100)]
+    fn tail_recurse(n, acc) {
+        if n <= 0 {
+            return acc;
+        }
+        return tail_recurse(n - 1, acc + 1);
+    }
+
+    // Test 3: Mutual recursion
+    #[max_depth(20)]
+    fn is_even(n) {
+        if n == 0 {
+            return 1;  // true
+        }
+        return is_odd(n - 1);
+    }
+
+    #[max_depth(20)]
+    fn is_odd(n) {
+        if n == 0 {
+            return 0;  // false
+        }
+        return is_even(n - 1);
+    }
+
+    // Test 4: Fibonacci with bounded recursion
+    #[max_depth(30)]
+    fn fib(n) {
+        if n <= 1 {
+            return n;
+        }
+        return fib(n - 1) + fib(n - 2);
+    }
+
+    // Test 5: Default max_depth (should be 1000)
+    fn factorial(n) {
+        if n <= 1 {
+            return 1;
+        }
+        return n * factorial(n - 1);
+    }
+
+    fn main() {
+        print("=== Bounded Recursion Tests ===");
+        print("");
+
+        // Test countdown
+        print("Test 1: countdown(5) = ");
+        let result1 = countdown(5);
+        print(result1);  // Should print 5
+
+        // Test tail recursion
+        print("Test 2: tail_recurse(50, 0) = ");
+        let result2 = tail_recurse(50, 0);
+        print(result2);  // Should print 50
+
+        // Test mutual recursion
+        print("Test 3: is_even(8) = ");
+        let result3 = is_even(8);
+        print(result3);  // Should print 1 (true)
+
+        print("Test 4: is_odd(7) = ");
+        let result4 = is_odd(7);
+        print(result4);  // Should print 1 (true)
+
+        // Test fibonacci
+        print("Test 5: fib(10) = ");
+        let result5 = fib(10);
+        print(result5);  // Should print 55
+
+        // Test factorial with default depth
+        print("Test 6: factorial(10) = ");
+        let result6 = factorial(10);
+        print(result6);  // Should print 3628800
+
+        print("");
+        print("All tests passed!");
+
+        return 0;
+    }
+}
