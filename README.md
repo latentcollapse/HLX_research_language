@@ -4,7 +4,8 @@
 
 [![CI](https://github.com/latentcollapse/hlx-compiler/workflows/CI/badge.svg)](https://github.com/latentcollapse/hlx-compiler/actions)
 
-**NOTE: The entire thing was prototyped in Rust first to make sure it would even work. Development has begun into ditching Rust and achieving true self-hosting**
+**NOTE: The entire thing was prototyped in Rust first to make sure it would even work. Development has begun into ditching Rust and achieving true self-hosting.
+Update: It has been decided to keep the Rust oracle as it's own thing separate, and to simply let it live as a deterministic Rust DSL for AI. HLX development continues separately**
 
 **HLX** is a programming language designed for the AI era. It combines **contracts as specifications**, **AI-native primitives**, and **deterministic GPU/CPU execution** into a language that both humans and AI systems can understand and verify.
 
