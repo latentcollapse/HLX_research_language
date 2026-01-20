@@ -14,7 +14,7 @@ Any code in this directory MUST:
 3. Be heavily commented to explain *why* the logic is constructed this way.
 
 ## Structure
-- `*.hlxa` - Pure HLX source files. Executable and verifiable.
+- `*.hlx` - Pure HLX source files. Executable and verifiable.
 - `*.md` - Conceptual explanations, edge cases, and "gotchas" for AI training.
 
 ## Key Concepts for LLMs

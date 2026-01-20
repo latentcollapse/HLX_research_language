@@ -5,7 +5,7 @@ set -e
 
 echo "Merging bootstrap compiler components..."
 
-OUTPUT="compiler.hlxa"
+OUTPUT="compiler.hlx"
 
 # Start with header
 cat > "$OUTPUT" << 'EOF'
@@ -25,7 +25,7 @@ echo "// ═══════════════════════�
 echo "" >> "$OUTPUT"
 
 # Get lexer content (skip first 6 lines "program hlx_lexer {", last line "}", and main())
-sed -n '7,436p' lexer.hlxa >> "$OUTPUT"
+sed -n '7,436p' lexer.hlx >> "$OUTPUT"
 
 # Extract parser (everything except program wrapper and main())
 echo "" >> "$OUTPUT"
@@ -35,7 +35,7 @@ echo "// ═══════════════════════�
 echo "" >> "$OUTPUT"
 
 # Get parser content (skip first line "program parser {", last lines with main())
-sed -n '4,816p' parser.hlxa >> "$OUTPUT"
+sed -n '4,816p' parser.hlx >> "$OUTPUT"
 
 # Extract lowerer (everything except program wrapper and main())
 echo "" >> "$OUTPUT"
@@ -45,7 +45,7 @@ echo "// ═══════════════════════�
 echo "" >> "$OUTPUT"
 
 # Get lowerer content
-sed -n '4,811p' lower.hlxa >> "$OUTPUT"
+sed -n '4,811p' lower.hlx >> "$OUTPUT"
 
 # Extract emitter (everything except program wrapper and main())
 echo "" >> "$OUTPUT"
@@ -55,7 +55,7 @@ echo "// ═══════════════════════�
 echo "" >> "$OUTPUT"
 
 # Get emitter content
-sed -n '4,327p' emit.hlxa >> "$OUTPUT"
+sed -n '4,327p' emit.hlx >> "$OUTPUT"
 
 # Add pipeline function
 cat >> "$OUTPUT" << 'EOF'

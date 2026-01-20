@@ -19,18 +19,18 @@ echo "✓ Rust compiler ready"
 echo ""
 
 # Clean previous artifacts
-rm -f stage1.lcc stage2.lcb stage2.lcc stage3.lcb stage3.lcc /tmp/stage1_wrapped.hlxa
+rm -f stage1.lcc stage2.lcb stage2.lcc stage3.lcb stage3.lcc /tmp/stage1_wrapped.hlx
 
 # ============================================
 # STAGE 1: Rust → HLX Compiler (Stage 1)
 # ============================================
 echo "--- Stage 1: Rust Compiling Self-Hosted Compiler ---"
-echo "program hlx_compiler {" > /tmp/stage1_wrapped.hlxa
-cat "$SOURCE" >> /tmp/stage1_wrapped.hlxa
-echo "}" >> /tmp/stage1_wrapped.hlxa
+echo "program hlx_compiler {" > /tmp/stage1_wrapped.hlx
+cat "$SOURCE" >> /tmp/stage1_wrapped.hlx
+echo "}" >> /tmp/stage1_wrapped.hlx
 
 START=$(date +%s%N)
-$RUST_COMPILER compile /tmp/stage1_wrapped.hlxa -o stage1.lcc > /dev/null 2>&1
+$RUST_COMPILER compile /tmp/stage1_wrapped.hlx -o stage1.lcc > /dev/null 2>&1
 END=$(date +%s%N)
 
 STAGE1_TIME=$(awk "BEGIN {printf \"%.3f\", ($END - $START) / 1000000000}")

@@ -19,7 +19,7 @@ fn main() -> Int {
 
 Run it:
 ```bash
-cargo run --bin hlx -- run hello_parallel.hlxa
+cargo run --bin hlx -- run hello_parallel.hlx
 ```
 
 Output:
@@ -87,7 +87,7 @@ Each of the 8 agents computes `fib(30)` independently, then all verify they got 
 
 ### See what's happening:
 ```bash
-RUST_LOG=1 cargo run --bin hlx -- run hello_parallel.hlxa
+RUST_LOG=1 cargo run --bin hlx -- run hello_parallel.hlx
 ```
 
 Shows agent fork events, barrier syncs, and hash verification.
@@ -103,7 +103,7 @@ Compares serial vs @scale execution to ensure identical results.
 
 - **[Full Documentation →](HLX-SCALE.md)** - Deep dive into barriers, cost model, roadmap
 - **[Phase 1A Details →](HLX_SCALE_PHASE1A_COMPLETE.md)** - Architecture and implementation
-- **[Demo Program →](demo_main_scale.hlxa)** - Working example with 2 barriers
+- **[Demo Program →](demo_main_scale.hlx)** - Working example with 2 barriers
 
 ---
 

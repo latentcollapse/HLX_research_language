@@ -6,7 +6,7 @@ Pure HLX implementations of common functionality. Written in HLX, compiled by HL
 
 The stdlib demonstrates that HLX can implement real functionality in itself (dogfooding). Functions here use only the core language features - no Rust runtime calls.
 
-## math.hlxa
+## math.hlx
 
 Mathematical functions implemented in pure HLX:
 
@@ -23,7 +23,7 @@ Mathematical functions implemented in pure HLX:
 ### Partially Working:
 - `floor(x)`, `ceil(x)` - Implemented but inefficient (linear search)
 
-See `examples/showcase_math.hlxa` for working demo.
+See `examples/showcase_math.hlx` for working demo.
 
 ## Design Philosophy
 
@@ -50,7 +50,7 @@ See `examples/showcase_math.hlxa` for working demo.
 
 ```bash
 # Run the showcase
-./target/release/hlx run examples/showcase_math.hlxa
+./target/release/hlx run examples/showcase_math.hlx
 
 # Expected output:
 # ✓ abs, min, max, pow, clamp, sign all work

@@ -354,7 +354,7 @@ let b2 = bool(42);  // 1 (true)
 
 ## Utility Functions from `hlx_builtins` Module
 
-The `hlx_bootstrap/builtins.hlxa` module provides higher-level utilities built on Tier 2 operations:
+The `hlx_bootstrap/builtins.hlx` module provides higher-level utilities built on Tier 2 operations:
 
 ### String Utilities
 

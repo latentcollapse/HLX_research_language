@@ -9,10 +9,10 @@ echo
 
 # Compile both versions
 echo "1. Compiling serial version..."
-cargo run --quiet --bin hlx -- compile demo_serial.hlxa -o demo_serial.lcc 2>&1 | grep "Compiled"
+cargo run --quiet --bin hlx -- compile demo_serial.hlx -o demo_serial.lcc 2>&1 | grep "Compiled"
 
 echo "2. Compiling @scale version..."
-cargo run --quiet --bin hlx -- compile demo_main_scale.hlxa -o demo_scale.lcc 2>&1 | grep "Compiled"
+cargo run --quiet --bin hlx -- compile demo_main_scale.hlx -o demo_scale.lcc 2>&1 | grep "Compiled"
 
 echo
 echo "3. Running serial execution..."

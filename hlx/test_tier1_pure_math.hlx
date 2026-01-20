@@ -1,0 +1,744 @@
+// Test suite for Tier 1 Pure Math Operations
+// Phase 3 of builtin library conversion
+
+program test_tier1_pure_math {
+
+    // ========================================================================
+    // TIER 1 PURE MATH FUNCTIONS (Embedded from tier1_pure_math module)
+    // ========================================================================
+
+    fn abs(x: i64) -> i64 {
+        if (x < 0) {
+            return 0 - x;
+        }
+        return x;
+    }
+
+    fn min(a: i64, b: i64) -> i64 {
+        if (a < b) {
+            return a;
+        }
+        return b;
+    }
+
+    fn max(a: i64, b: i64) -> i64 {
+        if (a > b) {
+            return a;
+        }
+        return b;
+    }
+
+    fn clamp(v: i64, min_val: i64, max_val: i64) -> i64 {
+        if (v < min_val) {
+            return min_val;
+        }
+        if (v > max_val) {
+            return max_val;
+        }
+        return v;
+    }
+
+    fn sign(x: i64) -> i64 {
+        if (x < 0) {
+            return 0 - 1;
+        }
+        if (x > 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn lerp(a: i64, b: i64, t: i64) -> i64 {
+        // Integer lerp: a + (b-a)*t/100
+        // Special cases to avoid float division issues
+        if (t == 0) {
+            return a;
+        }
+        if (t == 100) {
+            return b;
+        }
+
+        // General case: compute with proper truncation
+        let diff = b - a;
+        let scaled = diff * t;
+
+        // Integer divide with proper truncation handling
+        let numerator = scaled;
+        let denominator = 100;
+
+        // Use simple long division approach
+        let quotient = 0;
+        let remainder = numerator;
+
+        loop(remainder >= denominator, 100) {
+            remainder = remainder - denominator;
+            quotient = quotient + 1;
+        }
+
+        return a + quotient;
+    }
+
+    fn gcd(a: i64, b: i64) -> i64 {
+        let x = a;
+        let y = b;
+        if (x < 0) {
+            x = 0 - x;
+        }
+        if (y < 0) {
+            y = 0 - y;
+        }
+
+        loop(y != 0, 30) {
+            let temp = y;
+            y = x % y;
+            x = temp;
+        }
+
+        return x;
+    }
+
+    fn lcm(a: i64, b: i64) -> i64 {
+        let g = gcd(a, b);
+
+        if (g == 0) {
+            return 0;
+        }
+
+        let product = a * b;
+        if (product < 0) {
+            product = 0 - product;
+        }
+
+        // Integer divide using long division
+        let numerator = product;
+        let denominator = g;
+        let quotient = 0;
+        let remainder = numerator;
+
+        loop(remainder >= denominator, 100) {
+            remainder = remainder - denominator;
+            quotient = quotient + 1;
+        }
+
+        return quotient;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR abs() FUNCTION
+    // ========================================================================
+
+    fn test_abs_negative() -> i64 {
+        let result = abs(0 - 5);
+        if (result == 5) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_abs_positive() -> i64 {
+        let result = abs(5);
+        if (result == 5) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_abs_zero() -> i64 {
+        let result = abs(0);
+        if (result == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_abs_large_negative() -> i64 {
+        let result = abs(0 - 999);
+        if (result == 999) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR min() FUNCTION
+    // ========================================================================
+
+    fn test_min_first_smaller() -> i64 {
+        let result = min(3, 7);
+        if (result == 3) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_min_second_smaller() -> i64 {
+        let result = min(10, 2);
+        if (result == 2) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_min_equal() -> i64 {
+        let result = min(5, 5);
+        if (result == 5) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_min_negative() -> i64 {
+        let result = min(0 - 5, 2);
+        if (result == 0 - 5) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR max() FUNCTION
+    // ========================================================================
+
+    fn test_max_first_larger() -> i64 {
+        let result = max(10, 3);
+        if (result == 10) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_max_second_larger() -> i64 {
+        let result = max(4, 8);
+        if (result == 8) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_max_equal() -> i64 {
+        let result = max(5, 5);
+        if (result == 5) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_max_negative() -> i64 {
+        let result = max(0 - 10, 0 - 3);
+        if (result == 0 - 3) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR clamp() FUNCTION
+    // ========================================================================
+
+    fn test_clamp_in_range() -> i64 {
+        let result = clamp(5, 1, 10);
+        if (result == 5) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_clamp_below_min() -> i64 {
+        let result = clamp(0 - 5, 0, 10);
+        if (result == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_clamp_above_max() -> i64 {
+        let result = clamp(15, 0, 10);
+        if (result == 10) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_clamp_at_boundaries() -> i64 {
+        let result1 = clamp(1, 1, 10);
+        let result2 = clamp(10, 1, 10);
+        if (result1 == 1) {
+            if (result2 == 10) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR sign() FUNCTION
+    // ========================================================================
+
+    fn test_sign_negative() -> i64 {
+        let result = sign(0 - 42);
+        if (result == 0 - 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_sign_positive() -> i64 {
+        let result = sign(42);
+        if (result == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_sign_zero() -> i64 {
+        let result = sign(0);
+        if (result == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_sign_negative_one() -> i64 {
+        let result = sign(0 - 1);
+        if (result == 0 - 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR lerp() FUNCTION
+    // ========================================================================
+
+    fn test_lerp_midpoint() -> i64 {
+        let result = lerp(0, 100, 50);
+        if (result == 50) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_lerp_start() -> i64 {
+        let result = lerp(10, 20, 0);
+        if (result == 10) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_lerp_end() -> i64 {
+        let result = lerp(10, 20, 100);
+        if (result == 20) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_lerp_quarter() -> i64 {
+        let result = lerp(0, 100, 25);
+        if (result == 25) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR gcd() FUNCTION
+    // ========================================================================
+
+    fn test_gcd_common_divisor() -> i64 {
+        let result = gcd(12, 8);
+        if (result == 4) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_gcd_coprime() -> i64 {
+        let result = gcd(7, 13);
+        if (result == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_gcd_same_number() -> i64 {
+        let result = gcd(15, 15);
+        if (result == 15) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_gcd_with_negative() -> i64 {
+        let result = gcd(0 - 12, 8);
+        if (result == 4) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR lcm() FUNCTION
+    // ========================================================================
+
+    fn test_lcm_common_multiple() -> i64 {
+        let result = lcm(4, 6);
+        if (result == 12) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_lcm_coprime() -> i64 {
+        let result = lcm(3, 5);
+        if (result == 15) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_lcm_same_number() -> i64 {
+        let result = lcm(7, 7);
+        if (result == 7) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_lcm_larger_values() -> i64 {
+        let result = lcm(12, 8);
+        if (result == 24) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // MAIN TEST HARNESS
+    // ========================================================================
+
+    fn main() -> i64 {
+        let passed = 0;
+        let failed = 0;
+
+        print("═══════════════════════════════════════════════════════════\n");
+        print("TIER 1 PURE MATH OPERATIONS TESTS\n");
+        print("═══════════════════════════════════════════════════════════\n\n");
+
+        // Test abs()
+        print("Testing abs() function:\n");
+
+        if (test_abs_negative() == 1) {
+            print("  ✓ abs(-5) == 5\n");
+            passed += 1;
+        } else {
+            print("  ✗ abs(-5) failed\n");
+            failed += 1;
+        }
+
+        if (test_abs_positive() == 1) {
+            print("  ✓ abs(5) == 5\n");
+            passed += 1;
+        } else {
+            print("  ✗ abs(5) failed\n");
+            failed += 1;
+        }
+
+        if (test_abs_zero() == 1) {
+            print("  ✓ abs(0) == 0\n");
+            passed += 1;
+        } else {
+            print("  ✗ abs(0) failed\n");
+            failed += 1;
+        }
+
+        if (test_abs_large_negative() == 1) {
+            print("  ✓ abs(-999) == 999\n");
+            passed += 1;
+        } else {
+            print("  ✗ abs(-999) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test min()
+        print("Testing min() function:\n");
+
+        if (test_min_first_smaller() == 1) {
+            print("  ✓ min(3, 7) == 3\n");
+            passed += 1;
+        } else {
+            print("  ✗ min(3, 7) failed\n");
+            failed += 1;
+        }
+
+        if (test_min_second_smaller() == 1) {
+            print("  ✓ min(10, 2) == 2\n");
+            passed += 1;
+        } else {
+            print("  ✗ min(10, 2) failed\n");
+            failed += 1;
+        }
+
+        if (test_min_equal() == 1) {
+            print("  ✓ min(5, 5) == 5\n");
+            passed += 1;
+        } else {
+            print("  ✗ min(5, 5) failed\n");
+            failed += 1;
+        }
+
+        if (test_min_negative() == 1) {
+            print("  ✓ min(-5, 2) == -5\n");
+            passed += 1;
+        } else {
+            print("  ✗ min(-5, 2) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test max()
+        print("Testing max() function:\n");
+
+        if (test_max_first_larger() == 1) {
+            print("  ✓ max(10, 3) == 10\n");
+            passed += 1;
+        } else {
+            print("  ✗ max(10, 3) failed\n");
+            failed += 1;
+        }
+
+        if (test_max_second_larger() == 1) {
+            print("  ✓ max(4, 8) == 8\n");
+            passed += 1;
+        } else {
+            print("  ✗ max(4, 8) failed\n");
+            failed += 1;
+        }
+
+        if (test_max_equal() == 1) {
+            print("  ✓ max(5, 5) == 5\n");
+            passed += 1;
+        } else {
+            print("  ✗ max(5, 5) failed\n");
+            failed += 1;
+        }
+
+        if (test_max_negative() == 1) {
+            print("  ✓ max(-10, -3) == -3\n");
+            passed += 1;
+        } else {
+            print("  ✗ max(-10, -3) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test clamp()
+        print("Testing clamp() function:\n");
+
+        if (test_clamp_in_range() == 1) {
+            print("  ✓ clamp(5, 1, 10) == 5\n");
+            passed += 1;
+        } else {
+            print("  ✗ clamp(5, 1, 10) failed\n");
+            failed += 1;
+        }
+
+        if (test_clamp_below_min() == 1) {
+            print("  ✓ clamp(-5, 0, 10) == 0\n");
+            passed += 1;
+        } else {
+            print("  ✗ clamp(-5, 0, 10) failed\n");
+            failed += 1;
+        }
+
+        if (test_clamp_above_max() == 1) {
+            print("  ✓ clamp(15, 0, 10) == 10\n");
+            passed += 1;
+        } else {
+            print("  ✗ clamp(15, 0, 10) failed\n");
+            failed += 1;
+        }
+
+        if (test_clamp_at_boundaries() == 1) {
+            print("  ✓ clamp at boundaries works\n");
+            passed += 1;
+        } else {
+            print("  ✗ clamp at boundaries failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test sign()
+        print("Testing sign() function:\n");
+
+        if (test_sign_negative() == 1) {
+            print("  ✓ sign(-42) == -1\n");
+            passed += 1;
+        } else {
+            print("  ✗ sign(-42) failed\n");
+            failed += 1;
+        }
+
+        if (test_sign_positive() == 1) {
+            print("  ✓ sign(42) == 1\n");
+            passed += 1;
+        } else {
+            print("  ✗ sign(42) failed\n");
+            failed += 1;
+        }
+
+        if (test_sign_zero() == 1) {
+            print("  ✓ sign(0) == 0\n");
+            passed += 1;
+        } else {
+            print("  ✗ sign(0) failed\n");
+            failed += 1;
+        }
+
+        if (test_sign_negative_one() == 1) {
+            print("  ✓ sign(-1) == -1\n");
+            passed += 1;
+        } else {
+            print("  ✗ sign(-1) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test lerp()
+        print("Testing lerp() function:\n");
+
+        if (test_lerp_midpoint() == 1) {
+            print("  ✓ lerp(0, 100, 50) == 50\n");
+            passed += 1;
+        } else {
+            print("  ✗ lerp(0, 100, 50) failed\n");
+            failed += 1;
+        }
+
+        if (test_lerp_start() == 1) {
+            print("  ✓ lerp(10, 20, 0) == 10\n");
+            passed += 1;
+        } else {
+            print("  ✗ lerp(10, 20, 0) failed\n");
+            failed += 1;
+        }
+
+        if (test_lerp_end() == 1) {
+            print("  ✓ lerp(10, 20, 100) == 20\n");
+            passed += 1;
+        } else {
+            print("  ✗ lerp(10, 20, 100) failed\n");
+            failed += 1;
+        }
+
+        if (test_lerp_quarter() == 1) {
+            print("  ✓ lerp(0, 100, 25) == 25\n");
+            passed += 1;
+        } else {
+            print("  ✗ lerp(0, 100, 25) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test gcd()
+        print("Testing gcd() function:\n");
+
+        if (test_gcd_common_divisor() == 1) {
+            print("  ✓ gcd(12, 8) == 4\n");
+            passed += 1;
+        } else {
+            print("  ✗ gcd(12, 8) failed\n");
+            failed += 1;
+        }
+
+        if (test_gcd_coprime() == 1) {
+            print("  ✓ gcd(7, 13) == 1\n");
+            passed += 1;
+        } else {
+            print("  ✗ gcd(7, 13) failed\n");
+            failed += 1;
+        }
+
+        if (test_gcd_same_number() == 1) {
+            print("  ✓ gcd(15, 15) == 15\n");
+            passed += 1;
+        } else {
+            print("  ✗ gcd(15, 15) failed\n");
+            failed += 1;
+        }
+
+        if (test_gcd_with_negative() == 1) {
+            print("  ✓ gcd(-12, 8) == 4\n");
+            passed += 1;
+        } else {
+            print("  ✗ gcd(-12, 8) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test lcm()
+        print("Testing lcm() function:\n");
+
+        if (test_lcm_common_multiple() == 1) {
+            print("  ✓ lcm(4, 6) == 12\n");
+            passed += 1;
+        } else {
+            print("  ✗ lcm(4, 6) failed\n");
+            failed += 1;
+        }
+
+        if (test_lcm_coprime() == 1) {
+            print("  ✓ lcm(3, 5) == 15\n");
+            passed += 1;
+        } else {
+            print("  ✗ lcm(3, 5) failed\n");
+            failed += 1;
+        }
+
+        if (test_lcm_same_number() == 1) {
+            print("  ✓ lcm(7, 7) == 7\n");
+            passed += 1;
+        } else {
+            print("  ✗ lcm(7, 7) failed\n");
+            failed += 1;
+        }
+
+        if (test_lcm_larger_values() == 1) {
+            print("  ✓ lcm(12, 8) == 24\n");
+            passed += 1;
+        } else {
+            print("  ✗ lcm(12, 8) failed\n");
+            failed += 1;
+        }
+
+        // Summary
+        print("\n");
+        print("═══════════════════════════════════════════════════════════\n");
+        print("RESULTS:\n");
+        print("  Passed: ");
+        print(passed);
+        print("/36\n");
+        print("  Failed: ");
+        print(failed);
+        print("/36\n");
+
+        if (failed == 0) {
+            print("\n✓ ALL TESTS PASSED!\n");
+            print("═══════════════════════════════════════════════════════════\n");
+            return 1;
+        } else {
+            print("\n✗ SOME TESTS FAILED\n");
+            print("═══════════════════════════════════════════════════════════\n");
+            return 0;
+        }
+    }
+}

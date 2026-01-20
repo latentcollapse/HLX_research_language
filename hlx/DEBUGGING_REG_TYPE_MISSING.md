@@ -84,7 +84,7 @@ Run your code that triggers "Reg type missing":
 
 ```bash
 cd /path/to/your/hlx/code
-hlx compile your_file.hlxa
+hlx compile your_file.hlx
 ```
 
 **Capture:**
@@ -126,7 +126,7 @@ fn load_reg(&self, reg: Register) -> Result<(BasicValueEnum<'ctx>, ValueType)> {
 Recompile and run:
 ```bash
 cargo build --release
-./target/release/hlx compile your_file.hlxa
+./target/release/hlx compile your_file.hlx
 ```
 
 **Look for:**

@@ -138,8 +138,8 @@ unsafe impl bytemuck::Zeroable for SimplePushConstants {}
 - `SESSION_SUMMARY_2026-01-16.md` - **NEW**: This document
 
 ### Tests
-- `test_gpu_live.hlxa` - **NEW**: Live GPU operation test
-- `test_gpu_image_ops.hlxa` - **NEW**: GPU documentation test
+- `test_gpu_live.hlx` - **NEW**: Live GPU operation test
+- `test_gpu_image_ops.hlx` - **NEW**: GPU documentation test
 
 ---
 

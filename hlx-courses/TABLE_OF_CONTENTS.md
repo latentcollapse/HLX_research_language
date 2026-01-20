@@ -209,7 +209,7 @@ All course files are in: `/home/matt/hlx-courses/`
 All example programs can be run with:
 ```bash
 cd /path/to/hlx-compiler/hlx
-./target/release/hlx run /home/matt/hlx-courses/examples/program.hlxa
+./target/release/hlx run /home/matt/hlx-courses/examples/program.hlx
 ```
 
 ---

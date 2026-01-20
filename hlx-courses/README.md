@@ -66,7 +66,7 @@ All examples can be run with:
 cd /path/to/hlx-compiler/hlx
 
 # Run any example:
-./target/release/hlx run /path/to/example.hlxa
+./target/release/hlx run /path/to/example.hlx
 ```
 
 ## Getting Help

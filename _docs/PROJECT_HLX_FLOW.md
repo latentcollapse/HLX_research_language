@@ -5,7 +5,7 @@
 **Core Philosophy:** "Code is the Graph. The Graph is Code." (Axiom 3: Bijection)
 
 ## 1. The USP (Unique Selling Proposition)
-- **Git-Native:** Workflows are saved as `.hlxa` files. Diff them, branch them, PR them.
+- **Git-Native:** Workflows are saved as `.hlx` files. Diff them, branch them, PR them.
 - **Deterministic:** Replay failures locally with bit-perfect accuracy using Capsules.
 - **Universal:** Run the same flow on a cloud worker, a Raspberry Pi, or a GPU cluster.
 
@@ -34,7 +34,7 @@ We reuse the `hlx_runtime` VM.
 - [ ] **JSON Parser:** `std.json` library in HLX.
 - [ ] **Logic Nodes:** `If/Else`, `Map`, `Filter`.
 - [ ] **HTTP Request:** Call external APIs (e.g., Slack, OpenAI).
-- [ ] **Visualizer:** A simple web UI (React?) that renders `.hlxa` as a node graph.
+- [ ] **Visualizer:** A simple web UI (React?) that renders `.hlx` as a node graph.
 
 ## 4. Technical Stack
 - **Backend:** `hlx` (Self-hosted compiler + Runtime).
@@ -47,4 +47,4 @@ We reuse the `hlx_runtime` VM.
 3.  **Transform:** Append " - Verified by HLX".
 4.  **Response:** Return JSON.
 
-**Next Step:** Build `lib/net.hlxa` (Network Standard Library).
+**Next Step:** Build `lib/net.hlx` (Network Standard Library).

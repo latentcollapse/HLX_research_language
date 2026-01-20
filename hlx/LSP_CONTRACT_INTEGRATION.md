@@ -154,7 +154,7 @@ Create `.vscode/settings.json` in your HLX project:
 
 ### 4. Test in HLX File
 
-Create `test_contracts.hlxa`:
+Create `test_contracts.hlx`:
 
 ```hlx
 program test {

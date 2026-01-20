@@ -18,7 +18,7 @@ echo "✓ Rust compiler ready"
 echo ""
 echo "Step 2: Compiling Self-Hosted Compiler (Stage 1)..."
 SOURCE="hlx_compiler/bootstrap/compiler.hlxc"
-STAGE1_SRC="/tmp/stage1_wrapped.hlxa"
+STAGE1_SRC="/tmp/stage1_wrapped.hlx"
 STAGE1_BIN="stage1.lcc"
 
 # Wrap the flat compiler file in a program block for the Rust compiler

@@ -1,0 +1,115 @@
+module boot {
+    capability: raw_memory
+
+    const VGA_BUFFER: u64 = 0xB8000;
+    const GDT_BASE: u64 = 0x1000;
+
+    // Contract IDs: 20 = GDTEntry, 21 = BootState
+
+    #[entry]
+    fn _start() {
+        // Initialize boot state using contracts (A4: Universal Value)
+        let boot_state = {21:{@0:0, @1:0xB8000, @2:0x0A}};
+
+        init_gdt();
+        clear_screen(boot_state);
+        print_banner(boot_state);
+    }
+
+    fn init_gdt() {
+        let gdt_base = GDT_BASE;
+
+        // Create GDT entries using contracts (A4: Explicit values)
+        // Contract 20: {20:{@0:index, @1:limit, @2:base, @3:access, @4:gran}}
+
+        // Null descriptor
+        let null_entry = {20:{@0:0, @1:0, @2:0, @3:0, @4:0}};
+        write_gdt_entry(gdt_base, null_entry);
+
+        // Code segment (0x08)
+        let code_entry = {20:{@0:1, @1:0xFFFFF, @2:0, @3:0x9A, @4:0xCF}};
+        write_gdt_entry(gdt_base, code_entry);
+
+        // Data segment (0x10)
+        let data_entry = {20:{@0:2, @1:0xFFFFF, @2:0, @3:0x92, @4:0xCF}};
+        write_gdt_entry(gdt_base, data_entry);
+
+        // Load GDT (deterministic operation - A1)
+        asm("lgdt (%0)" : : "r"(gdt_base) : "memory");
+    }
+
+    fn write_gdt_entry(base: u64, entry: [i64]) {
+        // Extract fields from contract (A4: Universal Value)
+        let index = entry.@0;
+        let limit = entry.@1;
+        let seg_base = entry.@2;
+        let access = entry.@3;
+        let gran = entry.@4;
+
+        let addr = base + (index * 8);
+
+        // Write limit (lower 16 bits)
+        let limit_low = limit & 0xFFFF;
+        write16(addr + 0, limit_low);
+
+        // Write base (lower 16 bits)
+        let base_low = seg_base & 0xFFFF;
+        write16(addr + 2, base_low);
+
+        // Write base (middle 8 bits)
+        let base_mid = (seg_base >> 16) & 0xFF;
+        write8(addr + 4, base_mid);
+
+        // Write access byte
+        write8(addr + 5, access);
+
+        // Write granularity and limit (upper 4 bits)
+        let gran_limit = (gran & 0xF0) | ((limit >> 16) & 0x0F);
+        write8(addr + 6, gran_limit);
+
+        // Write base (upper 8 bits)
+        let base_high = (seg_base >> 24) & 0xFF;
+        write8(addr + 7, base_high);
+    }
+
+    fn clear_screen(boot_state: [i64]) {
+        // Extract boot state (A4: All fields explicit)
+        let vga = boot_state.@1;
+        let blank = 0x0F20;
+
+        // Bounded loop (A1: Determinism - all loops have max_iter)
+        let i = 0;
+        loop(i < 2000, 2000) {
+            write16(vga + (i * 2), blank);
+            i = i + 1;
+        }
+    }
+
+    fn print_banner(boot_state: [i64]) {
+        let vga = boot_state.@1;
+        let green = boot_state.@2;
+
+        // Write 'HELINUX' using deterministic operations (A1)
+        write_colored_char(vga, 0, 72, green);   // H
+        write_colored_char(vga, 2, 69, green);   // E
+        write_colored_char(vga, 4, 76, green);   // L
+        write_colored_char(vga, 6, 73, green);   // I
+        write_colored_char(vga, 8, 78, green);   // N
+        write_colored_char(vga, 10, 85, green);  // U
+        write_colored_char(vga, 12, 88, green);  // X
+    }
+
+    fn write_colored_char(vga: u64, offset: u64, ascii: u64, color: u64) {
+        // All values explicit (A4: Universal Value)
+        let value = (color << 8) | ascii;
+        write16(vga + offset, value);
+    }
+
+    fn write8(addr: u64, value: u64) {
+        asm("movb %1, (%0)" : : "r"(addr), "r"(value) : "memory");
+    }
+
+    fn write16(addr: u64, value: u64) {
+        asm("movw %1, (%0)" : : "r"(addr), "r"(value) : "memory");
+    }
+}

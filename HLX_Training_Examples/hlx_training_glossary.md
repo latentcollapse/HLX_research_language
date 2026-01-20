@@ -7,18 +7,18 @@
 ## 1. The Training Unit Philosophy
 Each concept is not just "shown"; it is **proven**. A Training Unit consists of two files:
 1.  **The Lesson (`.md`)**: A deep-dive explanation, the "why", the "what", and strict instruction-tuning pairs (Prompt -> Code).
-2.  **The Artifact (`.hlxa`)**: The verifiable, executable source code that proves the lesson is true.
+2.  **The Artifact (`.hlx`)**: The verifiable, executable source code that proves the lesson is true.
 
 ## 2. File Extension Strategy (Documentation Note)
 *Current State:* 
-- `.hlxa` = Human-readable source (Assembly/Source hybrid)
+- `.hlx` = Human-readable source (Assembly/Source hybrid)
 - `.hlxc` = Compiled Bytecode (Contract)
 - `.lcc`, `.lcb` = Bootstrap intermediate stages
 
 *Target State (Phase 4 Cleanup):*
 - `.hlx` = The single source of truth for humans.
 - `.hlxb` = The deterministic binary contract.
-*(Note: Compiler changes required to support strictly `.hlx`. For now, training data will use `.hlxa` but we will treat it conceptually as `.hlx`)*.
+*(Note: Compiler changes required to support strictly `.hlx`. For now, training data will use `.hlx` but we will treat it conceptually as `.hlx`)*.
 
 ---
 

@@ -4,7 +4,7 @@ This demonstrates the full C FFI workflow from HLX source to shared library.
 
 ## Step 1: Write HLX Library with FFI Exports
 
-**File: math_lib.hlxa**
+**File: math_lib.hlx**
 ```hlx
 program math_lib {
     #[no_mangle]
@@ -32,10 +32,10 @@ program math_lib {
 
 ```bash
 # Compile to .so on Linux (or .dylib on macOS, .dll on Windows)
-hlx compile-native math_lib.hlxa --shared -o libmath.so
+hlx compile-native math_lib.hlx --shared -o libmath.so
 
 # Or let it use the default name
-hlx compile-native math_lib.hlxa --shared
+hlx compile-native math_lib.hlx --shared
 # Creates: math_lib.so
 ```
 
@@ -43,7 +43,7 @@ hlx compile-native math_lib.hlxa --shared
 
 ```bash
 # First compile to crate to capture metadata
-hlx compile math_lib.hlxa -o math_lib.hlxl
+hlx compile math_lib.hlx -o math_lib.hlxl
 
 # Generate header
 hlx generate-header math_lib.hlxl -o math_lib.h
@@ -119,7 +119,7 @@ power_of_two(12) = 144
 
 ```bash
 # Compile to object file instead
-hlx compile-native math_lib.hlxa -o math_lib.o
+hlx compile-native math_lib.hlx -o math_lib.o
 
 # Link statically
 gcc demo.c math_lib.o -o demo_static

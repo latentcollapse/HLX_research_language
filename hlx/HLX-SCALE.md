@@ -27,7 +27,7 @@ fn main() -> Int {
 
 Compile and run:
 ```bash
-cargo run --bin hlx -- compile parallel_example.hlxa -o parallel.lcc
+cargo run --bin hlx -- compile parallel_example.hlx -o parallel.lcc
 RUST_LOG=1 cargo run --bin hlx -- run parallel.lcc
 ```
 

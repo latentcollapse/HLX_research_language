@@ -277,7 +277,7 @@ cargo build --release
 
 ### Hello GPU
 
-Create `hello_gpu.hlxa`:
+Create `hello_gpu.hlx`:
 ```hlx
 program hello_gpu {
     fn main() {
@@ -299,7 +299,7 @@ program hello_gpu {
 
 Run it:
 ```bash
-./target/release/hlx run hello_gpu.hlxa
+./target/release/hlx run hello_gpu.hlx
 
 # Output:
 # [Backend] Attempting Vulkan...
@@ -376,13 +376,13 @@ Same code runs on any hardware:
 
 ```bash
 # Any GPU (NVIDIA/AMD/Intel/Apple)
-hlx run vision_pipeline.hlxa  # Auto-selects Vulkan
+hlx run vision_pipeline.hlx  # Auto-selects Vulkan
 
 # Explicit GPU backend
-hlx --backend vulkan vision_pipeline.hlxa
+hlx --backend vulkan vision_pipeline.hlx
 
 # CPU fallback (always available)
-hlx --backend cpu vision_pipeline.hlxa
+hlx --backend cpu vision_pipeline.hlx
 ```
 
 All produce **bit-identical results** across all platforms.
@@ -431,7 +431,7 @@ fn detect_lane(frame: Tensor[H, W, 3]) -> Tensor[H, W, 1] {
 
 ```
 ┌─────────────────────────────────────┐
-│   HLX Source (.hlxa)                │
+│   HLX Source (.hlx)                │
 │   (what LLMs generate)              │
 └────────────┬────────────────────────┘
              │

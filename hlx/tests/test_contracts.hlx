@@ -1,0 +1,214 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// HLX Contract System Tests
+// Tests for contract syntax, field access, and basic operations
+// ═══════════════════════════════════════════════════════════════════════════
+
+module test_contracts {
+
+    // Test 1: Simple contract creation and field access
+    fn test_simple_contract() {
+        let data = {42:{@0:123, @1:456}};
+        let value0 = data.@0;
+        let value1 = data.@1;
+
+        // Expected: value0 = 123, value1 = 456
+        if (value0 == 123) {
+            if (value1 == 456) {
+                print("PASS: test_simple_contract\n");
+                return 1;
+            }
+        }
+        print("FAIL: test_simple_contract\n");
+        return 0;
+    }
+
+    // Test 2: Contract with string field
+    fn test_contract_with_string() {
+        let config = {100:{@0:1, @1:2}};
+        let id = config.@0;
+        let count = config.@1;
+
+        if (id == 1) {
+            if (count == 2) {
+                print("PASS: test_contract_with_string\n");
+                return 1;
+            }
+        }
+        print("FAIL: test_contract_with_string\n");
+        return 0;
+    }
+
+    // Test 3: Nested contracts
+    fn test_nested_contracts() {
+        let inner = {10:{@0:5, @1:10}};
+        let outer = {20:{@0:inner, @1:15}};
+
+        let inner_from_outer = outer.@0;
+        let inner_field_0 = inner_from_outer.@0;
+        let outer_field_1 = outer.@1;
+
+        // Expected: inner_field_0 = 5, outer_field_1 = 15
+        if (inner_field_0 == 5) {
+            if (outer_field_1 == 15) {
+                print("PASS: test_nested_contracts\n");
+                return 1;
+            }
+        }
+        print("FAIL: test_nested_contracts\n");
+        return 0;
+    }
+
+    // Test 4: Multiple field access
+    fn test_multiple_fields() {
+        let point = {1:{@0:10, @1:20, @2:30}};
+        let x = point.@0;
+        let y = point.@1;
+        let z = point.@2;
+
+        let sum = x + y + z;
+
+        if (sum == 60) {
+            print("PASS: test_multiple_fields\n");
+            return 1;
+        }
+        print("FAIL: test_multiple_fields\n");
+        return 0;
+    }
+
+    // Test 5: Contract in array
+    fn test_contract_in_array() {
+        let contracts = [{1:{@0:10}}, {1:{@0:20}}, {1:{@0:30}}];
+        let first_value = contracts[0].@0;
+        let second_value = contracts[1].@0;
+        let third_value = contracts[2].@0;
+
+        if (first_value == 10) {
+            if (second_value == 20) {
+                if (third_value == 30) {
+                    print("PASS: test_contract_in_array\n");
+                    return 1;
+                }
+            }
+        }
+        print("FAIL: test_contract_in_array\n");
+        return 0;
+    }
+
+    // Test 6: Contract field arithmetic
+    fn test_contract_arithmetic() {
+        let data = {2:{@0:100, @1:50}};
+        let a = data.@0;
+        let b = data.@1;
+        let result = a + b;
+
+        if (result == 150) {
+            print("PASS: test_contract_arithmetic\n");
+            return 1;
+        }
+        print("FAIL: test_contract_arithmetic\n");
+        return 0;
+    }
+
+    // Test 7: Contract in conditional
+    fn test_contract_conditional() {
+        let config = {3:{@0:1, @1:0}};
+        let enabled = config.@0;
+        let disabled = config.@1;
+
+        if (enabled == 1) {
+            if (disabled == 0) {
+                print("PASS: test_contract_conditional\n");
+                return 1;
+            }
+        }
+        print("FAIL: test_contract_conditional\n");
+        return 0;
+    }
+
+    // Test 8: Contract field in loop
+    fn test_contract_in_loop() {
+        let data = {4:{@0:5}};
+        let max = data.@0;
+        let sum = 0;
+
+        loop(sum < max, 10) {
+            sum = sum + 1;
+        }
+
+        if (sum == 5) {
+            print("PASS: test_contract_in_loop\n");
+            return 1;
+        }
+        print("FAIL: test_contract_in_loop\n");
+        return 0;
+    }
+
+    // Test 9: Contract field assignment
+    fn test_contract_field_assignment() {
+        let data = {5:{@0:10, @1:20}};
+        let value = data.@0;
+        let another = value + 5;
+
+        if (another == 15) {
+            print("PASS: test_contract_field_assignment\n");
+            return 1;
+        }
+        print("FAIL: test_contract_field_assignment\n");
+        return 0;
+    }
+
+    // Test 10: Complex contract structure
+    fn test_complex_contract() {
+        let rect = {6:{@0:10, @1:20, @2:30, @3:40}};
+        let width = rect.@0;
+        let height = rect.@1;
+        let area = width * height;
+
+        if (area == 200) {
+            print("PASS: test_complex_contract\n");
+            return 1;
+        }
+        print("FAIL: test_complex_contract\n");
+        return 0;
+    }
+
+    // Main test runner
+    fn main() -> i64 {
+        print("═══════════════════════════════════════════════════════\n");
+        print("HLX Contract System Tests\n");
+        print("═══════════════════════════════════════════════════════\n");
+        print("\n");
+
+        let passed = 0;
+        let failed = 0;
+
+        // Run all tests
+        if (test_simple_contract() == 1) { passed = passed + 1; } else { failed = failed + 1; }
+        if (test_contract_with_string() == 1) { passed = passed + 1; } else { failed = failed + 1; }
+        if (test_nested_contracts() == 1) { passed = passed + 1; } else { failed = failed + 1; }
+        if (test_multiple_fields() == 1) { passed = passed + 1; } else { failed = failed + 1; }
+        if (test_contract_in_array() == 1) { passed = passed + 1; } else { failed = failed + 1; }
+        if (test_contract_arithmetic() == 1) { passed = passed + 1; } else { failed = failed + 1; }
+        if (test_contract_conditional() == 1) { passed = passed + 1; } else { failed = failed + 1; }
+        if (test_contract_in_loop() == 1) { passed = passed + 1; } else { failed = failed + 1; }
+        if (test_contract_field_assignment() == 1) { passed = passed + 1; } else { failed = failed + 1; }
+        if (test_complex_contract() == 1) { passed = passed + 1; } else { failed = failed + 1; }
+
+        print("\n");
+        print("═══════════════════════════════════════════════════════\n");
+        print("Results: ");
+        print_int(passed);
+        print(" passed, ");
+        print_int(failed);
+        print(" failed\n");
+        print("═══════════════════════════════════════════════════════\n");
+
+        if (failed == 0) {
+            print("\nAll contract tests PASSED!\n");
+            return 0;
+        } else {
+            print("\nSome tests FAILED\n");
+            return 1;
+        }
+    }
+}

@@ -21,10 +21,10 @@ docker build -t hlx-compiler:latest .
 docker-compose run --rm hlx-compiler hlx --help
 
 # Compile a HLX file
-docker-compose run --rm hlx-compiler hlx compile examples/hello_world.hlxa
+docker-compose run --rm hlx-compiler hlx compile examples/hello_world.hlx
 
 # Run a HLX program
-docker-compose run --rm hlx-compiler hlx run examples/hello_world.hlxa
+docker-compose run --rm hlx-compiler hlx run examples/hello_world.hlx
 ```
 
 ### Run the HLX LSP Server
@@ -87,11 +87,11 @@ The Dockerfile uses a multi-stage build for optimal image size:
 ```bash
 # Mount your source directory
 docker run --rm -v $(pwd):/workspace hlx-compiler:latest \
-  hlx compile /workspace/my_program.hlxa -o /workspace/output.bin
+  hlx compile /workspace/my_program.hlx -o /workspace/output.bin
 
 # Using docker-compose:
 docker-compose run --rm -v $(pwd):/workspace hlx-compiler \
-  hlx compile /workspace/my_program.hlxa
+  hlx compile /workspace/my_program.hlx
 ```
 
 ### Run HLX Programs
@@ -99,11 +99,11 @@ docker-compose run --rm -v $(pwd):/workspace hlx-compiler \
 ```bash
 # Execute a compiled HLX program
 docker run --rm -v $(pwd):/workspace hlx-compiler:latest \
-  hlx run /workspace/my_program.hlxa
+  hlx run /workspace/my_program.hlx
 
 # With backend selection:
 docker-compose run --rm hlx-compiler \
-  hlx run --backend cpu examples/tensor_ops.hlxa
+  hlx run --backend cpu examples/tensor_ops.hlx
 ```
 
 ### Language Server Integration
@@ -145,7 +145,7 @@ docker-compose up hlx-lsp
 Runs the HLX compiler for one-off compilation tasks.
 
 ```bash
-docker-compose run --rm hlx-compiler hlx compile examples/tensor.hlxa
+docker-compose run --rm hlx-compiler hlx compile examples/tensor.hlx
 ```
 
 **Volumes:**
@@ -200,7 +200,7 @@ docker run --rm \
   -v /path/to/hlx/project:/workspace \
   -v /path/to/output:/output \
   hlx-compiler:latest \
-  hlx compile /workspace/main.hlxa -o /output/main.bin
+  hlx compile /workspace/main.hlx -o /output/main.bin
 ```
 
 ### Environment Variables
@@ -212,7 +212,7 @@ docker run --rm \
   -e HLX_LOG_LEVEL=debug \
   -v $(pwd):/workspace \
   hlx-compiler:latest \
-  hlx run /workspace/program.hlxa
+  hlx run /workspace/program.hlx
 ```
 
 ---
@@ -310,7 +310,7 @@ If files created by Docker are owned by root:
 docker run --rm --user $(id -u):$(id -g) \
   -v $(pwd):/workspace \
   hlx-compiler:latest \
-  hlx compile /workspace/file.hlxa
+  hlx compile /workspace/file.hlx
 ```
 
 ### Large Image Size

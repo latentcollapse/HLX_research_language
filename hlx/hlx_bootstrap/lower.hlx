@@ -1,0 +1,1024 @@
+// HLX Bootstrap Lowering Pass - AST to Bytecode
+// Takes AST from parser and emits bytecode instructions
+
+module lowerer {
+
+// ============================================================================
+// Instruction Type Constants (must match HLX bytecode format)
+// ============================================================================
+
+fn INST_CONSTANT() -> i64 { return 1; }
+fn INST_MOVE() -> i64 { return 2; }
+fn INST_ADD() -> i64 { return 10; }
+fn INST_SUB() -> i64 { return 11; }
+fn INST_MUL() -> i64 { return 12; }
+fn INST_DIV() -> i64 { return 13; }
+fn INST_MOD() -> i64 { return 14; }
+fn INST_EQ() -> i64 { return 20; }
+fn INST_NE() -> i64 { return 21; }
+fn INST_LT() -> i64 { return 22; }
+fn INST_LE() -> i64 { return 23; }
+fn INST_GT() -> i64 { return 24; }
+fn INST_GE() -> i64 { return 25; }
+fn INST_AND() -> i64 { return 30; }
+fn INST_OR() -> i64 { return 31; }
+fn INST_BIT_AND() -> i64 { return 32; }
+fn INST_BIT_OR() -> i64 { return 33; }
+fn INST_BIT_XOR() -> i64 { return 34; }
+fn INST_SHL() -> i64 { return 35; }
+fn INST_SHR() -> i64 { return 36; }
+fn INST_NOT() -> i64 { return 37; }
+fn INST_IF() -> i64 { return 40; }
+fn INST_JUMP() -> i64 { return 41; }
+fn INST_CALL() -> i64 { return 50; }
+fn INST_RETURN() -> i64 { return 51; }
+fn INST_LOOP() -> i64 { return 60; }
+fn INST_BREAK() -> i64 { return 61; }
+fn INST_CONTINUE() -> i64 { return 62; }
+fn INST_FUNCDEF() -> i64 { return 70; }
+fn INST_GET_ELEMENT() -> i64 { return 80; }
+fn INST_SET_ELEMENT() -> i64 { return 81; }
+fn INST_CONTRACT_CREATE() -> i64 { return 90; }
+fn INST_CONTRACT_GET() -> i64 { return 91; }
+fn INST_CONTRACT_SET() -> i64 { return 92; }
+fn INST_COLLAPSE() -> i64 { return 93; }
+fn INST_RESOLVE() -> i64 { return 94; }
+
+// AST Node Type Constants (from parser.hlx)
+fn EXPR_INT() -> i64 { return 1; }
+fn EXPR_STRING() -> i64 { return 2; }
+fn EXPR_IDENT() -> i64 { return 3; }
+fn EXPR_BINOP() -> i64 { return 4; }
+fn EXPR_CALL() -> i64 { return 5; }
+fn EXPR_ARRAY() -> i64 { return 6; }
+fn EXPR_INDEX() -> i64 { return 7; }
+fn EXPR_UNARY() -> i64 { return 8; }
+fn EXPR_CONTRACT() -> i64 { return 9; }
+fn EXPR_CONTRACT_FIELD() -> i64 { return 25; }
+fn EXPR_FIELD_ACCESS() -> i64 { return 26; }
+fn EXPR_COLLAPSE() -> i64 { return 27; }
+fn EXPR_RESOLVE() -> i64 { return 28; }
+
+fn STMT_LET() -> i64 { return 10; }
+fn STMT_ASSIGN() -> i64 { return 11; }
+fn STMT_IF() -> i64 { return 12; }
+fn STMT_LOOP() -> i64 { return 13; }
+fn STMT_RETURN() -> i64 { return 14; }
+fn STMT_EXPR() -> i64 { return 15; }
+fn STMT_BREAK() -> i64 { return 16; }
+fn STMT_CONTINUE() -> i64 { return 17; }
+
+fn NODE_FUNCTION() -> i64 { return 20; }
+fn NODE_PROGRAM() -> i64 { return 21; }
+
+fn OP_ADD() -> i64 { return 30; }
+fn OP_SUB() -> i64 { return 31; }
+fn OP_MUL() -> i64 { return 32; }
+fn OP_DIV() -> i64 { return 33; }
+fn OP_MOD() -> i64 { return 34; }
+fn OP_EQ() -> i64 { return 35; }
+fn OP_NE() -> i64 { return 36; }
+fn OP_LT() -> i64 { return 37; }
+fn OP_LE() -> i64 { return 38; }
+fn OP_GT() -> i64 { return 39; }
+fn OP_GE() -> i64 { return 40; }
+fn OP_AND() -> i64 { return 41; }
+fn OP_OR() -> i64 { return 42; }
+
+// ============================================================================
+// Lowerer State
+// ============================================================================
+
+// State: [next_reg, instructions, bindings, func_table, loop_stack]
+// - next_reg: next available register number
+// - instructions: array of instruction arrays
+// - bindings: array of [name_ptr, register] pairs
+// - func_table: array of [name_ptr, start_pc] pairs
+// - loop_stack: array of [continue_target, patches] for nested loops
+
+fn make_lowerer() -> [i64] {
+    let state = [0, 0, 0, 0, 0];
+    state = set_at(state, 0, 0);  // next_reg = 0
+    state = set_at(state, 1, ptr_to_int([]));  // instructions = []
+    state = set_at(state, 2, ptr_to_int([]));  // bindings = []
+    state = set_at(state, 3, ptr_to_int([]));  // func_table = []
+    state = set_at(state, 4, ptr_to_int([]));  // loop_stack = []
+    return state;
+}
+
+fn get_next_reg(state: [i64]) -> i64 {
+    return get_at(state, 0);
+}
+
+fn alloc_reg(state: [i64]) -> [i64] {
+    let reg = get_at(state, 0);
+    let next = reg + 1;
+    state = set_at(state, 0, next);
+    let result = [0, 0];
+    result = set_at(result, 0, reg);  // Return register number
+    result = set_at(result, 1, ptr_to_int(state));  // Return updated state
+    return result;
+}
+
+fn get_instructions(state: [i64]) -> [i64] {
+    return int_to_ptr(get_at(state, 1));
+}
+
+fn set_instructions(state: [i64], insts: [i64]) -> [i64] {
+    return set_at(state, 1, ptr_to_int(insts));
+}
+
+fn emit(state: [i64], inst: [i64]) -> [i64] {
+    let insts = get_instructions(state);
+    insts = push(insts, ptr_to_int(inst));
+    return set_instructions(state, insts);
+}
+
+fn get_pc(state: [i64]) -> i64 {
+    let insts = get_instructions(state);
+    return array_len(insts);
+}
+
+fn patch_instruction(state: [i64], idx: i64, inst: [i64]) -> [i64] {
+    let insts = get_instructions(state);
+    insts = set_at(insts, idx, ptr_to_int(inst));
+    return set_instructions(state, insts);
+}
+
+// ============================================================================
+// Variable Bindings
+// ============================================================================
+
+fn get_bindings(state: [i64]) -> [i64] {
+    return int_to_ptr(get_at(state, 2));
+}
+
+fn set_bindings(state: [i64], bindings: [i64]) -> [i64] {
+    return set_at(state, 2, ptr_to_int(bindings));
+}
+
+fn bind_var(state: [i64], name: String, reg: i64) -> [i64] {
+    let bindings = get_bindings(state);
+    let binding = [0, 0];
+    binding = set_at(binding, 0, ptr_to_int(name));
+    binding = set_at(binding, 1, reg);
+    bindings = push(bindings, ptr_to_int(binding));
+    return set_bindings(state, bindings);
+}
+
+fn lookup_var(state: [i64], name: String) -> i64 {
+    let bindings = get_bindings(state);
+    let len = array_len(bindings);
+    let i = len - 1;
+
+    // Search backwards (most recent binding first)
+    loop(i >= 0, 1000) {
+        if i < 0 { break; }
+
+        let binding = int_to_ptr(get_at(bindings, i));
+        let bound_name = int_to_ptr(get_at(binding, 0));
+
+        if strcmp(name, bound_name) == 0 {
+            return get_at(binding, 1);
+        }
+
+        i = i - 1;
+    }
+
+    print("Error: undefined variable: ");
+    print(name);
+    print("\n");
+    return 0;
+}
+
+// ============================================================================
+// Function Table
+// ============================================================================
+
+fn get_func_table(state: [i64]) -> [i64] {
+    return int_to_ptr(get_at(state, 3));
+}
+
+fn set_func_table(state: [i64], table: [i64]) -> [i64] {
+    return set_at(state, 3, ptr_to_int(table));
+}
+
+fn register_function(state: [i64], name: String, start_pc: i64) -> [i64] {
+    let table = get_func_table(state);
+    let entry = [0, 0];
+    entry = set_at(entry, 0, ptr_to_int(name));
+    entry = set_at(entry, 1, start_pc);
+    table = push(table, ptr_to_int(entry));
+    return set_func_table(state, table);
+}
+
+fn lookup_function(state: [i64], name: String) -> i64 {
+    let table = get_func_table(state);
+    let len = array_len(table);
+    let i = 0;
+
+    loop(i < len, 1000) {
+        let entry = int_to_ptr(get_at(table, i));
+        let func_name = int_to_ptr(get_at(entry, 0));
+
+        if strcmp(name, func_name) == 0 {
+            return get_at(entry, 1);
+        }
+
+        i += 1;
+    }
+
+    return -1;  // Not found
+}
+
+// ============================================================================
+// Loop Stack (for break/continue)
+// ============================================================================
+
+fn get_loop_stack(state: [i64]) -> [i64] {
+    return int_to_ptr(get_at(state, 4));
+}
+
+fn set_loop_stack(state: [i64], stack: [i64]) -> [i64] {
+    return set_at(state, 4, ptr_to_int(stack));
+}
+
+fn push_loop(state: [i64], continue_target: i64) -> [i64] {
+    let stack = get_loop_stack(state);
+    let entry = [0, 0];
+    entry = set_at(entry, 0, continue_target);
+    entry = set_at(entry, 1, ptr_to_int([]));  // patches = []
+    stack = push(stack, ptr_to_int(entry));
+    return set_loop_stack(state, stack);
+}
+
+fn pop_loop(state: [i64]) -> [i64] {
+    let stack = get_loop_stack(state);
+    let len = array_len(stack);
+    if len == 0 {
+        print("Error: pop_loop on empty stack\n");
+        return state;
+    }
+
+    // Remove last element by creating new array without it
+    let new_stack = [];
+    let i = 0;
+    loop(i < len - 1, 1000) {
+        new_stack = push(new_stack, get_at(stack, i));
+        i += 1;
+    }
+
+    return set_loop_stack(state, new_stack);
+}
+
+fn get_current_loop(state: [i64]) -> [i64] {
+    let stack = get_loop_stack(state);
+    let len = array_len(stack);
+    if len == 0 {
+        print("Error: no current loop\n");
+        return [0, 0];
+    }
+    return int_to_ptr(get_at(stack, len - 1));
+}
+
+fn add_break_patch(state: [i64], patch_pc: i64) -> [i64] {
+    let stack = get_loop_stack(state);
+    let len = array_len(stack);
+    let loop_entry = get_current_loop(state);
+
+    let continue_target = get_at(loop_entry, 0);
+    let patches = int_to_ptr(get_at(loop_entry, 1));
+    patches = push(patches, patch_pc);
+
+    let new_entry = [0, 0];
+    new_entry = set_at(new_entry, 0, continue_target);
+    new_entry = set_at(new_entry, 1, ptr_to_int(patches));
+
+    stack = set_at(stack, len - 1, ptr_to_int(new_entry));
+    return set_loop_stack(state, stack);
+}
+
+// ============================================================================
+// Instruction Construction Helpers
+// ============================================================================
+
+fn make_inst_constant(out: i64, value: i64, is_string: i64) -> [i64] {
+    let inst = [0, 0, 0, 0];
+    inst = set_at(inst, 0, INST_CONSTANT());
+    inst = set_at(inst, 1, out);
+    inst = set_at(inst, 2, value);
+    inst = set_at(inst, 3, is_string);  // 0 = int, 1 = string
+    return inst;
+}
+
+fn make_inst_move(out: i64, src: i64) -> [i64] {
+    let inst = [0, 0, 0];
+    inst = set_at(inst, 0, INST_MOVE());
+    inst = set_at(inst, 1, out);
+    inst = set_at(inst, 2, src);
+    return inst;
+}
+
+fn make_inst_binop(opcode: i64, out: i64, lhs: i64, rhs: i64) -> [i64] {
+    let inst = [0, 0, 0, 0];
+    inst = set_at(inst, 0, opcode);
+    inst = set_at(inst, 1, out);
+    inst = set_at(inst, 2, lhs);
+    inst = set_at(inst, 3, rhs);
+    return inst;
+}
+
+fn make_inst_unary(opcode: i64, out: i64, operand: i64) -> [i64] {
+    let inst = [0, 0, 0];
+    inst = set_at(inst, 0, opcode);
+    inst = set_at(inst, 1, out);
+    inst = set_at(inst, 2, operand);
+    return inst;
+}
+
+fn make_inst_if(cond: i64, then_pc: i64, else_pc: i64) -> [i64] {
+    let inst = [0, 0, 0, 0];
+    inst = set_at(inst, 0, INST_IF());
+    inst = set_at(inst, 1, cond);
+    inst = set_at(inst, 2, then_pc);
+    inst = set_at(inst, 3, else_pc);
+    return inst;
+}
+
+fn make_inst_jump(target: i64) -> [i64] {
+    let inst = [0, 0];
+    inst = set_at(inst, 0, INST_JUMP());
+    inst = set_at(inst, 1, target);
+    return inst;
+}
+
+fn make_inst_call(out: i64, func_name: String, args: [i64]) -> [i64] {
+    let inst = [0, 0, 0, 0];
+    inst = set_at(inst, 0, INST_CALL());
+    inst = set_at(inst, 1, out);
+    inst = set_at(inst, 2, ptr_to_int(func_name));
+    inst = set_at(inst, 3, ptr_to_int(args));
+    return inst;
+}
+
+fn make_inst_return(val: i64) -> [i64] {
+    let inst = [0, 0];
+    inst = set_at(inst, 0, INST_RETURN());
+    inst = set_at(inst, 1, val);
+    return inst;
+}
+
+fn make_inst_loop(cond: i64, body_pc: i64, max_iter: i64) -> [i64] {
+    let inst = [0, 0, 0, 0];
+    inst = set_at(inst, 0, INST_LOOP());
+    inst = set_at(inst, 1, cond);
+    inst = set_at(inst, 2, body_pc);
+    inst = set_at(inst, 3, max_iter);
+    return inst;
+}
+
+fn make_inst_break() -> [i64] {
+    let inst = [0];
+    inst = set_at(inst, 0, INST_BREAK());
+    return inst;
+}
+
+fn make_inst_continue() -> [i64] {
+    let inst = [0];
+    inst = set_at(inst, 0, INST_CONTINUE());
+    return inst;
+}
+
+fn make_inst_funcdef(name: String, params: [i64], body_pc: i64, max_depth: i64) -> [i64] {
+    let inst = [0, 0, 0, 0, 0];
+    inst = set_at(inst, 0, INST_FUNCDEF());
+    inst = set_at(inst, 1, ptr_to_int(name));
+    inst = set_at(inst, 2, ptr_to_int(params));
+    inst = set_at(inst, 3, body_pc);
+    inst = set_at(inst, 4, max_depth);  // NEW: max_depth field
+    return inst;
+}
+
+fn make_inst_get_element(out: i64, array: i64, index: i64) -> [i64] {
+    let inst = [0, 0, 0, 0];
+    inst = set_at(inst, 0, INST_GET_ELEMENT());
+    inst = set_at(inst, 1, out);
+    inst = set_at(inst, 2, array);
+    inst = set_at(inst, 3, index);
+    return inst;
+}
+
+fn make_inst_set_element(array: i64, index: i64, value: i64) -> [i64] {
+    let inst = [0, 0, 0, 0];
+    inst = set_at(inst, 0, INST_SET_ELEMENT());
+    inst = set_at(inst, 1, array);
+    inst = set_at(inst, 2, index);
+    inst = set_at(inst, 3, value);
+    return inst;
+}
+
+// ============================================================================
+// Expression Lowering
+// ============================================================================
+
+fn lower_expr(state: [i64], expr_node: [i64]) -> [i64] {
+    let node_type = get_at(expr_node, 0);
+    let out_reg = 0;
+
+    switch node_type {
+        1 => {  // EXPR_INT
+            let value = get_at(expr_node, 1);
+            let alloc_result = alloc_reg(state);
+            out_reg = get_at(alloc_result, 0);
+            state = int_to_ptr(get_at(alloc_result, 1));
+
+            let inst = make_inst_constant(out_reg, value, 0);
+            state = emit(state, inst);
+        },
+        2 => {  // EXPR_STRING
+            let str_ptr = get_at(expr_node, 1);
+            let alloc_result = alloc_reg(state);
+            out_reg = get_at(alloc_result, 0);
+            state = int_to_ptr(get_at(alloc_result, 1));
+
+            let inst = make_inst_constant(out_reg, str_ptr, 1);
+            state = emit(state, inst);
+        },
+        3 => {  // EXPR_IDENT
+            let name_ptr = get_at(expr_node, 1);
+            let name = int_to_ptr(name_ptr);
+            out_reg = lookup_var(state, name);
+        },
+        4 => {  // EXPR_BINOP
+            let op = get_at(expr_node, 1);
+            let lhs_node = int_to_ptr(get_at(expr_node, 2));
+            let rhs_node = int_to_ptr(get_at(expr_node, 3));
+
+            let lhs_result = lower_expr(state, lhs_node);
+            let lhs_reg = get_at(lhs_result, 0);
+            state = int_to_ptr(get_at(lhs_result, 1));
+
+            let rhs_result = lower_expr(state, rhs_node);
+            let rhs_reg = get_at(rhs_result, 0);
+            state = int_to_ptr(get_at(rhs_result, 1));
+
+            let alloc_result = alloc_reg(state);
+            out_reg = get_at(alloc_result, 0);
+            state = int_to_ptr(get_at(alloc_result, 1));
+
+            // Map operator to instruction
+            let opcode = 0;
+            switch op {
+                30 => { opcode = INST_ADD(); },  // OP_ADD
+                31 => { opcode = INST_SUB(); },  // OP_SUB
+                32 => { opcode = INST_MUL(); },  // OP_MUL
+                33 => { opcode = INST_DIV(); },  // OP_DIV
+                34 => { opcode = INST_MOD(); },  // OP_MOD
+                35 => { opcode = INST_EQ(); },   // OP_EQ
+                36 => { opcode = INST_NE(); },   // OP_NE
+                37 => { opcode = INST_LT(); },   // OP_LT
+                38 => { opcode = INST_LE(); },   // OP_LE
+                39 => { opcode = INST_GT(); },   // OP_GT
+                40 => { opcode = INST_GE(); },   // OP_GE
+                41 => { opcode = INST_AND(); },  // OP_AND
+                42 => { opcode = INST_OR(); },   // OP_OR
+                45 => { opcode = INST_BIT_AND(); },  // OP_BIT_AND
+                46 => { opcode = INST_BIT_OR(); },   // OP_BIT_OR
+                47 => { opcode = INST_BIT_XOR(); },  // OP_BIT_XOR
+                49 => { opcode = INST_SHL(); },      // OP_SHL
+                50 => { opcode = INST_SHR(); },      // OP_SHR
+                _ => {
+                    print("Error: unknown operator ");
+                    print_int(op);
+                    print("\n");
+                },
+            }
+
+            let inst = make_inst_binop(opcode, out_reg, lhs_reg, rhs_reg);
+            state = emit(state, inst);
+        },
+        5 => {  // EXPR_CALL
+            let func_name = int_to_ptr(get_at(expr_node, 1));
+            let args_nodes = int_to_ptr(get_at(expr_node, 2));
+
+            // Lower all argument expressions
+            let arg_regs = [];
+            let i = 0;
+            let args_len = array_len(args_nodes);
+            loop(i < args_len, 100) {
+                let arg_node = int_to_ptr(get_at(args_nodes, i));
+                let arg_result = lower_expr(state, arg_node);
+                let arg_reg = get_at(arg_result, 0);
+                state = int_to_ptr(get_at(arg_result, 1));
+                arg_regs = push(arg_regs, arg_reg);
+                i += 1;
+            }
+
+            let alloc_result = alloc_reg(state);
+            out_reg = get_at(alloc_result, 0);
+            state = int_to_ptr(get_at(alloc_result, 1));
+
+            let inst = make_inst_call(out_reg, func_name, arg_regs);
+            state = emit(state, inst);
+        },
+        6 => {  // EXPR_ARRAY
+            // For now, arrays are handled as literals at parse time
+            // This is simplified - real implementation would construct arrays
+            let alloc_result = alloc_reg(state);
+            out_reg = get_at(alloc_result, 0);
+            state = int_to_ptr(get_at(alloc_result, 1));
+
+            // Emit empty array constant
+            let inst = make_inst_constant(out_reg, 0, 0);
+            state = emit(state, inst);
+        },
+        7 => {  // EXPR_INDEX
+            let array_node = int_to_ptr(get_at(expr_node, 1));
+            let index_node = int_to_ptr(get_at(expr_node, 2));
+
+            let array_result = lower_expr(state, array_node);
+            let array_reg = get_at(array_result, 0);
+            state = int_to_ptr(get_at(array_result, 1));
+
+            let index_result = lower_expr(state, index_node);
+            let index_reg = get_at(index_result, 0);
+            state = int_to_ptr(get_at(index_result, 1));
+
+            let alloc_result = alloc_reg(state);
+            out_reg = get_at(alloc_result, 0);
+            state = int_to_ptr(get_at(alloc_result, 1));
+
+            let inst = make_inst_get_element(out_reg, array_reg, index_reg);
+            state = emit(state, inst);
+        },
+        8 => {  // EXPR_UNARY
+            let op = get_at(expr_node, 1);
+            let operand_node = int_to_ptr(get_at(expr_node, 2));
+
+            let operand_result = lower_expr(state, operand_node);
+            let operand_reg = get_at(operand_result, 0);
+            state = int_to_ptr(get_at(operand_result, 1));
+
+            let alloc_result = alloc_reg(state);
+            out_reg = get_at(alloc_result, 0);
+            state = int_to_ptr(get_at(alloc_result, 1));
+
+            // Map operator to instruction
+            let opcode = 0;
+            switch op {
+                56 => { opcode = INST_NOT(); },  // OP_NOT
+                _ => {
+                    print("Error: unknown unary operator ");
+                    print_int(op);
+                    print("\n");
+                },
+            }
+
+            let inst = make_inst_unary(opcode, out_reg, operand_reg);
+            state = emit(state, inst);
+        },
+        9 => {  // EXPR_CONTRACT literal
+            let contract_id = get_at(expr_node, 1);
+            let fields = int_to_ptr(get_at(expr_node, 2));
+            let field_count = array_len(fields);
+
+            // Lower each field value
+            let field_regs = [];
+            let i = 0;
+            loop(i < field_count, 100) {
+                let field_node = int_to_ptr(get_at(fields, i));
+                let value_node = int_to_ptr(get_at(field_node, 2));
+
+                let value_result = lower_expr(state, value_node);
+                let value_reg = get_at(value_result, 0);
+                state = int_to_ptr(get_at(value_result, 1));
+
+                field_regs = push(field_regs, value_reg);
+                i += 1;
+            }
+
+            // Allocate output register
+            let alloc_result = alloc_reg(state);
+            out_reg = get_at(alloc_result, 0);
+            state = int_to_ptr(get_at(alloc_result, 1));
+
+            // Emit CONTRACT_CREATE instruction
+            let inst = [0, 0, 0, 0];
+            inst = set_at(inst, 0, INST_CONTRACT_CREATE());
+            inst = set_at(inst, 1, out_reg);
+            inst = set_at(inst, 2, contract_id);
+            inst = set_at(inst, 3, ptr_to_int(field_regs));
+            state = emit(state, inst);
+        },
+        26 => {  // EXPR_FIELD_ACCESS (.@field)
+            let object_node = int_to_ptr(get_at(expr_node, 1));
+            let field_id = get_at(expr_node, 2);
+
+            let object_result = lower_expr(state, object_node);
+            let object_reg = get_at(object_result, 0);
+            state = int_to_ptr(get_at(object_result, 1));
+
+            let alloc_result = alloc_reg(state);
+            out_reg = get_at(alloc_result, 0);
+            state = int_to_ptr(get_at(alloc_result, 1));
+
+            // Emit CONTRACT_GET instruction
+            let inst = [0, 0, 0, 0];
+            inst = set_at(inst, 0, INST_CONTRACT_GET());
+            inst = set_at(inst, 1, out_reg);
+            inst = set_at(inst, 2, object_reg);
+            inst = set_at(inst, 3, field_id);
+            state = emit(state, inst);
+        },
+        27 => {  // EXPR_COLLAPSE
+            let value_node = int_to_ptr(get_at(expr_node, 1));
+
+            let value_result = lower_expr(state, value_node);
+            let value_reg = get_at(value_result, 0);
+            state = int_to_ptr(get_at(value_result, 1));
+
+            let alloc_result = alloc_reg(state);
+            out_reg = get_at(alloc_result, 0);
+            state = int_to_ptr(get_at(alloc_result, 1));
+
+            // Emit COLLAPSE instruction
+            let inst = [0, 0, 0];
+            inst = set_at(inst, 0, INST_COLLAPSE());
+            inst = set_at(inst, 1, out_reg);
+            inst = set_at(inst, 2, value_reg);
+            state = emit(state, inst);
+        },
+        28 => {  // EXPR_RESOLVE
+            let handle_node = int_to_ptr(get_at(expr_node, 1));
+
+            let handle_result = lower_expr(state, handle_node);
+            let handle_reg = get_at(handle_result, 0);
+            state = int_to_ptr(get_at(handle_result, 1));
+
+            let alloc_result = alloc_reg(state);
+            out_reg = get_at(alloc_result, 0);
+            state = int_to_ptr(get_at(alloc_result, 1));
+
+            // Emit RESOLVE instruction
+            let inst = [0, 0, 0];
+            inst = set_at(inst, 0, INST_RESOLVE());
+            inst = set_at(inst, 1, out_reg);
+            inst = set_at(inst, 2, handle_reg);
+            state = emit(state, inst);
+        },
+        _ => {
+            print("Error: unknown expression type ");
+            print_int(node_type);
+            print("\n");
+        },
+    }
+
+    let result = [0, 0];
+    result = set_at(result, 0, out_reg);
+    result = set_at(result, 1, ptr_to_int(state));
+    return result;
+}
+
+// ============================================================================
+// Statement Lowering
+// ============================================================================
+
+fn lower_stmt(state: [i64], stmt_node: [i64]) -> [i64] {
+    let node_type = get_at(stmt_node, 0);
+
+    switch node_type {
+        10 => {  // STMT_LET
+            let name = int_to_ptr(get_at(stmt_node, 1));
+            let value_node = int_to_ptr(get_at(stmt_node, 2));
+
+            let value_result = lower_expr(state, value_node);
+            let value_reg = get_at(value_result, 0);
+            state = int_to_ptr(get_at(value_result, 1));
+
+            // Allocate new register and copy (avoid aliasing)
+            let alloc_result = alloc_reg(state);
+            let new_reg = get_at(alloc_result, 0);
+            state = int_to_ptr(get_at(alloc_result, 1));
+
+            let inst = make_inst_move(new_reg, value_reg);
+            state = emit(state, inst);
+
+            state = bind_var(state, name, new_reg);
+        },
+        11 => {  // STMT_ASSIGN
+            let lhs_node = int_to_ptr(get_at(stmt_node, 1));
+            let value_node = int_to_ptr(get_at(stmt_node, 2));
+
+            let lhs_type = get_at(lhs_node, 0);
+
+            if lhs_type == EXPR_IDENT() {
+                // Simple variable assignment
+                let name = int_to_ptr(get_at(lhs_node, 1));
+                let target_reg = lookup_var(state, name);
+
+                let value_result = lower_expr(state, value_node);
+                let value_reg = get_at(value_result, 0);
+                state = int_to_ptr(get_at(value_result, 1));
+
+                let inst = make_inst_move(target_reg, value_reg);
+                state = emit(state, inst);
+            } else if lhs_type == EXPR_INDEX() {
+                // Array element assignment
+                let array_node = int_to_ptr(get_at(lhs_node, 1));
+                let index_node = int_to_ptr(get_at(lhs_node, 2));
+
+                let array_result = lower_expr(state, array_node);
+                let array_reg = get_at(array_result, 0);
+                state = int_to_ptr(get_at(array_result, 1));
+
+                let index_result = lower_expr(state, index_node);
+                let index_reg = get_at(index_result, 0);
+                state = int_to_ptr(get_at(index_result, 1));
+
+                let value_result = lower_expr(state, value_node);
+                let value_reg = get_at(value_result, 0);
+                state = int_to_ptr(get_at(value_result, 1));
+
+                let inst = make_inst_set_element(array_reg, index_reg, value_reg);
+                state = emit(state, inst);
+            }
+        },
+        12 => {  // STMT_IF
+            let cond_node = int_to_ptr(get_at(stmt_node, 1));
+            let then_body = int_to_ptr(get_at(stmt_node, 2));
+            let else_body = int_to_ptr(get_at(stmt_node, 3));
+
+            // Lower condition
+            let cond_result = lower_expr(state, cond_node);
+            let cond_reg = get_at(cond_result, 0);
+            state = int_to_ptr(get_at(cond_result, 1));
+
+            // Reserve space for If instruction
+            let if_pc = get_pc(state);
+            let placeholder = make_inst_jump(0);
+            state = emit(state, placeholder);
+
+            // Lower then branch
+            let then_pc = get_pc(state);
+            let i = 0;
+            let then_len = array_len(then_body);
+            loop(i < then_len, 1000) {
+                let stmt = int_to_ptr(get_at(then_body, i));
+                state = lower_stmt(state, stmt);
+                i += 1;
+            }
+
+            // Jump to exit
+            let skip_else_pc = get_pc(state);
+            state = emit(state, placeholder);
+
+            // Lower else branch
+            let else_pc = get_pc(state);
+            let else_len = array_len(else_body);
+            if else_len > 0 {
+                i = 0;
+                loop(i < else_len, 1000) {
+                    let stmt = int_to_ptr(get_at(else_body, i));
+                    state = lower_stmt(state, stmt);
+                    i += 1;
+                }
+            }
+
+            let exit_pc = get_pc(state);
+
+            // Patch If instruction
+            let if_inst = make_inst_if(cond_reg, then_pc, else_pc);
+            state = patch_instruction(state, if_pc, if_inst);
+
+            // Patch skip jump
+            let skip_inst = make_inst_jump(exit_pc);
+            state = patch_instruction(state, skip_else_pc, skip_inst);
+        },
+        13 => {  // STMT_LOOP
+            let cond_node = int_to_ptr(get_at(stmt_node, 1));
+            let max_iter = get_at(stmt_node, 2);
+            let body = int_to_ptr(get_at(stmt_node, 3));
+
+            let loop_start = get_pc(state);
+
+            // Lower condition
+            let cond_result = lower_expr(state, cond_node);
+            let cond_reg = get_at(cond_result, 0);
+            state = int_to_ptr(get_at(cond_result, 1));
+
+            // Reserve space for Loop instruction
+            let loop_pc = get_pc(state);
+            let placeholder = make_inst_jump(0);
+            state = emit(state, placeholder);
+
+            // Push loop context for break/continue
+            state = push_loop(state, loop_start);
+
+            // Lower body
+            let body_pc = get_pc(state);
+            let i = 0;
+            let body_len = array_len(body);
+            loop(i < body_len, 1000) {
+                let stmt = int_to_ptr(get_at(body, i));
+                state = lower_stmt(state, stmt);
+                i += 1;
+            }
+
+            // Jump back to condition
+            let back_jump = make_inst_jump(loop_start);
+            state = emit(state, back_jump);
+
+            let exit_pc = get_pc(state);
+
+            // Patch Loop instruction
+            let loop_inst = make_inst_loop(cond_reg, body_pc, max_iter);
+            state = patch_instruction(state, loop_pc, loop_inst);
+
+            // Patch all break statements
+            let loop_entry = get_current_loop(state);
+            let patches = int_to_ptr(get_at(loop_entry, 1));
+            i = 0;
+            let patches_len = array_len(patches);
+            loop(i < patches_len, 1000) {
+                let patch_pc = get_at(patches, i);
+                let break_jump = make_inst_jump(exit_pc);
+                state = patch_instruction(state, patch_pc, break_jump);
+                i += 1;
+            }
+
+            state = pop_loop(state);
+        },
+        14 => {  // STMT_RETURN
+            let value_node = int_to_ptr(get_at(stmt_node, 1));
+
+            let value_result = lower_expr(state, value_node);
+            let value_reg = get_at(value_result, 0);
+            state = int_to_ptr(get_at(value_result, 1));
+
+            let inst = make_inst_return(value_reg);
+            state = emit(state, inst);
+        },
+        15 => {  // STMT_EXPR
+            let expr_node = int_to_ptr(get_at(stmt_node, 1));
+            let expr_result = lower_expr(state, expr_node);
+            state = int_to_ptr(get_at(expr_result, 1));
+        },
+        16 => {  // STMT_BREAK
+            let patch_pc = get_pc(state);
+            let placeholder = make_inst_jump(0);
+            state = emit(state, placeholder);
+            state = add_break_patch(state, patch_pc);
+        },
+        17 => {  // STMT_CONTINUE
+            let loop_entry = get_current_loop(state);
+            let continue_target = get_at(loop_entry, 0);
+            let inst = make_inst_jump(continue_target);
+            state = emit(state, inst);
+        },
+        18 => {  // STMT_MODULE
+            let name = int_to_ptr(get_at(stmt_node, 1));
+            let body = int_to_ptr(get_at(stmt_node, 2));
+
+            // Lower module body statements
+            let i = 0;
+            let body_len = array_len(body);
+            loop(i < body_len, 1000) {
+                let stmt = int_to_ptr(get_at(body, i));
+                state = lower_stmt(state, stmt);
+                i += 1;
+            }
+        },
+        19 => {  // STMT_IMPORT
+            // Import statements are markers for future linking
+            // For now, they don't emit any instructions
+        },
+        20 => {  // STMT_EXPORT
+            let item_node = int_to_ptr(get_at(stmt_node, 1));
+
+            // Lower the exported item (typically a function declaration)
+            // The item itself handles the lowering
+            state = lower_stmt(state, item_node);
+        },
+        _ => {
+            print("Error: unknown statement type ");
+            print_int(node_type);
+            print("\n");
+        },
+    }
+
+    return state;
+}
+
+// ============================================================================
+// Function and Program Lowering
+// ============================================================================
+
+fn lower_function(state: [i64], func_node: [i64]) -> [i64] {
+    let name = int_to_ptr(get_at(func_node, 1));
+    let params = int_to_ptr(get_at(func_node, 2));
+    let body = int_to_ptr(get_at(func_node, 3));
+
+    // Extract attributes (new field at index 4)
+    let attributes = [];
+    if (array_len(func_node) > 4) {
+        attributes = int_to_ptr(get_at(func_node, 4));
+    }
+
+    // Extract max_depth from attributes
+    // Look for "max_depth(N)" in attributes array
+    let max_depth = 1000;  // DEFAULT_MAX_DEPTH
+    let i = 0;
+    loop(i < array_len(attributes), 10) {
+        let attr_str = int_to_ptr(get_at(attributes, i));
+        // Check if starts with "max_depth"
+        if (starts_with(attr_str, "max_depth")) {
+            // Extract the number between ( and )
+            // For simplicity, find the opening parenthesis
+            let paren_idx = index_of(attr_str, "(");
+            if (paren_idx >= 0) {
+                let close_idx = index_of(attr_str, ")");
+                if (close_idx > paren_idx) {
+                    let num_str = substring(attr_str, paren_idx + 1, close_idx);
+                    // Try to parse as integer
+                    let parsed = to_int(num_str);
+                    if (parsed > 0) {
+                        max_depth = parsed;
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+
+    // Register function at current PC
+    let func_start = get_pc(state);
+    state = register_function(state, name, func_start);
+
+    // Emit FuncDef instruction with max_depth
+    let funcdef = make_inst_funcdef(name, params, func_start + 1, max_depth);
+    state = emit(state, funcdef);
+
+    // Bind parameters to registers
+    let i = 0;
+    let params_len = array_len(params);
+    loop(i < params_len, 100) {
+        let param_name = int_to_ptr(get_at(params, i));
+        let alloc_result = alloc_reg(state);
+        let param_reg = get_at(alloc_result, 0);
+        state = int_to_ptr(get_at(alloc_result, 1));
+        state = bind_var(state, param_name, param_reg);
+        i += 1;
+    }
+
+    // Lower function body
+    i = 0;
+    let body_len = array_len(body);
+    loop(i < body_len, 1000) {
+        let stmt = int_to_ptr(get_at(body, i));
+        state = lower_stmt(state, stmt);
+        i += 1;
+    }
+
+    // Implicit return 0 if no explicit return
+    let alloc_result = alloc_reg(state);
+    let zero_reg = get_at(alloc_result, 0);
+    state = int_to_ptr(get_at(alloc_result, 1));
+    let zero_const = make_inst_constant(zero_reg, 0, 0);
+    state = emit(state, zero_const);
+    let ret = make_inst_return(zero_reg);
+    state = emit(state, ret);
+
+    return state;
+}
+
+export fn lower_program(program_node: [i64]) -> [i64] {
+    let state = make_lowerer();
+
+    let functions = int_to_ptr(get_at(program_node, 1));
+    let i = 0;
+    let funcs_len = array_len(functions);
+
+    loop(i < funcs_len, 1000) {
+        let func_node = int_to_ptr(get_at(functions, i));
+        state = lower_function(state, func_node);
+        i += 1;
+    }
+
+    return get_instructions(state);
+}
+
+// ============================================================================
+// Main Entry Point
+// ============================================================================
+
+fn main() -> i64 {
+    print("HLX Bootstrap Lowering Pass\n");
+    print("This will convert AST to bytecode\n");
+
+    // TODO: Integration with parser
+    // For now, this is the lowering infrastructure
+
+    return 0;
+}
+
+}

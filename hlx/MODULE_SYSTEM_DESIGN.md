@@ -23,7 +23,7 @@ The HLX module system enables:
 Functions can be marked for export using the `export` keyword:
 
 ```hlx
-// math.hlxa
+// math.hlx
 program math_lib {
     export fn add(a: i64, b: i64) -> i64 {
         return a + b;
@@ -45,8 +45,8 @@ program math_lib {
 Import specific functions from other modules:
 
 ```hlx
-// main.hlxa
-import { add, multiply } from "./math.hlxa";
+// main.hlx
+import { add, multiply } from "./math.hlx";
 
 program main {
     fn main() -> i64 {
@@ -60,7 +60,7 @@ program main {
 **Syntax Rules:**
 - Import statements must appear at the top of the file, before the `program` declaration
 - Import paths are relative to the current file
-- Import paths must use `.hlxa` extension
+- Import paths must use `.hlx` extension
 - Imported names must be explicitly listed (no wildcard imports for v1)
 
 ---
@@ -70,8 +70,8 @@ program main {
 ### Module Resolution
 
 1. **Path Resolution**:
-   - Relative paths: `"./foo.hlxa"` → same directory
-   - Parent paths: `"../bar.hlxa"` → parent directory
+   - Relative paths: `"./foo.hlx"` → same directory
+   - Parent paths: `"../bar.hlx"` → parent directory
    - No absolute paths (for portability)
 
 2. **File Loading**:
@@ -100,14 +100,14 @@ program utils {
 
 **Single-file compilation (current)**:
 ```
-source.hlxa → parse → lower → emit → binary.hlxb
+source.hlx → parse → lower → emit → binary.hlxb
 ```
 
 **Multi-file compilation (with modules)**:
 ```
-main.hlxa → parse → discover imports
-    ├→ foo.hlxa → parse → extract exports
-    └→ bar.hlxa → parse → extract exports
+main.hlx → parse → discover imports
+    ├→ foo.hlx → parse → extract exports
+    └→ bar.hlx → parse → extract exports
          → link all → lower → emit → binary.hlxb
 ```
 
@@ -128,7 +128,7 @@ main.hlxa → parse → discover imports
 enum Item {
     Import {
         names: Vec<String>,      // ["add", "multiply"]
-        path: String,            // "./math.hlxa"
+        path: String,            // "./math.hlx"
     },
     Statement(Statement),
 }
@@ -270,7 +270,7 @@ pub fn compile_file(path: &Path) -> Result<Vec<u8>> {
 
 ### Before (monolithic):
 ```
-compiler.hlxa (2500 lines)
+compiler.hlx (2500 lines)
   - tokenize() function
   - parse_program() function
   - lower_program() function
@@ -280,7 +280,7 @@ compiler.hlxa (2500 lines)
 
 ### After (modular):
 
-**lexer.hlxa**:
+**lexer.hlx**:
 ```hlx
 program hlx_lexer {
     export fn tokenize(source: String) -> [i64] {
@@ -289,7 +289,7 @@ program hlx_lexer {
 }
 ```
 
-**parser.hlxa**:
+**parser.hlx**:
 ```hlx
 program hlx_parser {
     export fn parse_program(tokens: [i64]) -> [i64] {
@@ -298,7 +298,7 @@ program hlx_parser {
 }
 ```
 
-**lower.hlxa**:
+**lower.hlx**:
 ```hlx
 program hlx_lowerer {
     export fn lower_program(ast: [i64]) -> [i64] {
@@ -307,7 +307,7 @@ program hlx_lowerer {
 }
 ```
 
-**emit.hlxa**:
+**emit.hlx**:
 ```hlx
 program hlx_emitter {
     export fn emit_bytecode(instructions: [i64]) -> [i64] {
@@ -316,12 +316,12 @@ program hlx_emitter {
 }
 ```
 
-**compiler.hlxa** (main):
+**compiler.hlx** (main):
 ```hlx
-import { tokenize } from "./lexer.hlxa";
-import { parse_program } from "./parser.hlxa";
-import { lower_program } from "./lower.hlxa";
-import { emit_bytecode } from "./emit.hlxa";
+import { tokenize } from "./lexer.hlx";
+import { parse_program } from "./parser.hlx";
+import { lower_program } from "./lower.hlx";
+import { emit_bytecode } from "./emit.hlx";
 
 program bootstrap_compiler {
     fn compile(source: String) -> [i64] {
@@ -345,37 +345,37 @@ program bootstrap_compiler {
 
 1. **Import not found**:
    ```
-   Error: Cannot find module './foo.hlxa'
-     --> main.hlxa:1:24
+   Error: Cannot find module './foo.hlx'
+     --> main.hlx:1:24
       |
-    1 | import { bar } from "./foo.hlxa";
+    1 | import { bar } from "./foo.hlx";
       |                        ^^^^^^^^^^
    ```
 
 2. **Exported function not found**:
    ```
-   Error: Function 'bar' not exported by './foo.hlxa'
-     --> main.hlxa:1:10
+   Error: Function 'bar' not exported by './foo.hlx'
+     --> main.hlx:1:10
       |
-    1 | import { bar } from "./foo.hlxa";
+    1 | import { bar } from "./foo.hlx";
       |          ^^^
    ```
 
 3. **Circular dependency**:
    ```
    Error: Circular module dependency detected
-     --> a.hlxa imports b.hlxa
-         b.hlxa imports c.hlxa
-         c.hlxa imports a.hlxa
+     --> a.hlx imports b.hlx
+         b.hlx imports c.hlx
+         c.hlx imports a.hlx
    ```
 
 4. **Name conflict**:
    ```
    Error: Function 'foo' imported from multiple modules
-     --> main.hlxa:2:10
+     --> main.hlx:2:10
       |
-    1 | import { foo } from "./a.hlxa";
-    2 | import { foo } from "./b.hlxa";
+    1 | import { foo } from "./a.hlx";
+    2 | import { foo } from "./b.hlx";
       |          ^^^
    ```
 
@@ -385,15 +385,15 @@ program bootstrap_compiler {
 
 ### Test 1: Simple Import/Export
 ```hlx
-// utils.hlxa
+// utils.hlx
 program utils {
     export fn double(x: i64) -> i64 {
         return x * 2;
     }
 }
 
-// main.hlxa
-import { double } from "./utils.hlxa";
+// main.hlx
+import { double } from "./utils.hlx";
 program main {
     fn main() -> i64 {
         return double(21); // Should return 42
@@ -403,35 +403,35 @@ program main {
 
 ### Test 2: Multiple Imports
 ```hlx
-import { add } from "./math.hlxa";
-import { print_result } from "./io.hlxa";
+import { add } from "./math.hlx";
+import { print_result } from "./io.hlx";
 ```
 
 ### Test 3: Circular Dependency Detection
 ```hlx
-// a.hlxa imports b.hlxa
-// b.hlxa imports a.hlxa
+// a.hlx imports b.hlx
+// b.hlx imports a.hlx
 // Should fail with error
 ```
 
 ### Test 4: Bootstrap Compiler
 ```hlx
 // The ultimate test: 4-file modular bootstrap compiler
-import { tokenize } from "./lexer.hlxa";
-import { parse_program } from "./parser.hlxa";
-import { lower_program } from "./lower.hlxa";
-import { emit_bytecode } from "./emit.hlxa";
+import { tokenize } from "./lexer.hlx";
+import { parse_program } from "./parser.hlx";
+import { lower_program } from "./lower.hlx";
+import { emit_bytecode } from "./emit.hlx";
 ```
 
 ---
 
 ## Future Enhancements (Not in v1)
 
-1. **Wildcard imports**: `import * from "./foo.hlxa";`
-2. **Aliasing**: `import { foo as bar } from "./baz.hlxa";`
-3. **Re-exports**: `export { foo } from "./bar.hlxa";`
+1. **Wildcard imports**: `import * from "./foo.hlx";`
+2. **Aliasing**: `import { foo as bar } from "./baz.hlx";`
+3. **Re-exports**: `export { foo } from "./bar.hlx";`
 4. **Type exports**: `export type Point = [i64, i64];`
-5. **Nested paths**: `import { foo } from "./lib/utils.hlxa";`
+5. **Nested paths**: `import { foo } from "./lib/utils.hlx";`
 6. **Package system**: `import { foo } from "stdlib/math";`
 
 ---

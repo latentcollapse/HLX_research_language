@@ -453,7 +453,7 @@ hlx_runtime/src/backends/vulkan/shaders/
    - Push constant setup
    - Contract handler implementations
 
-2. **Fix stdlib/math.hlxa** (Priority 2)
+2. **Fix stdlib/math.hlx** (Priority 2)
    - Replace O(n) floor/ceil
    - Add sin, cos, tan, log, exp
    - Benchmark improvements

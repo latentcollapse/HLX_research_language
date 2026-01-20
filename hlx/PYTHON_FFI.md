@@ -6,7 +6,7 @@ Complete guide for using HLX functions from Python with ctypes-based FFI.
 
 ### 1. Write HLX Library
 
-**math_ops.hlxa:**
+**math_ops.hlx:**
 ```hlx
 program math_ops {
     #[no_mangle]
@@ -28,10 +28,10 @@ program math_ops {
 
 ```bash
 # Compile HLX to crate (for metadata)
-hlx compile math_ops.hlxa -o math_ops.hlxl
+hlx compile math_ops.hlx -o math_ops.hlxl
 
 # Compile to shared library
-hlx compile-native math_ops.hlxa --shared -o libhlx_math.so
+hlx compile-native math_ops.hlx --shared -o libhlx_math.so
 ```
 
 ### 3. Generate Python Wrapper
@@ -197,7 +197,7 @@ python setup.py build_ext --inplace
 ```bash
 # Write pure HLX
 # Compile once
-hlx compile-native lib.hlxa --shared
+hlx compile-native lib.hlx --shared
 hlx generate-python lib.hlxl -o wrapper.py
 
 # Works immediately
@@ -229,11 +229,11 @@ python3 app.py
 
 ```bash
 # Wrong (conflicts)
-hlx compile-native math.hlxa --shared -o libmath.so
+hlx compile-native math.hlx --shared -o libmath.so
 hlx generate-python math.hlxl -o math.py  # Import conflict!
 
 # Correct (no conflict)
-hlx compile-native math.hlxa --shared -o libhlx_math.so
+hlx compile-native math.hlx --shared -o libhlx_math.so
 hlx generate-python math.hlxl -o math.py --lib-name hlx_math
 ```
 

@@ -255,7 +255,7 @@ Performance:    🚀 GPU-accelerated tensor ops
    - Buffer management
    - Push constant setup
 
-2. **Fix stdlib/math.hlxa**
+2. **Fix stdlib/math.hlx**
    - Replace O(n) floor/ceil with intrinsic contracts
    - Add sin, cos, tan, log, exp using GPU or intrinsics
    - Benchmark improvements

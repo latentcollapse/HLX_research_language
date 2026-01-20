@@ -18,7 +18,7 @@ Wait for it to build (takes a few minutes the first time).
 ### Step 2: Test that it works
 
 ```bash
-./target/release/hlx run /home/matt/hlx-courses/examples/01-hello-world.hlxa
+./target/release/hlx run /home/matt/hlx-courses/examples/01-hello-world.hlx
 ```
 
 You should see:
@@ -90,9 +90,9 @@ Build actual programs:
 ├── ... more chapters ...
 │
 └── examples/
-    ├── 01-hello-world.hlxa
-    ├── 02-calculator.hlxa
-    ├── 03-grade-checker.hlxa
+    ├── 01-hello-world.hlx
+    ├── 02-calculator.hlx
+    ├── 03-grade-checker.hlx
     └── ... more examples ...
 ```
 
@@ -102,12 +102,12 @@ All examples can be run with:
 
 ```bash
 cd /path/to/hlx-compiler/hlx
-./target/release/hlx run /home/matt/hlx-courses/examples/EXAMPLE_NAME.hlxa
+./target/release/hlx run /home/matt/hlx-courses/examples/EXAMPLE_NAME.hlx
 ```
 
 Try it now:
 ```bash
-./target/release/hlx run /home/matt/hlx-courses/examples/02-calculator.hlxa
+./target/release/hlx run /home/matt/hlx-courses/examples/02-calculator.hlx
 ```
 
 ## Need Help?

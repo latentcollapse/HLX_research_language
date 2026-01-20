@@ -44,10 +44,10 @@ cargo test test_agent_state_hash
 cargo build --release
 
 # Run an HLX program
-./target/release/hlx run program.hlxa
+./target/release/hlx run program.hlx
 
 # Compile to bytecode
-./target/release/hlx compile program.hlxa -o program.lcc
+./target/release/hlx compile program.hlx -o program.lcc
 ```
 
 ## Project Structure

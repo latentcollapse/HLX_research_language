@@ -1,0 +1,146 @@
+// HLX Builtin Library - Tier 1: Pure Math Operations
+// Phase 3 of Builtin Conversion: Mathematical operations on integers
+// No side effects, pure functional operations
+
+module tier1_pure_math {
+
+// ============================================================================
+// PURE MATH OPERATIONS
+// ============================================================================
+
+// Absolute value - returns non-negative value
+// Examples: abs(-5) -> 5, abs(5) -> 5, abs(0) -> 0
+export fn abs(x: i64) -> i64 {
+    if (x < 0) {
+        return 0 - x;
+    }
+    return x;
+}
+
+// Minimum of two values
+// Examples: min(3, 7) -> 3, min(-5, 2) -> -5, min(4, 4) -> 4
+export fn min(a: i64, b: i64) -> i64 {
+    if (a < b) {
+        return a;
+    }
+    return b;
+}
+
+// Maximum of two values
+// Examples: max(3, 7) -> 7, max(-5, 2) -> 2, max(4, 4) -> 4
+export fn max(a: i64, b: i64) -> i64 {
+    if (a > b) {
+        return a;
+    }
+    return b;
+}
+
+// Clamp value between minimum and maximum
+// Examples: clamp(5, 1, 10) -> 5, clamp(-5, 0, 10) -> 0, clamp(15, 0, 10) -> 10
+export fn clamp(v: i64, min_val: i64, max_val: i64) -> i64 {
+    if (v < min_val) {
+        return min_val;
+    }
+    if (v > max_val) {
+        return max_val;
+    }
+    return v;
+}
+
+// Sign of a number: -1 for negative, 0 for zero, 1 for positive
+// Examples: sign(-5) -> -1, sign(0) -> 0, sign(7) -> 1
+export fn sign(x: i64) -> i64 {
+    if (x < 0) {
+        return 0 - 1;
+    }
+    if (x > 0) {
+        return 1;
+    }
+    return 0;
+}
+
+// Linear interpolation between a and b by t (where t is 0-1 in scaled form)
+// For integer math: lerp(a, b, t) = a + (b - a) * t / 100
+// This allows t to be 0-100 for percentage
+// Examples: lerp(0, 100, 50) -> 50, lerp(10, 20, 0) -> 10, lerp(10, 20, 100) -> 20
+export fn lerp(a: i64, b: i64, t: i64) -> i64 {
+    // Special cases to avoid float division issues
+    if (t == 0) {
+        return a;
+    }
+    if (t == 100) {
+        return b;
+    }
+
+    // General case: compute with proper integer division
+    let diff = b - a;
+    let scaled = diff * t;
+
+    // Integer divide using long division
+    let numerator = scaled;
+    let denominator = 100;
+    let quotient = 0;
+    let remainder = numerator;
+
+    loop(remainder >= denominator, 100) {
+        remainder = remainder - denominator;
+        quotient = quotient + 1;
+    }
+
+    return a + quotient;
+}
+
+// Greatest common divisor using Euclidean algorithm
+// Examples: gcd(12, 8) -> 4, gcd(15, 25) -> 5, gcd(7, 13) -> 1
+export fn gcd(a: i64, b: i64) -> i64 {
+    // Handle negative numbers
+    let x = a;
+    let y = b;
+    if (x < 0) {
+        x = 0 - x;
+    }
+    if (y < 0) {
+        y = 0 - y;
+    }
+
+    // Euclidean algorithm
+    loop(y != 0, 30) {
+        let temp = y;
+        y = x % y;
+        x = temp;
+    }
+
+    return x;
+}
+
+// Least common multiple = (a * b) / gcd(a, b)
+// Examples: lcm(4, 6) -> 12, lcm(3, 5) -> 15, lcm(12, 8) -> 24
+export fn lcm(a: i64, b: i64) -> i64 {
+    let g = gcd(a, b);
+
+    // Handle zero case
+    if (g == 0) {
+        return 0;
+    }
+
+    // Calculate lcm with proper handling of integer division
+    let product = a * b;
+    if (product < 0) {
+        product = 0 - product;
+    }
+
+    // Integer divide using long division
+    let numerator = product;
+    let denominator = g;
+    let quotient = 0;
+    let remainder = numerator;
+
+    loop(remainder >= denominator, 100) {
+        remainder = remainder - denominator;
+        quotient = quotient + 1;
+    }
+
+    return quotient;
+}
+
+}

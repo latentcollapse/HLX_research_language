@@ -47,14 +47,14 @@ A complete VS Code extension with:
 - Syntax highlighting for keywords, types, functions, strings, numbers, comments
 - Auto-closing brackets: `{}`, `[]`, `()`, `""`
 - Line comments with `//`
-- File associations: `.hlxa`, `.hlxc`
+- File associations: `.hlx`, `.hlxc`
 - Configurable LSP path via settings (`hlx.lsp.path`)
 
 **Installed Location**: `~/.vscode/extensions/hlx-language-0.1.0/`
 
 ### 3. Test File
 
-Created `test_lsp.hlxa` with both valid and invalid syntax to verify LSP functionality.
+Created `test_lsp.hlx` with both valid and invalid syntax to verify LSP functionality.
 
 ---
 
@@ -70,7 +70,7 @@ Created `test_lsp.hlxa` with both valid and invalid syntax to verify LSP functio
 
 3. **Open test file**:
    ```bash
-   code /home/matt/hlx-compiler/hlx/test_lsp.hlxa
+   code /home/matt/hlx-compiler/hlx/test_lsp.hlx
    ```
 
 4. **Verify LSP is working**:
@@ -80,7 +80,7 @@ Created `test_lsp.hlxa` with both valid and invalid syntax to verify LSP functio
 
 ### Testing Checklist
 
-- [ ] Open a `.hlxa` file - extension activates
+- [ ] Open a `.hlx` file - extension activates
 - [ ] Type invalid syntax (e.g., `let x = @#$`) - red squiggle appears
 - [ ] Hover over error - error message displays
 - [ ] Fix syntax - red squiggle disappears
@@ -149,7 +149,7 @@ No modifications to existing compiler logic.
 
 ## Phase 1 Success Criteria - ALL MET ✓
 
-1. ✓ Open a `.hlxa` file in VS Code
+1. ✓ Open a `.hlx` file in VS Code
 2. ✓ Type invalid syntax (e.g., missing semicolon)
 3. ✓ See a red squiggle appear
 4. ✓ Hover over it, see error message
@@ -176,7 +176,7 @@ vscode-hlx/
 └── syntaxes/
     └── hlx.tmLanguage.json
 
-test_lsp.hlxa
+test_lsp.hlx
 _docs/LSP_PHASE1_COMPLETE.md (this file)
 ```
 
@@ -250,7 +250,7 @@ cd vscode-hlx
 ```
 ┌─────────────────────────────────────────────┐
 │            VS Code Editor                    │
-│  (User types .hlxa file with syntax)        │
+│  (User types .hlx file with syntax)        │
 └──────────────────┬──────────────────────────┘
                    │ LSP Protocol (JSON-RPC)
                    │ over stdin/stdout
@@ -301,13 +301,13 @@ LSP Features:
 - Configurable LSP binary path
 
 Extension Features:
-- Syntax highlighting for .hlxa and .hlxc files
+- Syntax highlighting for .hlx and .hlxc files
 - Auto-closing brackets and quotes
 - Line comment support (//)
 - File associations and language configuration
 
 Testing:
-- test_lsp.hlxa: Test file with valid/invalid syntax
+- test_lsp.hlx: Test file with valid/invalid syntax
 - Ouroboros verified: Hash unchanged (5b8fa2ee59205fbf...)
 - Extension installed to ~/.vscode/extensions/
 
@@ -342,7 +342,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 4. Restart VS Code: `Developer: Reload Window`
 
 **If syntax highlighting doesn't work**:
-1. Check file extension is `.hlxa` or `.hlxc`
+1. Check file extension is `.hlx` or `.hlxc`
 2. Check language mode in bottom-right corner (should say "HLX")
 3. Manually set language: Click language mode → type "HLX"
 

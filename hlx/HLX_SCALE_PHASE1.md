@@ -151,7 +151,7 @@ Remaining tasks for full HLX-Scale implementation:
 **New Files:**
 - `hlx_compiler/src/substrate.rs` (257 lines)
 - `hlx_compiler/src/substrate_inference.rs` (398 lines)
-- `test_scale.hlxa` (test file demonstrating all features)
+- `test_scale.hlx` (test file demonstrating all features)
 
 **Modified Files:**
 - `hlx_compiler/src/lib.rs` (added exports)

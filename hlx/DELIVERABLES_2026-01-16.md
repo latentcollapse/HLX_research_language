@@ -54,7 +54,7 @@ Comprehensive gap analysis document: `STDLIB_GAPS.md`
 
 ## Test Files Included
 
-### 1. test_gpu_live.hlxa
+### 1. test_gpu_live.hlx
 **Purpose**: Live GPU operation test with synthetic data
 **What it does**:
 - Creates 4x4 RGB tensor programmatically
@@ -64,7 +64,7 @@ Comprehensive gap analysis document: `STDLIB_GAPS.md`
 
 **Result**: ✅ All operations execute successfully
 
-### 2. test_gpu_image_ops.hlxa
+### 2. test_gpu_image_ops.hlx
 **Purpose**: Documentation of GPU capabilities
 **What it does**:
 - Lists all available GPU operations
@@ -73,7 +73,7 @@ Comprehensive gap analysis document: `STDLIB_GAPS.md`
 
 **Result**: ✅ Informative overview
 
-### 3. example_image_pipeline.hlxa
+### 3. example_image_pipeline.hlx
 **Purpose**: Real-world usage example
 **What it does**:
 - Shows complete image processing pipeline
@@ -142,8 +142,8 @@ Comprehensive gap analysis document: `STDLIB_GAPS.md`
 
 ### Test Execution
 ```
-✅ test_gpu_live.hlxa: All operations execute on GPU
-✅ example_image_pipeline.hlxa: Documentation renders correctly
+✅ test_gpu_live.hlx: All operations execute on GPU
+✅ example_image_pipeline.hlx: Documentation renders correctly
 ✅ tensor() builtin: Creates tensors from array data
 ```
 
@@ -306,7 +306,7 @@ HLX now supports:
 2. **Create test image**: Download any image as `input.png`
 3. **Run example**:
    ```bash
-   hlx run example_image_pipeline.hlxa
+   hlx run example_image_pipeline.hlx
    ```
 4. **Uncomment pipeline code** in example file
 5. **Run again** and see GPU magic happen!

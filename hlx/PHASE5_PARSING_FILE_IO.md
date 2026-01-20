@@ -290,7 +290,7 @@ All operations handle errors gracefully:
 
 ## Testing
 
-**Test File**: `test_phase5.hlxa`
+**Test File**: `test_phase5.hlx`
 - ✅ All 18 operations tested
 - ✅ File creation verified
 - ✅ Directory operations confirmed

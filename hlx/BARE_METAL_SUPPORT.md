@@ -67,7 +67,7 @@ Asm {
 **New Command**: `hlx compile-native`
 
 ```bash
-hlx compile-native boot.hlxa \
+hlx compile-native boot.hlx \
     --target x86_64-unknown-none-elf \
     --output boot.o \
     [--asm]      # Emit assembly instead of object
@@ -77,20 +77,20 @@ hlx compile-native boot.hlxa \
 **Examples**:
 ```bash
 # Compile for bare metal x86-64
-hlx compile-native kernel.hlxa --target x86_64-unknown-none-elf -o kernel.o
+hlx compile-native kernel.hlx --target x86_64-unknown-none-elf -o kernel.o
 
 # See assembly output
-hlx compile-native kernel.hlxa --target x86_64-unknown-none-elf --asm -o kernel.s
+hlx compile-native kernel.hlx --target x86_64-unknown-none-elf --asm -o kernel.s
 
 # Debug LLVM IR
-hlx compile-native kernel.hlxa --target x86_64-unknown-none-elf --print-ir
+hlx compile-native kernel.hlx --target x86_64-unknown-none-elf --print-ir
 ```
 
 ---
 
 ## Example: VGA Text Mode Bootloader
 
-### HLX Code (`boot.hlxa`)
+### HLX Code (`boot.hlx`)
 
 ```hlx
 // Write to VGA text buffer at 0xB8000
@@ -130,7 +130,7 @@ fn main() -> Int {
 
 ```bash
 # Compile to object file
-hlx compile-native boot.hlxa --target x86_64-unknown-none-elf -o boot.o
+hlx compile-native boot.hlx --target x86_64-unknown-none-elf -o boot.o
 
 # Link with linker script (example)
 ld -T linker.ld boot.o -o boot.elf
@@ -188,7 +188,7 @@ let result = builder.build_indirect_call(
 ## Compilation Flow
 
 ```
-HLX Source (boot.hlxa)
+HLX Source (boot.hlx)
     ↓
 Parse → AST
     ↓
@@ -272,7 +272,7 @@ fn test_asm() -> Int {
 
 ### Verify Target Triple
 ```bash
-hlx compile-native test.hlxa --target x86_64-unknown-none-elf --print-ir 2>&1 | grep target
+hlx compile-native test.hlx --target x86_64-unknown-none-elf --print-ir 2>&1 | grep target
 # Should show: target triple = "x86_64-unknown-none-elf"
 ```
 
@@ -284,7 +284,7 @@ hlx compile-native test.hlxa --target x86_64-unknown-none-elf --print-ir 2>&1 | 
 
 **To test**:
 ```bash
-./target/release/hlx compile-native your_kernel.hlxa \
+./target/release/hlx compile-native your_kernel.hlx \
     --target x86_64-unknown-none-elf \
     -o kernel.o
 ```

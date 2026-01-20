@@ -12,7 +12,7 @@ The implementation uses three specialized sub-phases:
 ## Phase 8a: Bootstrap Parser - Attribute Parsing ✅
 
 ### Implementation
-**File**: `hlx_bootstrap/parser.hlxa` (~1165 lines total)
+**File**: `hlx_bootstrap/parser.hlx` (~1165 lines total)
 
 **New Function**: `parse_attributes()` (~55 lines)
 - Parses `#[...]` blocks before function definitions
@@ -39,7 +39,7 @@ The implementation uses three specialized sub-phases:
 ## Phase 8b: Bootstrap Semantic - Validation ✅
 
 ### Implementation
-**File**: `hlx_bootstrap/semantic_complete.hlxa` (~1470 lines total)
+**File**: `hlx_bootstrap/semantic_complete.hlx` (~1470 lines total)
 
 **New Function**: `extract_and_validate_max_depth()` (~70 lines)
 - Searches attributes array for "max_depth(N)" pattern
@@ -70,7 +70,7 @@ Validates and reports errors for:
 ## Phase 8c: Bootstrap Lowering - Emission ✅
 
 ### Implementation
-**File**: `hlx_bootstrap/lower.hlxa` (~1850 lines total)
+**File**: `hlx_bootstrap/lower.hlx` (~1850 lines total)
 
 **Key Changes**:
 1. `lower_function()` (~45 lines added):
@@ -233,19 +233,19 @@ Bootstrap compiler can now:
 
 ## Files Modified
 
-1. **hlx_bootstrap/parser.hlxa**
+1. **hlx_bootstrap/parser.hlx**
    - Added: `parse_attributes()` function
    - Modified: `parse_function()`, `make_function()` for 5-element nodes
 
-2. **hlx_bootstrap/semantic_complete.hlxa**
+2. **hlx_bootstrap/semantic_complete.hlx**
    - Added: `extract_and_validate_max_depth()` function
    - Modified: `analyze_func()` to validate max_depth
 
-3. **hlx_bootstrap/lower.hlxa**
+3. **hlx_bootstrap/lower.hlx**
    - Modified: `lower_function()` to extract max_depth
    - Modified: `make_inst_funcdef()` for 5-element instructions
 
-4. **hlx_bootstrap/pipeline.hlxa**
+4. **hlx_bootstrap/pipeline.hlx**
    - Integrated semantic analysis phase
    - Updated test cases for demonstration
 

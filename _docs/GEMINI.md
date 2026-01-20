@@ -12,4 +12,4 @@
 - The HLX compiler is now fully self-hosted. The Rust bootstrap compiler produced Stage 1, which successfully compiled itself to produce Stage 2. Stage 2 then compiled itself to produce Stage 3.
 - Determinism verified: Stage 2 and Stage 3 hashes match bit-perfectly (5b8fa2ee...).
 - We are pivoting to building "HLX-Flow" (an n8n killer) to demonstrate the language's power.
-- HLX VM (hlx run) now supports 'to_float' intrinsic and 'ArrayAlloc' instruction, achieving parity with the LLVM backend for complex simulations like the Particle System. Verified with 'lsp_particles.hlxa'. (2026-01-09)
+- HLX VM (hlx run) now supports 'to_float' intrinsic and 'ArrayAlloc' instruction, achieving parity with the LLVM backend for complex simulations like the Particle System. Verified with 'lsp_particles.hlx'. (2026-01-09)

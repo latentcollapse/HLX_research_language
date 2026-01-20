@@ -234,7 +234,7 @@ cargo build --release
 ```
 
 ### Hello World
-Create `hello.hlxa`:
+Create `hello.hlx`:
 ```hlx
 program hello {
     fn main() {
@@ -245,7 +245,7 @@ program hello {
 
 Compile and run:
 ```bash
-./target/release/hlx compile hello.hlxa -o hello.lcc
+./target/release/hlx compile hello.hlx -o hello.lcc
 ./target/release/hlx run hello.lcc
 ```
 
@@ -477,7 +477,7 @@ cargo test --release
 ./target/release/hlx run examples/test_tensor.lcc
 
 # Compile to native and verify
-./target/release/hlx compile examples/fibonacci.hlxa --emit-obj -o fib.o
+./target/release/hlx compile examples/fibonacci.hlx --emit-obj -o fib.o
 gcc fib.o -o fibonacci
 ./fibonacci
 ```

@@ -1,0 +1,916 @@
+// HLX Bootstrap Semantic Analyzer - Complete
+// Phase 1: Scope tracking
+// Phase 2: Type checking & inference
+// Phase 3: Comprehensive diagnostics
+
+module semantic_complete {
+
+// ============================================================================
+// TYPE SYSTEM
+// ============================================================================
+
+fn TYPE_I64() -> i64 { return 0; }
+fn TYPE_STRING() -> i64 { return 1; }
+fn TYPE_ARRAY() -> i64 { return 2; }
+fn TYPE_FUNCTION() -> i64 { return 3; }
+fn TYPE_NULL() -> i64 { return 4; }
+fn TYPE_UNKNOWN() -> i64 { return 5; }
+fn TYPE_CONTRACT() -> i64 { return 6; }
+fn TYPE_HANDLE() -> i64 { return 7; }
+
+fn type_name(t: i64) -> String {
+    if (t == 0) { return "i64"; }
+    if (t == 1) { return "String"; }
+    if (t == 2) { return "[i64]"; }
+    if (t == 3) { return "function"; }
+    if (t == 4) { return "null"; }
+    if (t == 6) { return "contract"; }
+    if (t == 7) { return "handle"; }
+    return "unknown";
+}
+
+fn types_compatible(t1: i64, t2: i64) -> i64 {
+    if (t1 == t2) { return 1; }
+    if (t1 == TYPE_UNKNOWN()) { return 1; }
+    if (t2 == TYPE_UNKNOWN()) { return 1; }
+    return 0;
+}
+
+// ============================================================================
+// BINDING WITH TYPE INFORMATION
+// ============================================================================
+
+// Binding: [name_ptr, type, line, column, assigned, is_param, is_func, arity]
+fn make_binding(name_ptr: i64, type_val: i64, line: i64, column: i64) -> [i64] {
+    let binding = [0, 0, 0, 0, 0, 0, 0, 0];
+    binding = set_at(binding, 0, name_ptr);      // name
+    binding = set_at(binding, 1, type_val);      // type
+    binding = set_at(binding, 2, line);          // line
+    binding = set_at(binding, 3, column);        // column
+    binding = set_at(binding, 4, 1);             // assigned
+    binding = set_at(binding, 5, 0);             // is_param
+    binding = set_at(binding, 6, 0);             // is_func
+    binding = set_at(binding, 7, 0);             // arity (for functions)
+    return binding;
+}
+
+fn binding_name(binding: [i64]) -> String {
+    return int_to_ptr(get_at(binding, 0));
+}
+
+fn binding_type(binding: [i64]) -> i64 {
+    return get_at(binding, 1);
+}
+
+fn binding_line(binding: [i64]) -> i64 {
+    return get_at(binding, 2);
+}
+
+fn binding_column(binding: [i64]) -> i64 {
+    return get_at(binding, 3);
+}
+
+fn binding_is_func(binding: [i64]) -> i64 {
+    return get_at(binding, 6);
+}
+
+fn binding_arity(binding: [i64]) -> i64 {
+    return get_at(binding, 7);
+}
+
+fn mark_binding_func(binding: [i64], arity: i64) -> [i64] {
+    binding = set_at(binding, 6, 1);
+    binding = set_at(binding, 7, arity);
+    return binding;
+}
+
+// ============================================================================
+// SCOPE MANAGEMENT
+// ============================================================================
+
+fn make_scope(level: i64, parent_ptr: i64) -> [i64] {
+    let scope = [0, 0, 0];
+    scope = set_at(scope, 0, level);
+    scope = set_at(scope, 1, ptr_to_int([]));
+    scope = set_at(scope, 2, parent_ptr);
+    return scope;
+}
+
+fn scope_level(scope: [i64]) -> i64 {
+    return get_at(scope, 0);
+}
+
+fn scope_bindings(scope: [i64]) -> [i64] {
+    return int_to_ptr(get_at(scope, 1));
+}
+
+fn scope_parent(scope: [i64]) -> [i64] {
+    let parent_ptr = get_at(scope, 2);
+    if (parent_ptr == 0) {
+        return [];
+    }
+    return int_to_ptr(parent_ptr);
+}
+
+fn set_scope_bindings(scope: [i64], bindings: [i64]) -> [i64] {
+    return set_at(scope, 1, ptr_to_int(bindings));
+}
+
+fn lookup_in_scope(scope: [i64], name: String) -> [i64] {
+    let bindings = scope_bindings(scope);
+    let len = array_len(bindings);
+    let i = 0;
+
+    loop(i < len, 10000) {
+        let binding_entry = int_to_ptr(get_at(bindings, i));
+        let binding = int_to_ptr(get_at(binding_entry, 1));
+        let entry_name = binding_name(binding);
+
+        if (strcmp(entry_name, name) == 0) {
+            return binding;
+        }
+
+        i += 1;
+    }
+
+    return [];
+}
+
+fn lookup_binding(scope: [i64], name: String) -> [i64] {
+    let current = scope;
+
+    loop(1 == 1, 10000) {
+        let result = lookup_in_scope(current, name);
+
+        if (array_len(result) > 0) {
+            return result;
+        }
+
+        let parent = scope_parent(current);
+        if (array_len(parent) == 0) {
+            break;
+        }
+
+        current = parent;
+    }
+
+    return [];
+}
+
+fn add_binding(scope: [i64], name: String, type_val: i64, line: i64, column: i64) -> [i64] {
+    let binding = make_binding(ptr_to_int(name), type_val, line, column);
+    let bindings = scope_bindings(scope);
+
+    let entry = [0, 0];
+    entry = set_at(entry, 0, ptr_to_int(name));
+    entry = set_at(entry, 1, ptr_to_int(binding));
+
+    bindings = push(bindings, ptr_to_int(entry));
+    return set_scope_bindings(scope, bindings);
+}
+
+// ============================================================================
+// ERROR MANAGEMENT WITH DIAGNOSTICS
+// ============================================================================
+
+// Error: [code_ptr, message_ptr, line, column, expected, got, context_ptr]
+fn make_error(code: String, message: String, line: i64, column: i64) -> [i64] {
+    let error = [0, 0, 0, 0, 0, 0, 0];
+    error = set_at(error, 0, ptr_to_int(code));
+    error = set_at(error, 1, ptr_to_int(message));
+    error = set_at(error, 2, line);
+    error = set_at(error, 3, column);
+    error = set_at(error, 4, ptr_to_int(""));      // expected
+    error = set_at(error, 5, ptr_to_int(""));      // got
+    error = set_at(error, 6, ptr_to_int(""));      // context
+    return error;
+}
+
+fn error_with_types(code: String, message: String, line: i64, column: i64,
+                     expected: String, got: String) -> [i64] {
+    let error = make_error(code, message, line, column);
+    error = set_at(error, 4, ptr_to_int(expected));
+    error = set_at(error, 5, ptr_to_int(got));
+    return error;
+}
+
+fn make_semantic_state() -> [i64] {
+    let global_scope = make_scope(0, 0);
+    let state = [0, 0];
+    state = set_at(state, 0, ptr_to_int(global_scope));
+    state = set_at(state, 1, ptr_to_int([]));
+    return state;
+}
+
+fn semantic_global_scope(state: [i64]) -> [i64] {
+    return int_to_ptr(get_at(state, 0));
+}
+
+fn semantic_errors(state: [i64]) -> [i64] {
+    return int_to_ptr(get_at(state, 1));
+}
+
+fn add_error_to_state(state: [i64], error: [i64]) -> [i64] {
+    let errors = semantic_errors(state);
+    errors = push(errors, ptr_to_int(error));
+    return set_at(state, 1, ptr_to_int(errors));
+}
+
+fn has_errors(state: [i64]) -> i64 {
+    let errors = semantic_errors(state);
+    if (array_len(errors) > 0) {
+        return 1;
+    }
+    return 0;
+}
+
+// ============================================================================
+// TYPE INFERENCE
+// ============================================================================
+
+// Infer type from expression AST node
+fn infer_type(state: [i64], scope: [i64], expr_node: [i64]) -> i64 {
+    let node_type = get_at(expr_node, 0);
+
+    if (node_type == 1) {  // INT
+        return TYPE_I64();
+    }
+
+    if (node_type == 2) {  // STRING
+        return TYPE_STRING();
+    }
+
+    if (node_type == 3) {  // IDENT
+        let name_ptr = get_at(expr_node, 1);
+        let name = int_to_ptr(name_ptr);
+        let binding = lookup_binding(scope, name);
+
+        if (array_len(binding) > 0) {
+            return binding_type(binding);
+        }
+
+        return TYPE_UNKNOWN();
+    }
+
+    if (node_type == 4) {  // BINOP
+        let op = get_at(expr_node, 1);
+
+        // Arithmetic operations return i64
+        if (op >= 30) {
+            if (op <= 34) {
+                return TYPE_I64();
+            }
+        }
+
+        // Comparisons return i64
+        if (op >= 35) {
+            if (op <= 40) {
+                return TYPE_I64();
+            }
+        }
+
+        // Logical ops return i64
+        if (op >= 41) {
+            if (op <= 42) {
+                return TYPE_I64();
+            }
+        }
+
+        // Bitwise ops return i64
+        if (op >= 45) {
+            if (op <= 50) {
+                return TYPE_I64();
+            }
+        }
+
+        return TYPE_UNKNOWN();
+    }
+
+    if (node_type == 5) {  // CALL
+        // For now, assume all user functions return i64
+        return TYPE_I64();
+    }
+
+    if (node_type == 6) {  // ARRAY
+        return TYPE_ARRAY();
+    }
+
+    if (node_type == 7) {  // INDEX
+        return TYPE_I64();  // Array element
+    }
+
+    if (node_type == 8) {  // UNARY
+        let op = get_at(expr_node, 1);
+        if (op == 56) {  // NOT
+            return TYPE_I64();
+        }
+        return TYPE_UNKNOWN();
+    }
+
+    if (node_type == 9) {  // CONTRACT literal
+        return TYPE_CONTRACT();
+    }
+
+    if (node_type == 25) {  // CONTRACT_FIELD (part of contract literal)
+        return TYPE_UNKNOWN();  // Handled by parent contract
+    }
+
+    if (node_type == 26) {  // FIELD_ACCESS
+        let field_id = get_at(expr_node, 2);
+        // For now, assume all contract fields are i64
+        return TYPE_I64();
+    }
+
+    if (node_type == 27) {  // COLLAPSE
+        return TYPE_HANDLE();
+    }
+
+    if (node_type == 28) {  // RESOLVE
+        return TYPE_UNKNOWN();  // Could be any type
+    }
+
+    return TYPE_UNKNOWN();
+}
+
+// ============================================================================
+// TYPE VALIDATION
+// ============================================================================
+
+fn validate_binop_types(state: [i64], scope: [i64], expr_node: [i64]) -> [i64] {
+    let op = get_at(expr_node, 1);
+    let lhs_node = int_to_ptr(get_at(expr_node, 2));
+    let rhs_node = int_to_ptr(get_at(expr_node, 3));
+    let line = get_at(expr_node, 4);
+
+    let lhs_type = infer_type(state, scope, lhs_node);
+    let rhs_type = infer_type(state, scope, rhs_node);
+
+    // Arithmetic ops require i64
+    if (op >= 30) {
+        if (op <= 34) {
+            if (lhs_type != TYPE_I64()) {
+                let msg = concat("Arithmetic operation requires i64, got ", type_name(lhs_type));
+                let err = error_with_types("E_TYPE_MISMATCH", msg, line, 0, "i64", type_name(lhs_type));
+                state = add_error_to_state(state, err);
+            }
+            if (rhs_type != TYPE_I64()) {
+                let msg = concat("Arithmetic operation requires i64, got ", type_name(rhs_type));
+                let err = error_with_types("E_TYPE_MISMATCH", msg, line, 0, "i64", type_name(rhs_type));
+                state = add_error_to_state(state, err);
+            }
+        }
+    }
+
+    // Comparison ops - types must match
+    if (op >= 35) {
+        if (op <= 40) {
+            if (!types_compatible(lhs_type, rhs_type)) {
+                let msg = concat("Cannot compare ", type_name(lhs_type));
+                msg = concat(msg, " with ");
+                msg = concat(msg, type_name(rhs_type));
+                let err = error_with_types("E_TYPE_MISMATCH", msg, line, 0, type_name(lhs_type), type_name(rhs_type));
+                state = add_error_to_state(state, err);
+            }
+        }
+    }
+
+    return state;
+}
+
+// ============================================================================
+// EXPRESSION ANALYSIS
+// ============================================================================
+
+fn analyze_expr(state: [i64], scope: [i64], expr_node: [i64]) -> [i64] {
+    let node_type = get_at(expr_node, 0);
+
+    if (node_type == 1) {  // INT
+        return state;
+    }
+
+    if (node_type == 2) {  // STRING
+        return state;
+    }
+
+    if (node_type == 3) {  // IDENT
+        let name_ptr = get_at(expr_node, 1);
+        let name = int_to_ptr(name_ptr);
+        let line = get_at(expr_node, 2);
+
+        let binding = lookup_binding(scope, name);
+
+        if (array_len(binding) == 0) {
+            let msg = concat("Undefined variable: ", name);
+            let err = make_error("E_UNDEFINED_VAR", msg, line, 0);
+            state = add_error_to_state(state, err);
+        }
+
+        return state;
+    }
+
+    if (node_type == 4) {  // BINOP
+        let lhs_node = int_to_ptr(get_at(expr_node, 2));
+        let rhs_node = int_to_ptr(get_at(expr_node, 3));
+
+        state = analyze_expr(state, scope, lhs_node);
+        state = analyze_expr(state, scope, rhs_node);
+        state = validate_binop_types(state, scope, expr_node);
+
+        return state;
+    }
+
+    if (node_type == 5) {  // CALL
+        let func_name_ptr = get_at(expr_node, 1);
+        let func_name = int_to_ptr(func_name_ptr);
+        let args_nodes = int_to_ptr(get_at(expr_node, 2));
+        let line = get_at(expr_node, 3);
+
+        let binding = lookup_binding(scope, func_name);
+
+        if (array_len(binding) == 0) {
+            let msg = concat("Undefined function: ", func_name);
+            let err = make_error("E_UNDEFINED_FUNC", msg, line, 0);
+            state = add_error_to_state(state, err);
+        } else if (binding_is_func(binding) == 1) {
+            // Check arity
+            let expected_arity = binding_arity(binding);
+            let actual_arity = array_len(args_nodes);
+
+            if (expected_arity != actual_arity) {
+                let msg_exp = str(expected_arity);
+                let msg_act = str(actual_arity);
+                let msg = concat(func_name, " expects ");
+                msg = concat(msg, msg_exp);
+                msg = concat(msg, " args, got ");
+                msg = concat(msg, msg_act);
+                let err = error_with_types("E_ARITY_MISMATCH", msg, line, 0, msg_exp, msg_act);
+                state = add_error_to_state(state, err);
+            }
+        }
+
+        // Analyze arguments
+        let args_len = array_len(args_nodes);
+        let i = 0;
+        loop(i < args_len, 1000) {
+            let arg_node = int_to_ptr(get_at(args_nodes, i));
+            state = analyze_expr(state, scope, arg_node);
+            i += 1;
+        }
+
+        return state;
+    }
+
+    if (node_type == 6) {  // ARRAY
+        let elements = int_to_ptr(get_at(expr_node, 1));
+        let len = array_len(elements);
+        let i = 0;
+
+        loop(i < len, 1000) {
+            let elem_node = int_to_ptr(get_at(elements, i));
+            state = analyze_expr(state, scope, elem_node);
+            i += 1;
+        }
+
+        return state;
+    }
+
+    if (node_type == 7) {  // INDEX
+        let array_node = int_to_ptr(get_at(expr_node, 1));
+        let index_node = int_to_ptr(get_at(expr_node, 2));
+
+        state = analyze_expr(state, scope, array_node);
+        state = analyze_expr(state, scope, index_node);
+
+        return state;
+    }
+
+    if (node_type == 8) {  // UNARY
+        let operand_node = int_to_ptr(get_at(expr_node, 2));
+        state = analyze_expr(state, scope, operand_node);
+
+        return state;
+    }
+
+    if (node_type == 9) {  // CONTRACT literal
+        let fields = int_to_ptr(get_at(expr_node, 2));
+        let field_count = array_len(fields);
+        let i = 0;
+
+        loop(i < field_count, 1000) {
+            let field_node = int_to_ptr(get_at(fields, i));
+            // field_node is [EXPR_CONTRACT_FIELD, field_id, value_expr]
+            let value_expr = int_to_ptr(get_at(field_node, 2));
+            state = analyze_expr(state, scope, value_expr);
+            i += 1;
+        }
+
+        return state;
+    }
+
+    if (node_type == 26) {  // FIELD_ACCESS
+        let object_node = int_to_ptr(get_at(expr_node, 1));
+        state = analyze_expr(state, scope, object_node);
+        return state;
+    }
+
+    if (node_type == 27) {  // COLLAPSE
+        let value_node = int_to_ptr(get_at(expr_node, 1));
+        state = analyze_expr(state, scope, value_node);
+        return state;
+    }
+
+    if (node_type == 28) {  // RESOLVE
+        let handle_node = int_to_ptr(get_at(expr_node, 1));
+        state = analyze_expr(state, scope, handle_node);
+        return state;
+    }
+
+    return state;
+}
+
+// ============================================================================
+// STATEMENT ANALYSIS
+// ============================================================================
+
+fn analyze_stmt(state: [i64], scope: [i64], stmt_node: [i64]) -> [i64] {
+    let node_type = get_at(stmt_node, 0);
+
+    if (node_type == 10) {  // LET
+        let name_ptr = get_at(stmt_node, 1);
+        let name = int_to_ptr(name_ptr);
+        let value_node = int_to_ptr(get_at(stmt_node, 2));
+        let line = get_at(stmt_node, 3);
+
+        // Check for duplicate
+        let existing = lookup_in_scope(scope, name);
+        if (array_len(existing) > 0) {
+            let msg = concat("Variable already declared: ", name);
+            let err = make_error("E_DUPLICATE", msg, line, 0);
+            state = add_error_to_state(state, err);
+        }
+
+        // Analyze value
+        state = analyze_expr(state, scope, value_node);
+
+        // Infer type
+        let inferred_type = infer_type(state, scope, value_node);
+
+        // Add binding
+        scope = add_binding(scope, name, inferred_type, line, 0);
+
+        return state;
+    }
+
+    if (node_type == 11) {  // ASSIGN
+        let lhs_node = int_to_ptr(get_at(stmt_node, 1));
+        let value_node = int_to_ptr(get_at(stmt_node, 2));
+        let line = get_at(stmt_node, 3);
+
+        let lhs_type = get_at(lhs_node, 0);
+        if (lhs_type == 3) {  // IDENT
+            let lhs_name_ptr = get_at(lhs_node, 1);
+            let lhs_name = int_to_ptr(lhs_name_ptr);
+
+            let binding = lookup_binding(scope, lhs_name);
+            if (array_len(binding) == 0) {
+                let msg = concat("Undefined variable: ", lhs_name);
+                let err = make_error("E_UNDEFINED_VAR", msg, line, 0);
+                state = add_error_to_state(state, err);
+            } else {
+                // Type check assignment
+                let lhs_type_val = binding_type(binding);
+                state = analyze_expr(state, scope, value_node);
+                let rhs_type = infer_type(state, scope, value_node);
+
+                if (!types_compatible(lhs_type_val, rhs_type)) {
+                    let msg = concat("Cannot assign ", type_name(rhs_type));
+                    msg = concat(msg, " to ");
+                    msg = concat(msg, type_name(lhs_type_val));
+                    let err = error_with_types("E_TYPE_MISMATCH", msg, line, 0, type_name(lhs_type_val), type_name(rhs_type));
+                    state = add_error_to_state(state, err);
+                }
+            }
+        } else {
+            state = analyze_expr(state, scope, value_node);
+        }
+
+        return state;
+    }
+
+    if (node_type == 12) {  // IF
+        let cond_node = int_to_ptr(get_at(stmt_node, 1));
+        let then_body = int_to_ptr(get_at(stmt_node, 2));
+        let else_body = int_to_ptr(get_at(stmt_node, 3));
+
+        state = analyze_expr(state, scope, cond_node);
+
+        let then_len = array_len(then_body);
+        let i = 0;
+        loop(i < then_len, 1000) {
+            let then_stmt = int_to_ptr(get_at(then_body, i));
+            state = analyze_stmt(state, scope, then_stmt);
+            i += 1;
+        }
+
+        let else_len = array_len(else_body);
+        i = 0;
+        loop(i < else_len, 1000) {
+            let else_stmt = int_to_ptr(get_at(else_body, i));
+            state = analyze_stmt(state, scope, else_stmt);
+            i += 1;
+        }
+
+        return state;
+    }
+
+    if (node_type == 13) {  // LOOP
+        let cond_node = int_to_ptr(get_at(stmt_node, 1));
+        let body = int_to_ptr(get_at(stmt_node, 3));
+
+        state = analyze_expr(state, scope, cond_node);
+
+        let body_len = array_len(body);
+        let i = 0;
+        loop(i < body_len, 1000) {
+            let body_stmt = int_to_ptr(get_at(body, i));
+            state = analyze_stmt(state, scope, body_stmt);
+            i += 1;
+        }
+
+        return state;
+    }
+
+    if (node_type == 14) {  // RETURN
+        let value_node = int_to_ptr(get_at(stmt_node, 1));
+        state = analyze_expr(state, scope, value_node);
+
+        return state;
+    }
+
+    if (node_type == 15) {  // EXPR
+        let expr_node = int_to_ptr(get_at(stmt_node, 1));
+        state = analyze_expr(state, scope, expr_node);
+
+        return state;
+    }
+
+    return state;
+}
+
+// ============================================================================
+// MAX_DEPTH ATTRIBUTE VALIDATION (Phase 8b: Bootstrap Recursion)
+// ============================================================================
+
+// Extract max_depth from attributes array
+// Returns [max_depth_value, 0] if found and valid, [1000, 0] for default, [-1, error_msg_ptr] on error
+fn extract_and_validate_max_depth(attributes: [i64]) -> [i64] {
+    let result = [0, 0];
+    let default_depth = 1000;  // DEFAULT_MAX_DEPTH
+
+    if (array_len(attributes) == 0) {
+        result = set_at(result, 0, default_depth);
+        return result;
+    }
+
+    let i = 0;
+    loop(i < array_len(attributes), 100) {
+        let attr_ptr = get_at(attributes, i);
+        let attr_str = int_to_ptr(attr_ptr);
+
+        // Check if this attribute starts with "max_depth"
+        if (starts_with(attr_str, "max_depth")) {
+            // Look for opening parenthesis
+            let paren_idx = index_of(attr_str, "(");
+            if (paren_idx < 0) {
+                // Missing opening parenthesis
+                let error_msg = "Malformed max_depth attribute: missing '('";
+                result = set_at(result, 0, -1);
+                result = set_at(result, 1, ptr_to_int(error_msg));
+                return result;
+            }
+
+            // Look for closing parenthesis
+            let close_idx = index_of(attr_str, ")");
+            if (close_idx < 0) {
+                // Missing closing parenthesis
+                let error_msg = "Malformed max_depth attribute: missing ')'";
+                result = set_at(result, 0, -1);
+                result = set_at(result, 1, ptr_to_int(error_msg));
+                return result;
+            }
+
+            if (close_idx <= paren_idx) {
+                // Invalid parenthesis order
+                let error_msg = "Malformed max_depth attribute: invalid parentheses";
+                result = set_at(result, 0, -1);
+                result = set_at(result, 1, ptr_to_int(error_msg));
+                return result;
+            }
+
+            // Extract the number between parentheses
+            let num_str = substring(attr_str, paren_idx + 1, close_idx);
+            let parsed_depth = to_int(num_str);
+
+            // Validate it's a positive number
+            if (parsed_depth <= 0) {
+                let error_msg = "max_depth must be a positive integer";
+                result = set_at(result, 0, -1);
+                result = set_at(result, 1, ptr_to_int(error_msg));
+                return result;
+            }
+
+            // Valid max_depth found
+            result = set_at(result, 0, parsed_depth);
+            return result;
+        }
+
+        i += 1;
+    }
+
+    // No max_depth attribute found, use default
+    result = set_at(result, 0, default_depth);
+    return result;
+}
+
+// ============================================================================
+// FUNCTION ANALYSIS
+// ============================================================================
+
+fn analyze_func(state: [i64], global_scope: [i64], func_node: [i64]) -> [i64] {
+    let func_name_ptr = get_at(func_node, 1);
+    let func_name = int_to_ptr(func_name_ptr);
+    let params = int_to_ptr(get_at(func_node, 2));
+    let body = int_to_ptr(get_at(func_node, 3));
+
+    // Validate max_depth attribute if present (Phase 8b)
+    let attributes = [];
+    if (array_len(func_node) > 4) {
+        attributes = int_to_ptr(get_at(func_node, 4));
+    }
+
+    let validation_result = extract_and_validate_max_depth(attributes);
+    let max_depth = get_at(validation_result, 0);
+
+    if (max_depth < 0) {
+        // Validation error
+        let error_msg = int_to_ptr(get_at(validation_result, 1));
+        let error = make_error("E_INVALID_MAX_DEPTH", error_msg, 0, 0);
+        state = add_error_to_state(state, error);
+        return state;
+    }
+
+    let func_scope = make_scope(1, ptr_to_int(global_scope));
+
+    let params_len = array_len(params);
+    let i = 0;
+    loop(i < params_len, 1000) {
+        let param_ptr = get_at(params, i);
+        let param = int_to_ptr(param_ptr);
+        func_scope = add_binding(func_scope, param, TYPE_I64(), 0, 0);
+        i += 1;
+    }
+
+    let body_len = array_len(body);
+    i = 0;
+    loop(i < body_len, 1000) {
+        let stmt = int_to_ptr(get_at(body, i));
+        state = analyze_stmt(state, func_scope, stmt);
+        i += 1;
+    }
+
+    return state;
+}
+
+// ============================================================================
+// MAIN ENTRY POINT
+// ============================================================================
+
+export fn analyze_program(ast_functions: [i64]) -> [i64] {
+    let state = make_semantic_state();
+    let global_scope = semantic_global_scope(state);
+
+    // Phase 1: Collect function definitions
+    let func_len = array_len(ast_functions);
+    let i = 0;
+    loop(i < func_len, 1000) {
+        let func_node = int_to_ptr(get_at(ast_functions, i));
+        let func_name_ptr = get_at(func_node, 1);
+        let func_name = int_to_ptr(func_name_ptr);
+        let params = int_to_ptr(get_at(func_node, 2));
+
+        let arity = array_len(params);
+        let binding = make_binding(func_name_ptr, TYPE_FUNCTION(), 0, 0);
+        binding = mark_binding_func(binding, arity);
+
+        let entry = [0, 0];
+        entry = set_at(entry, 0, func_name_ptr);
+        entry = set_at(entry, 1, ptr_to_int(binding));
+
+        let bindings = scope_bindings(global_scope);
+        bindings = push(bindings, ptr_to_int(entry));
+        global_scope = set_scope_bindings(global_scope, bindings);
+
+        i += 1;
+    }
+
+    state = set_at(state, 0, ptr_to_int(global_scope));
+
+    // Phase 2: Analyze function bodies
+    i = 0;
+    loop(i < func_len, 1000) {
+        let func_node = int_to_ptr(get_at(ast_functions, i));
+        state = analyze_func(state, global_scope, func_node);
+        i += 1;
+    }
+
+    return state;
+}
+
+// ============================================================================
+// DIAGNOSTIC REPORTING
+// ============================================================================
+
+export fn print_diagnostics(state: [i64]) -> i64 {
+    let errors = semantic_errors(state);
+    let error_count = array_len(errors);
+
+    if (error_count == 0) {
+        print("✓ No semantic errors found\n");
+        return 0;
+    }
+
+    print("════════════════════════════════════════════════════════════\n");
+    print("Semantic Analysis Report\n");
+    print("════════════════════════════════════════════════════════════\n\n");
+
+    let i = 0;
+    loop(i < error_count, 1000) {
+        let error_entry = int_to_ptr(get_at(errors, i));
+        let code = int_to_ptr(get_at(error_entry, 0));
+        let message = int_to_ptr(get_at(error_entry, 1));
+        let line = get_at(error_entry, 2);
+        let column = get_at(error_entry, 3);
+        let expected = int_to_ptr(get_at(error_entry, 4));
+        let got = int_to_ptr(get_at(error_entry, 5));
+
+        print("Error [");
+        print(code);
+        print("] at line ");
+        print_int(line);
+        if (column > 0) {
+            print(", column ");
+            print_int(column);
+        }
+        print(":\n");
+
+        print("  ");
+        print(message);
+        print("\n");
+
+        if (strlen(expected) > 0) {
+            print("  Expected: ");
+            print(expected);
+            print("\n");
+        }
+
+        if (strlen(got) > 0) {
+            print("  Got:      ");
+            print(got);
+            print("\n");
+        }
+
+        print("\n");
+        i += 1;
+    }
+
+    print("════════════════════════════════════════════════════════════\n");
+    print("Total: ");
+    print_int(error_count);
+    print(" semantic error");
+    if (error_count != 1) {
+        print("s");
+    }
+    print("\n");
+    print("════════════════════════════════════════════════════════════\n\n");
+
+    return error_count;
+}
+
+export fn error_summary(state: [i64]) -> String {
+    let errors = semantic_errors(state);
+    let error_count = array_len(errors);
+
+    if (error_count == 0) {
+        return "No semantic errors";
+    }
+
+    if (error_count == 1) {
+        return "1 semantic error";
+    }
+
+    let count_str = str(error_count);
+    let result = concat(count_str, " semantic errors");
+    return result;
+}
+
+}

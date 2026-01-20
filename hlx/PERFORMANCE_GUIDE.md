@@ -9,10 +9,10 @@
 cargo build --release
 
 # Quick benchmark any file
-./perf_toolkit.sh quick examples/fibonacci.hlxa
+./perf_toolkit.sh quick examples/fibonacci.hlx
 
 # Full analysis
-./perf_toolkit.sh all examples/showcase_math.hlxa
+./perf_toolkit.sh all examples/showcase_math.hlx
 
 # Run regression suite (checks all examples)
 ./perf_toolkit.sh regression
@@ -26,12 +26,12 @@ cargo build --release
 **Why it's good:** Eliminates measurement noise, shows you REAL differences
 
 ```bash
-./perf_toolkit.sh quick examples/factorial.hlxa
+./perf_toolkit.sh quick examples/factorial.hlx
 ```
 
 Output:
 ```
-Benchmark 1: hlx compile factorial.hlxa
+Benchmark 1: hlx compile factorial.hlx
   Time (mean ± σ):      23.4 ms ±   1.2 ms    [User: 19.8 ms, System: 3.4 ms]
   Range (min … max):    21.7 ms …  26.3 ms    10 runs
 ```
@@ -46,7 +46,7 @@ Benchmark 1: hlx compile factorial.hlxa
 **Why it's good:** Visual flamegraphs make it OBVIOUS what's slow
 
 ```bash
-./perf_toolkit.sh profile examples/showcase_math.hlxa
+./perf_toolkit.sh profile examples/showcase_math.hlx
 ```
 
 Output: `flamegraph.svg` - open in browser
@@ -69,7 +69,7 @@ Look for:
 **Why it's good:** Catches leaks, shows memory growth over time
 
 ```bash
-./perf_toolkit.sh memory examples/primes.hlxa
+./perf_toolkit.sh memory examples/primes.hlx
 ```
 
 Output:
@@ -92,7 +92,7 @@ Possibly lost: 0 bytes (good!)
 **Why it's good:** Cache misses = waiting for RAM (100x slower than L1 cache!)
 
 ```bash
-./perf_toolkit.sh cache examples/fibonacci.hlxa
+./perf_toolkit.sh cache examples/fibonacci.hlx
 ```
 
 Output:
@@ -118,7 +118,7 @@ LLd misses:        12,391  (last-level data cache misses)
 **Why it's good:** Tells you WHERE to optimize
 
 ```bash
-./perf_toolkit.sh phases examples/factorial.hlxa
+./perf_toolkit.sh phases examples/factorial.hlx
 ```
 
 Output:
@@ -139,19 +139,19 @@ Total:   23.7ms
 **Why it's good:** Answers "is this ACTUALLY better?" with numbers
 
 ```bash
-./perf_toolkit.sh compare examples/factorial.hlxa examples/fibonacci.hlxa
+./perf_toolkit.sh compare examples/factorial.hlx examples/fibonacci.hlx
 ```
 
 Output:
 ```
-Benchmark 1: factorial.hlxa
+Benchmark 1: factorial.hlx
   Time: 23.4 ms ± 1.2 ms
 
-Benchmark 2: fibonacci.hlxa
+Benchmark 2: fibonacci.hlx
   Time: 28.7 ms ± 1.5 ms
 
 Summary:
-  factorial.hlxa is 1.23x faster
+  factorial.hlx is 1.23x faster
 ```
 
 ---
@@ -183,22 +183,22 @@ cp perf_results_*/regression_suite.json baseline.json
 ### 2. Identify Bottleneck
 ```bash
 # Profile the slow example
-./perf_toolkit.sh profile examples/slow_thing.hlxa
+./perf_toolkit.sh profile examples/slow_thing.hlx
 # Look at flamegraph - what's wide?
 ```
 
 ### 3. Dig Deeper
 ```bash
 # If flamegraph doesn't show obvious hotspot:
-./perf_toolkit.sh cache examples/slow_thing.hlxa  # Check cache misses
-./perf_toolkit.sh memory examples/slow_thing.hlxa # Check allocations
-./perf_toolkit.sh phases examples/slow_thing.hlxa # Which phase?
+./perf_toolkit.sh cache examples/slow_thing.hlx  # Check cache misses
+./perf_toolkit.sh memory examples/slow_thing.hlx # Check allocations
+./perf_toolkit.sh phases examples/slow_thing.hlx # Which phase?
 ```
 
 ### 4. Optimize & Verify
 ```bash
 # Make your change, then:
-./perf_toolkit.sh quick examples/slow_thing.hlxa  # Is it faster?
+./perf_toolkit.sh quick examples/slow_thing.hlx  # Is it faster?
 
 # Check you didn't break other things:
 ./perf_toolkit.sh regression
@@ -208,7 +208,7 @@ cp perf_results_*/regression_suite.json baseline.json
 ### 5. Document
 ```bash
 # Save your results
-./perf_toolkit.sh compare examples/old_version.hlxa examples/new_version.hlxa
+./perf_toolkit.sh compare examples/old_version.hlx examples/new_version.hlx
 # Commit the flamegraphs and benchmark results
 ```
 
@@ -262,13 +262,13 @@ cp perf_results_*/regression_suite.json baseline.json
 ```bash
 # Create test files of increasing size
 echo "Testing scalability..."
-./perf_toolkit.sh quick small_10_lines.hlxa
-./perf_toolkit.sh quick medium_100_lines.hlxa
-./perf_toolkit.sh quick large_1000_lines.hlxa
+./perf_toolkit.sh quick small_10_lines.hlx
+./perf_toolkit.sh quick medium_100_lines.hlx
+./perf_toolkit.sh quick large_1000_lines.hlx
 
 # If 10x size = 100x time, you have O(n²)
 # Profile the large one to find the quadratic loop
-./perf_toolkit.sh profile large_1000_lines.hlxa
+./perf_toolkit.sh profile large_1000_lines.hlx
 ```
 
 **Common O(n²) culprits:**
@@ -304,7 +304,7 @@ sudo apt install valgrind  # Ubuntu
 
 ### CPU Stats (perf stat)
 ```
-Performance counter stats for './hlx compile test.hlxa':
+Performance counter stats for './hlx compile test.hlx':
 
         45.67 msec task-clock                #    0.945 CPUs utilized
           234      context-switches          #    5.124 K/sec
@@ -328,7 +328,7 @@ Performance counter stats for './hlx compile test.hlxa':
 
 Run this:
 ```bash
-./perf_toolkit.sh all examples/the_slow_thing.hlxa
+./perf_toolkit.sh all examples/the_slow_thing.hlx
 ```
 
 Then open the flamegraph and look for:
@@ -400,7 +400,7 @@ jobs:
 
 **"Permission denied" when running perf**
 - Try: `sudo sysctl -w kernel.perf_event_paranoid=-1`
-- Or run with sudo: `sudo ./perf_toolkit.sh profile test.hlxa`
+- Or run with sudo: `sudo ./perf_toolkit.sh profile test.hlx`
 
 **"Hyperfine not found, falling back..."**
 - Install with `cargo install hyperfine`
@@ -419,7 +419,7 @@ When you optimize something:
 
 1. **Benchmark before & after**
    ```bash
-   ./perf_toolkit.sh compare old_version.hlxa new_version.hlxa
+   ./perf_toolkit.sh compare old_version.hlx new_version.hlx
    ```
 
 2. **Include flamegraphs in PR**
@@ -432,7 +432,7 @@ When you optimize something:
    Reduced parser time by 40% on large files by eliminating
    excessive backtracking in binary operator parsing.
 
-   Benchmark (showcase_math.hlxa):
+   Benchmark (showcase_math.hlx):
    - Before: 45.2ms ± 2.1ms
    - After:  27.1ms ± 1.3ms
    - Speedup: 1.67x

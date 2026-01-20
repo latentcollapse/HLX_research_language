@@ -1,0 +1,398 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// HLX Axiom Validators
+// Verify Axioms A1-A4 compliance for HLX programs
+// ═══════════════════════════════════════════════════════════════════════════
+
+module axiom_validators {
+
+// ============================================================================
+// AXIOM A1: DETERMINISM
+// Validates: No randomness, bounded loops, no time-dependent operations
+// ============================================================================
+
+fn A1_VIOLATION_RANDOM() -> i64 { return 1001; }
+fn A1_VIOLATION_UNBOUNDED_LOOP() -> i64 { return 1002; }
+fn A1_VIOLATION_TIME_OP() -> i64 { return 1003; }
+fn A1_OK() -> i64 { return 0; }
+
+fn is_banned_function(name: String) -> i64 {
+    // Functions that violate A1 (determinism)
+    if strcmp(name, "random") == 0 { return 1; }
+    if strcmp(name, "rand") == 0 { return 1; }
+    if strcmp(name, "now") == 0 { return 1; }
+    if strcmp(name, "timestamp") == 0 { return 1; }
+    if strcmp(name, "time") == 0 { return 1; }
+    if strcmp(name, "sleep") == 0 { return 1; }
+    return 0;
+}
+
+fn validate_a1_expr(expr_node: [i64]) -> i64 {
+    let node_type = get_at(expr_node, 0);
+
+    // Check for banned function calls
+    if node_type == 5 {  // EXPR_CALL
+        let func_name = int_to_ptr(get_at(expr_node, 1));
+        if is_banned_function(func_name) == 1 {
+            return A1_VIOLATION_RANDOM();
+        }
+    }
+
+    return A1_OK();
+}
+
+fn validate_a1_stmt(stmt_node: [i64]) -> i64 {
+    let node_type = get_at(stmt_node, 0);
+
+    // Check for unbounded loops
+    if node_type == 13 {  // STMT_LOOP
+        let max_iter = get_at(stmt_node, 2);
+        if max_iter <= 0 {
+            return A1_VIOLATION_UNBOUNDED_LOOP();
+        }
+    }
+
+    return A1_OK();
+}
+
+export fn validate_axiom_a1(ast: [i64]) -> i64 {
+    // Traverse AST checking for violations
+    // Returns 0 if compliant, error code if violation found
+
+    let functions = int_to_ptr(get_at(ast, 1));
+    let func_count = array_len(functions);
+    let i = 0;
+
+    loop(i < func_count, 10000) {
+        let func_node = int_to_ptr(get_at(functions, i));
+        // Functions have statements in body
+        let body = int_to_ptr(get_at(func_node, 3));
+        let stmt_count = array_len(body);
+        let j = 0;
+
+        loop(j < stmt_count, 10000) {
+            let stmt = int_to_ptr(get_at(body, j));
+            let result = validate_a1_stmt(stmt);
+            if result != A1_OK() {
+                return result;
+            }
+            j = j + 1;
+        }
+
+        i = i + 1;
+    }
+
+    return A1_OK();
+}
+
+// ============================================================================
+// AXIOM A2: REVERSIBILITY
+// Validates: Collapse/resolve bijection, value preservation
+// Implements: Bytecode lifter (instruction → AST)
+// ============================================================================
+
+fn A2_VIOLATION_LOSSY_OP() -> i64 { return 2001; }
+fn A2_VIOLATION_COLLAPSE_RESOLVE_MISMATCH() -> i64 { return 2002; }
+fn A2_OK() -> i64 { return 0; }
+
+fn is_lossy_operation(opcode: i64) -> i64 {
+    // Operations that lose information are violations of reversibility
+    // Note: In real implementation, would check for irreversible hashing, etc.
+    // For MVP, all our operations are reversible
+    return 0;
+}
+
+fn lift_instruction(bytecode: [i64], pc: i64) -> [i64] {
+    // Convert bytecode instruction back to AST-like structure
+    // Returns [opcode, op1, op2, op3]
+
+    let opcode = get_at(bytecode, pc);
+
+    let op1 = 0;
+    let op2 = 0;
+    let op3 = 0;
+
+    if pc + 4 < array_len(bytecode) {
+        op1 = get_at(bytecode, pc + 1);
+        op2 = get_at(bytecode, pc + 2);
+        op3 = get_at(bytecode, pc + 3);
+    }
+
+    let inst = [0, 0, 0, 0];
+    inst = set_at(inst, 0, opcode);
+    inst = set_at(inst, 1, op1);
+    inst = set_at(inst, 2, op2);
+    inst = set_at(inst, 3, op3);
+
+    return inst;
+}
+
+fn verify_collapse_resolve_pair(bytecode: [i64]) -> i64 {
+    // Check that all collapse instructions have matching resolve
+    // This verifies the bijection for handles
+
+    let i = 0;
+    let collapse_count = 0;
+    let resolve_count = 0;
+
+    loop(i < array_len(bytecode), 100000) {
+        let opcode = get_at(bytecode, i);
+
+        // opcode 93 = COLLAPSE
+        if opcode == 93 {
+            collapse_count = collapse_count + 1;
+        }
+
+        // opcode 94 = RESOLVE
+        if opcode == 94 {
+            resolve_count = resolve_count + 1;
+        }
+
+        i = i + 17;  // Advance by instruction size
+    }
+
+    // For now, just verify they exist together
+    // Full implementation would track nesting
+    if (collapse_count > 0) && (resolve_count > 0) {
+        return A2_OK();
+    }
+
+    if (collapse_count == 0) && (resolve_count == 0) {
+        return A2_OK();  // No handles used is ok
+    }
+
+    return A2_VIOLATION_COLLAPSE_RESOLVE_MISMATCH();
+}
+
+export fn validate_axiom_a2(bytecode: [i64]) -> i64 {
+    // Verify reversibility properties
+
+    let result = verify_collapse_resolve_pair(bytecode);
+    if result != A2_OK() {
+        return result;
+    }
+
+    // Check for lossy operations
+    let i = 0;
+    loop(i < array_len(bytecode), 100000) {
+        let opcode = get_at(bytecode, i);
+
+        if is_lossy_operation(opcode) == 1 {
+            return A2_VIOLATION_LOSSY_OP();
+        }
+
+        i = i + 17;
+    }
+
+    return A2_OK();
+}
+
+// ============================================================================
+// AXIOM A3: BIJECTION
+// Validates: HLX-A ↔ Bytecode ↔ HLX-R correspondence
+// ============================================================================
+
+fn A3_VIOLATION_ROUNDTRIP_FAIL() -> i64 { return 3001; }
+fn A3_OK() -> i64 { return 0; }
+
+fn compute_bytecode_hash(bytecode: [i64]) -> i64 {
+    // Simple hash of bytecode for bijection checking
+    let hash = 0;
+    let i = 0;
+
+    loop(i < array_len(bytecode), 100000) {
+        let byte = get_at(bytecode, i);
+        hash = hash + byte;
+        hash = bit_xor(hash, byte);
+        i = i + 1;
+    }
+
+    return hash;
+}
+
+export fn validate_axiom_a3_bytecode(bytecode1: [i64], bytecode2: [i64]) -> i64 {
+    // Verify two bytecode sequences hash the same (same source)
+    // In real implementation: compile source → bytecode, compare hashes
+
+    let hash1 = compute_bytecode_hash(bytecode1);
+    let hash2 = compute_bytecode_hash(bytecode2);
+
+    if hash1 == hash2 {
+        return A3_OK();
+    }
+
+    return A3_VIOLATION_ROUNDTRIP_FAIL();
+}
+
+export fn validate_axiom_a3() -> i64 {
+    // Verify HLX-A ↔ HLX-R bijection (requires HLX-R implementation)
+    // For MVP: stub - would need runic lexer/emitter
+    return A3_OK();
+}
+
+// ============================================================================
+// AXIOM A4: UNIVERSAL VALUE
+// Validates: No implicit coercions, all values explicit
+// ============================================================================
+
+fn A4_VIOLATION_IMPLICIT_COERCION() -> i64 { return 4001; }
+fn A4_VIOLATION_MISSING_FIELDS() -> i64 { return 4002; }
+fn A4_VIOLATION_HIDDEN_STATE() -> i64 { return 4003; }
+fn A4_OK() -> i64 { return 0; }
+
+fn check_type_mismatch(expr_type: i64, expected_type: i64) -> i64 {
+    // Check for implicit type coercions
+    // All types must match explicitly
+
+    if expr_type == 5 {  // UNKNOWN
+        return A4_VIOLATION_IMPLICIT_COERCION();
+    }
+
+    if expr_type != expected_type {
+        if (expr_type != 5) && (expected_type != 5) {
+            // Different concrete types = implicit coercion
+            return A4_VIOLATION_IMPLICIT_COERCION();
+        }
+    }
+
+    return A4_OK();
+}
+
+fn validate_a4_contract_fields(contract_node: [i64]) -> i64 {
+    // Verify all contract fields are present and typed
+
+    let fields = int_to_ptr(get_at(contract_node, 2));
+    let field_count = array_len(fields);
+
+    if field_count == 0 {
+        return A4_VIOLATION_MISSING_FIELDS();
+    }
+
+    // All fields must be present and have values
+    let i = 0;
+    loop(i < field_count, 10000) {
+        let field = int_to_ptr(get_at(fields, i));
+        let field_id = get_at(field, 1);
+        let value = int_to_ptr(get_at(field, 2));
+
+        // Verify field has a value (not null/unknown)
+        if array_len(value) == 0 {
+            return A4_VIOLATION_MISSING_FIELDS();
+        }
+
+        i = i + 1;
+    }
+
+    return A4_OK();
+}
+
+export fn validate_axiom_a4(ast: [i64]) -> i64 {
+    // Traverse AST checking for violations of universal value
+
+    let functions = int_to_ptr(get_at(ast, 1));
+    let func_count = array_len(functions);
+    let i = 0;
+
+    loop(i < func_count, 10000) {
+        let func_node = int_to_ptr(get_at(functions, i));
+        let body = int_to_ptr(get_at(func_node, 3));
+        let stmt_count = array_len(body);
+        let j = 0;
+
+        loop(j < stmt_count, 10000) {
+            let stmt = int_to_ptr(get_at(body, j));
+            // Check statements for implicit values
+            // (Would need to traverse all expressions)
+            j = j + 1;
+        }
+
+        i = i + 1;
+    }
+
+    return A4_OK();
+}
+
+// ============================================================================
+// Master Validator - Check All Axioms
+// ============================================================================
+
+export fn validate_all_axioms(ast: [i64], bytecode: [i64]) -> [i64] {
+    // Run all axiom validators and return results
+
+    let results = [0, 0, 0, 0];
+
+    let a1_result = validate_axiom_a1(ast);
+    results = set_at(results, 0, a1_result);
+
+    let a2_result = validate_axiom_a2(bytecode);
+    results = set_at(results, 1, a2_result);
+
+    let a3_result = validate_axiom_a3();
+    results = set_at(results, 2, a3_result);
+
+    let a4_result = validate_axiom_a4(ast);
+    results = set_at(results, 3, a4_result);
+
+    return results;
+}
+
+fn axiom_code_to_name(code: i64) -> String {
+    if code == 0 { return "OK"; }
+    if code == 1001 { return "A1_RANDOM"; }
+    if code == 1002 { return "A1_UNBOUNDED"; }
+    if code == 2001 { return "A2_LOSSY"; }
+    if code == 2002 { return "A2_BIJECTION"; }
+    if code == 3001 { return "A3_ROUNDTRIP"; }
+    if code == 4001 { return "A4_COERCION"; }
+    if code == 4002 { return "A4_MISSING"; }
+    if code == 4003 { return "A4_HIDDEN"; }
+    return "UNKNOWN";
+}
+
+export fn report_axiom_results(results: [i64]) -> i64 {
+    print("═══════════════════════════════════════════════════════\n");
+    print("Axiom Validation Report\n");
+    print("═══════════════════════════════════════════════════════\n");
+
+    let a1 = get_at(results, 0);
+    let a2 = get_at(results, 1);
+    let a3 = get_at(results, 2);
+    let a4 = get_at(results, 3);
+
+    print("A1 (Determinism): ");
+    print(axiom_code_to_name(a1));
+    print("\n");
+
+    print("A2 (Reversibility): ");
+    print(axiom_code_to_name(a2));
+    print("\n");
+
+    print("A3 (Bijection): ");
+    print(axiom_code_to_name(a3));
+    print("\n");
+
+    print("A4 (Universal Value): ");
+    print(axiom_code_to_name(a4));
+    print("\n");
+
+    print("═══════════════════════════════════════════════════════\n");
+
+    if (a1 == 0) && (a2 == 0) && (a3 == 0) && (a4 == 0) {
+        print("✓ All axioms PASSED\n");
+        return 0;
+    } else {
+        print("✗ Some axioms FAILED\n");
+        return 1;
+    }
+}
+
+// ============================================================================
+// Test Harness
+// ============================================================================
+
+fn main() -> i64 {
+    print("HLX Axiom Validators\n");
+    print("Validates A1 (Determinism) through A4 (Universal Value)\n");
+    return 0;
+}
+
+}

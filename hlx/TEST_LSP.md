@@ -16,7 +16,7 @@ cargo build --release --package hlx_lsp
 ## Create Test File
 
 ```bash
-cat > test_contracts.hlxa << 'EOF'
+cat > test_contracts.hlx << 'EOF'
 program contract_test {
     fn main() {
         // Type @ below and see autocomplete

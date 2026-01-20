@@ -411,19 +411,19 @@ Suggestion: Convert String to i64 with to_int()
 
 ### Current Pipeline
 ```
-parser.hlxa ─────→ ast
-lower.hlxa ─────→ instructions
-emit.hlxa ─────→ bytecode
+parser.hlx ─────→ ast
+lower.hlx ─────→ instructions
+emit.hlx ─────→ bytecode
 ```
 
 ### New Pipeline
 ```
-parser.hlxa ──────→ ast
-semantic.hlxa ────→ semantic info + errors
+parser.hlx ──────→ ast
+semantic.hlx ────→ semantic info + errors
                        ↓
                   [if errors, report & exit]
-lower.hlxa ──────→ instructions
-emit.hlxa ─────→ bytecode
+lower.hlx ──────→ instructions
+emit.hlx ─────→ bytecode
 ```
 
 ### Semantic Module Structure
@@ -501,7 +501,7 @@ Once semantic analysis is working in the bootstrap:
 
 ## Next Steps
 
-1. Implement `semantic.hlxa` with Phase 1 (scope tracking)
+1. Implement `semantic.hlx` with Phase 1 (scope tracking)
 2. Integrate into bootstrap pipeline (between parser and lowerer)
 3. Test with programs that have semantic errors
 4. Add Phase 2 (type checking)

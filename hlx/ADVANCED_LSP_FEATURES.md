@@ -255,7 +255,7 @@ Diagnostics sent to IDE (red/yellow squiggles)
 
 ### Test File
 
-Use `/home/matt/hlx-compiler/hlx/test_advanced_lsp.hlxa` for comprehensive testing.
+Use `/home/matt/hlx-compiler/hlx/test_advanced_lsp.hlx` for comprehensive testing.
 
 ### Test Scenarios
 
@@ -296,7 +296,7 @@ timeout 2 ./target/release/hlx_lsp 2>&1 | head -5
 # Should show: ✓ Loaded contract catalogue from ../CONTRACT_CATALOGUE.json
 
 # Open in VS Code
-code test_advanced_lsp.hlxa
+code test_advanced_lsp.hlx
 # VS Code should connect to LSP automatically
 ```
 

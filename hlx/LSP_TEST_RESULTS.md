@@ -156,7 +156,7 @@ pub related: Vec<String>,
 
 ## Test File Created
 
-**Location**: `/home/matt/hlx-compiler/hlx/test_contracts.hlxa`
+**Location**: `/home/matt/hlx-compiler/hlx/test_contracts.hlx`
 
 ```hlx
 program contract_test {

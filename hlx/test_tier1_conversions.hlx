@@ -1,0 +1,571 @@
+// Test suite for Tier 1 Type Conversions
+// Phase 2 of builtin library conversion
+
+program test_tier1_conversions {
+
+    // ========================================================================
+    // TIER 1 TYPE CONVERSION FUNCTIONS (Embedded from tier1_conversions module)
+    // ========================================================================
+
+    fn to_string(value: i64) -> String {
+        if (value == 0) {
+            return "0";
+        }
+
+        let is_negative = 0;
+        let abs_val = value;
+        if (value < 0) {
+            is_negative = 1;
+            abs_val = 0 - value;
+        }
+
+        let result = "";
+        let remaining = abs_val;
+
+        loop(remaining > 0, 30) {
+            let digit = remaining % 10;
+            remaining = remaining / 10;
+
+            let char_code = 48 + digit;
+
+            if (char_code == 48) { result = concat("0", result); }
+            else if (char_code == 49) { result = concat("1", result); }
+            else if (char_code == 50) { result = concat("2", result); }
+            else if (char_code == 51) { result = concat("3", result); }
+            else if (char_code == 52) { result = concat("4", result); }
+            else if (char_code == 53) { result = concat("5", result); }
+            else if (char_code == 54) { result = concat("6", result); }
+            else if (char_code == 55) { result = concat("7", result); }
+            else if (char_code == 56) { result = concat("8", result); }
+            else if (char_code == 57) { result = concat("9", result); }
+        }
+
+        if (is_negative == 1) {
+            result = concat("-", result);
+        }
+
+        return result;
+    }
+
+    fn parse_int(s: String) -> i64 {
+        let len = strlen(s);
+
+        if (len == 0) {
+            return 0;
+        }
+
+        let result = 0;
+        let is_negative = 0;
+        let start_idx = 0;
+
+        let first_char_str = char_at(s, 0);
+        let first_char = ord(first_char_str);
+        if (first_char == 45) {
+            is_negative = 1;
+            start_idx = 1;
+        }
+
+        if (first_char == 43) {
+            start_idx = 1;
+        }
+
+        let i = start_idx;
+        loop(i < len, 30) {
+            let char_str = char_at(s, i);
+            let char_code = ord(char_str);
+
+            if (char_code < 48) {
+                break;
+            }
+            if (char_code > 57) {
+                break;
+            }
+
+            let digit = char_code - 48;
+            result = result * 10 + digit;
+            i += 1;
+        }
+
+        if (is_negative == 1) {
+            result = 0 - result;
+        }
+
+        return result;
+    }
+
+    fn bool(value: i64) -> i64 {
+        if (value == 0) {
+            return 0;
+        }
+        return 1;
+    }
+
+    fn is_int(s: String) -> i64 {
+        let len = strlen(s);
+
+        if (len == 0) {
+            return 0;
+        }
+
+        let start_idx = 0;
+        let first_char_str = char_at(s, 0);
+        let first_char = ord(first_char_str);
+
+        if (first_char == 45) {
+            start_idx = 1;
+            if (start_idx >= len) {
+                return 0;
+            }
+        } else if (first_char == 43) {
+            start_idx = 1;
+            if (start_idx >= len) {
+                return 0;
+            }
+        }
+
+        let i = start_idx;
+        loop(i < len, 30) {
+            let char_str = char_at(s, i);
+            let char_code = ord(char_str);
+
+            if (char_code < 48) {
+                return 0;
+            }
+            if (char_code > 57) {
+                return 0;
+            }
+
+            i += 1;
+        }
+
+        return 1;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR to_string() FUNCTION
+    // ========================================================================
+
+    fn test_to_string_zero() -> i64 {
+        let s = to_string(0);
+        if (strlen(s) == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_to_string_positive() -> i64 {
+        let s = to_string(42);
+        if (strlen(s) == 2) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_to_string_negative() -> i64 {
+        let s = to_string(-100);
+        if (strlen(s) == 4) {  // "-100"
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_to_string_large() -> i64 {
+        let s = to_string(12345);
+        if (strlen(s) == 5) {  // "12345"
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR parse_int() FUNCTION
+    // ========================================================================
+
+    fn test_parse_int_zero() -> i64 {
+        let val = parse_int("0");
+        if (val == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_parse_int_positive() -> i64 {
+        let val = parse_int("42");
+        if (val == 42) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_parse_int_negative() -> i64 {
+        let val = parse_int("-100");
+        if (val == -100) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_parse_int_large() -> i64 {
+        let val = parse_int("12345");
+        if (val == 12345) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_parse_int_with_plus() -> i64 {
+        let val = parse_int("+50");
+        if (val == 50) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_parse_int_single_digit() -> i64 {
+        let val = parse_int("7");
+        if (val == 7) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_parse_int_negative_single() -> i64 {
+        let val = parse_int("-5");
+        if (val == -5) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR bool() FUNCTION
+    // ========================================================================
+
+    fn test_bool_zero() -> i64 {
+        let b = bool(0);
+        if (b == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bool_positive() -> i64 {
+        let b = bool(42);
+        if (b == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bool_negative() -> i64 {
+        let b = bool(-10);
+        if (b == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bool_one() -> i64 {
+        let b = bool(1);
+        if (b == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR is_int() FUNCTION
+    // ========================================================================
+
+    fn test_is_int_zero() -> i64 {
+        if (is_int("0") == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_is_int_positive() -> i64 {
+        if (is_int("42") == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_is_int_negative() -> i64 {
+        if (is_int("-100") == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_is_int_with_plus() -> i64 {
+        if (is_int("+50") == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_is_int_invalid_empty() -> i64 {
+        if (is_int("") == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_is_int_invalid_letters() -> i64 {
+        if (is_int("abc") == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_is_int_invalid_mixed() -> i64 {
+        if (is_int("12a34") == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_is_int_invalid_sign_only() -> i64 {
+        if (is_int("-") == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // MAIN TEST HARNESS
+    // ========================================================================
+
+    fn main() -> i64 {
+        let passed = 0;
+        let failed = 0;
+
+        print("═══════════════════════════════════════════════════════════\n");
+        print("TIER 1 TYPE CONVERSIONS TESTS\n");
+        print("═══════════════════════════════════════════════════════════\n\n");
+
+        // Test to_string()
+        print("Testing to_string() function:\n");
+
+        if (test_to_string_zero() == 1) {
+            print("  ✓ to_string(0) == \"0\"\n");
+            passed += 1;
+        } else {
+            print("  ✗ to_string(0) failed\n");
+            failed += 1;
+        }
+
+        if (test_to_string_positive() == 1) {
+            print("  ✓ to_string(42) == \"42\"\n");
+            passed += 1;
+        } else {
+            print("  ✗ to_string(42) failed\n");
+            failed += 1;
+        }
+
+        if (test_to_string_negative() == 1) {
+            print("  ✓ to_string(-100) == \"-100\"\n");
+            passed += 1;
+        } else {
+            print("  ✗ to_string(-100) failed\n");
+            failed += 1;
+        }
+
+        if (test_to_string_large() == 1) {
+            print("  ✓ to_string(12345) == \"12345\"\n");
+            passed += 1;
+        } else {
+            print("  ✗ to_string(12345) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test parse_int()
+        print("Testing parse_int() function:\n");
+
+        if (test_parse_int_zero() == 1) {
+            print("  ✓ parse_int(\"0\") == 0\n");
+            passed += 1;
+        } else {
+            print("  ✗ parse_int(\"0\") failed\n");
+            failed += 1;
+        }
+
+        if (test_parse_int_positive() == 1) {
+            print("  ✓ parse_int(\"42\") == 42\n");
+            passed += 1;
+        } else {
+            print("  ✗ parse_int(\"42\") failed\n");
+            failed += 1;
+        }
+
+        if (test_parse_int_negative() == 1) {
+            print("  ✓ parse_int(\"-100\") == -100\n");
+            passed += 1;
+        } else {
+            print("  ✗ parse_int(\"-100\") failed\n");
+            failed += 1;
+        }
+
+        if (test_parse_int_large() == 1) {
+            print("  ✓ parse_int(\"12345\") == 12345\n");
+            passed += 1;
+        } else {
+            print("  ✗ parse_int(\"12345\") failed\n");
+            failed += 1;
+        }
+
+        if (test_parse_int_with_plus() == 1) {
+            print("  ✓ parse_int(\"+50\") == 50\n");
+            passed += 1;
+        } else {
+            print("  ✗ parse_int(\"+50\") failed\n");
+            failed += 1;
+        }
+
+        if (test_parse_int_single_digit() == 1) {
+            print("  ✓ parse_int(\"7\") == 7\n");
+            passed += 1;
+        } else {
+            print("  ✗ parse_int(\"7\") failed\n");
+            failed += 1;
+        }
+
+        if (test_parse_int_negative_single() == 1) {
+            print("  ✓ parse_int(\"-5\") == -5\n");
+            passed += 1;
+        } else {
+            print("  ✗ parse_int(\"-5\") failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test bool()
+        print("Testing bool() function:\n");
+
+        if (test_bool_zero() == 1) {
+            print("  ✓ bool(0) == 0 (false)\n");
+            passed += 1;
+        } else {
+            print("  ✗ bool(0) failed\n");
+            failed += 1;
+        }
+
+        if (test_bool_positive() == 1) {
+            print("  ✓ bool(42) == 1 (true)\n");
+            passed += 1;
+        } else {
+            print("  ✗ bool(42) failed\n");
+            failed += 1;
+        }
+
+        if (test_bool_negative() == 1) {
+            print("  ✓ bool(-10) == 1 (true)\n");
+            passed += 1;
+        } else {
+            print("  ✗ bool(-10) failed\n");
+            failed += 1;
+        }
+
+        if (test_bool_one() == 1) {
+            print("  ✓ bool(1) == 1 (true)\n");
+            passed += 1;
+        } else {
+            print("  ✗ bool(1) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test is_int()
+        print("Testing is_int() function:\n");
+
+        if (test_is_int_zero() == 1) {
+            print("  ✓ is_int(\"0\") == 1\n");
+            passed += 1;
+        } else {
+            print("  ✗ is_int(\"0\") failed\n");
+            failed += 1;
+        }
+
+        if (test_is_int_positive() == 1) {
+            print("  ✓ is_int(\"42\") == 1\n");
+            passed += 1;
+        } else {
+            print("  ✗ is_int(\"42\") failed\n");
+            failed += 1;
+        }
+
+        if (test_is_int_negative() == 1) {
+            print("  ✓ is_int(\"-100\") == 1\n");
+            passed += 1;
+        } else {
+            print("  ✗ is_int(\"-100\") failed\n");
+            failed += 1;
+        }
+
+        if (test_is_int_with_plus() == 1) {
+            print("  ✓ is_int(\"+50\") == 1\n");
+            passed += 1;
+        } else {
+            print("  ✗ is_int(\"+50\") failed\n");
+            failed += 1;
+        }
+
+        if (test_is_int_invalid_empty() == 1) {
+            print("  ✓ is_int(\"\") == 0 (invalid)\n");
+            passed += 1;
+        } else {
+            print("  ✗ is_int(\"\") failed\n");
+            failed += 1;
+        }
+
+        if (test_is_int_invalid_letters() == 1) {
+            print("  ✓ is_int(\"abc\") == 0 (invalid)\n");
+            passed += 1;
+        } else {
+            print("  ✗ is_int(\"abc\") failed\n");
+            failed += 1;
+        }
+
+        if (test_is_int_invalid_mixed() == 1) {
+            print("  ✓ is_int(\"12a34\") == 0 (invalid)\n");
+            passed += 1;
+        } else {
+            print("  ✗ is_int(\"12a34\") failed\n");
+            failed += 1;
+        }
+
+        if (test_is_int_invalid_sign_only() == 1) {
+            print("  ✓ is_int(\"-\") == 0 (invalid)\n");
+            passed += 1;
+        } else {
+            print("  ✗ is_int(\"-\") failed\n");
+            failed += 1;
+        }
+
+        // Summary
+        print("\n");
+        print("═══════════════════════════════════════════════════════════\n");
+        print("RESULTS:\n");
+        print("  Passed: ");
+        print(passed);
+        print("/21\n");
+        print("  Failed: ");
+        print(failed);
+        print("/21\n");
+
+        if (failed == 0) {
+            print("\n✓ ALL TESTS PASSED!\n");
+            print("═══════════════════════════════════════════════════════════\n");
+            return 1;
+        } else {
+            print("\n✗ SOME TESTS FAILED\n");
+            print("═══════════════════════════════════════════════════════════\n");
+            return 0;
+        }
+    }
+}

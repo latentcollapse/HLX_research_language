@@ -20,7 +20,7 @@
 
 ### What Still Needs Implementation
 
-#### 8.1 Parser Support (hlx_bootstrap/parser.hlxa)
+#### 8.1 Parser Support (hlx_bootstrap/parser.hlx)
 **Status**: NOT IMPLEMENTED
 
 Needs to parse `#[max_depth(N)]` attribute syntax:
@@ -35,9 +35,9 @@ Changes needed:
 - [ ] Store attributes in Block AST node
 - [ ] Validate max_depth is numeric
 
-Estimated: 30-50 lines in parser.hlxa
+Estimated: 30-50 lines in parser.hlx
 
-#### 8.2 Semantic Validation (hlx_bootstrap/semantic_complete.hlxa)
+#### 8.2 Semantic Validation (hlx_bootstrap/semantic_complete.hlx)
 **Status**: NOT IMPLEMENTED
 
 Needs to validate max_depth attributes:
@@ -53,9 +53,9 @@ Changes needed:
 - [ ] Validate range (1-2^32)
 - [ ] Report validation errors
 
-Estimated: 40-60 lines in semantic_complete.hlxa
+Estimated: 40-60 lines in semantic_complete.hlx
 
-#### 8.3 Lowering (hlx_bootstrap/lower.hlxa)
+#### 8.3 Lowering (hlx_bootstrap/lower.hlx)
 **Status**: NOT IMPLEMENTED
 
 Currently uses Rust lowering. Bootstrap version needs:
@@ -71,7 +71,7 @@ Changes needed:
 - [ ] Apply max_depth when lowering Call instructions
 - [ ] Set max_depth in FuncDef lowering
 
-Estimated: 50-80 lines in lower.hlxa
+Estimated: 50-80 lines in lower.hlx
 
 ---
 
@@ -154,8 +154,8 @@ fn main() {
 ## 📊 Testing Coverage
 
 ### Current Tests ✅
-- `test_recursion_depth.hlxa` - Basic recursion patterns
-- `test_recursion_exceed.hlxa` - Runtime depth enforcement
+- `test_recursion_depth.hlx` - Basic recursion patterns
+- `test_recursion_exceed.hlx` - Runtime depth enforcement
 - `test_recursion_hardened.hlx` - Comprehensive 6-test suite
 
 ### Needed Tests ❌

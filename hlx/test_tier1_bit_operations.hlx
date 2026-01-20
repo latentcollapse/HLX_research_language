@@ -1,0 +1,624 @@
+// Test suite for Tier 1 Bit Operations
+// Phase 4 of builtin library conversion
+
+program test_tier1_bit_operations {
+
+    // ========================================================================
+    // TIER 1 BIT OPERATION FUNCTIONS (Embedded)
+    // ========================================================================
+
+    fn bit_and(a: i64, b: i64) -> i64 {
+        return a & b;
+    }
+
+    fn bit_or(a: i64, b: i64) -> i64 {
+        return a | b;
+    }
+
+    fn bit_xor(a: i64, b: i64) -> i64 {
+        return a ^ b;
+    }
+
+    fn bit_not(a: i64) -> i64 {
+        return 0 - a - 1;
+    }
+
+    fn bit_shl(a: i64, shift: i64) -> i64 {
+        return a << shift;
+    }
+
+    fn bit_shr(a: i64, shift: i64) -> i64 {
+        return a >> shift;
+    }
+
+    fn bit_count(a: i64) -> i64 {
+        let count = 0;
+        let value = a;
+
+        if (value < 0) {
+            value = 0 - value - 1;
+        }
+
+        loop(value > 0, 60) {
+            value = value & (value - 1);
+            count = count + 1;
+        }
+
+        return count;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR bit_and() FUNCTION
+    // ========================================================================
+
+    fn test_bit_and_both_set() -> i64 {
+        let result = bit_and(15, 7);  // 1111 & 0111 = 0111
+        if (result == 7) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_and_partial() -> i64 {
+        let result = bit_and(12, 10);  // 1100 & 1010 = 1000
+        if (result == 8) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_and_none() -> i64 {
+        let result = bit_and(12, 3);  // 1100 & 0011 = 0000
+        if (result == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_and_all() -> i64 {
+        let result = bit_and(255, 255);  // 11111111 & 11111111 = 11111111
+        if (result == 255) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR bit_or() FUNCTION
+    // ========================================================================
+
+    fn test_bit_or_both_set() -> i64 {
+        let result = bit_or(12, 10);  // 1100 | 1010 = 1110
+        if (result == 14) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_or_first_only() -> i64 {
+        let result = bit_or(12, 0);  // 1100 | 0000 = 1100
+        if (result == 12) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_or_combine() -> i64 {
+        let result = bit_or(8, 4);  // 1000 | 0100 = 1100
+        if (result == 12) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_or_all() -> i64 {
+        let result = bit_or(255, 255);  // 11111111 | 11111111 = 11111111
+        if (result == 255) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR bit_xor() FUNCTION
+    // ========================================================================
+
+    fn test_bit_xor_different() -> i64 {
+        let result = bit_xor(12, 10);  // 1100 ^ 1010 = 0110
+        if (result == 6) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_xor_same() -> i64 {
+        let result = bit_xor(15, 15);  // 1111 ^ 1111 = 0000
+        if (result == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_xor_with_zero() -> i64 {
+        let result = bit_xor(42, 0);  // 101010 ^ 000000 = 101010
+        if (result == 42) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_xor_toggle() -> i64 {
+        let result = bit_xor(8, 12);  // 1000 ^ 1100 = 0100
+        if (result == 4) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR bit_not() FUNCTION
+    // ========================================================================
+
+    fn test_bit_not_zero() -> i64 {
+        let result = bit_not(0);  // ~0 = -1
+        if (result == 0 - 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_not_one() -> i64 {
+        let result = bit_not(1);  // ~1 = -2
+        if (result == 0 - 2) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_not_all_bits() -> i64 {
+        let result = bit_not(0 - 1);  // ~(-1) = 0
+        if (result == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_not_negative() -> i64 {
+        let result = bit_not(0 - 2);  // ~(-2) = 1
+        if (result == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR bit_shl() FUNCTION
+    // ========================================================================
+
+    fn test_bit_shl_basic() -> i64 {
+        let result = bit_shl(1, 4);  // 0001 << 4 = 10000
+        if (result == 16) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_shl_zero_shift() -> i64 {
+        let result = bit_shl(42, 0);
+        if (result == 42) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_shl_multiple() -> i64 {
+        let result = bit_shl(3, 3);  // 0011 << 3 = 11000
+        if (result == 24) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_shl_overflow() -> i64 {
+        let result = bit_shl(128, 1);  // 10000000 << 1 = 100000000
+        if (result == 256) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR bit_shr() FUNCTION
+    // ========================================================================
+
+    fn test_bit_shr_basic() -> i64 {
+        let result = bit_shr(16, 2);  // 10000 >> 2 = 0100
+        if (result == 4) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_shr_zero_shift() -> i64 {
+        let result = bit_shr(42, 0);
+        if (result == 42) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_shr_multiple() -> i64 {
+        let result = bit_shr(32, 3);  // 100000 >> 3 = 000100
+        if (result == 4) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_shr_all_zeros() -> i64 {
+        let result = bit_shr(1, 4);  // 0001 >> 4 = 0000
+        if (result == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR bit_count() FUNCTION
+    // ========================================================================
+
+    fn test_bit_count_zero() -> i64 {
+        let result = bit_count(0);
+        if (result == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_count_all_ones_4() -> i64 {
+        let result = bit_count(15);  // 1111
+        if (result == 4) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_count_all_ones_8() -> i64 {
+        let result = bit_count(255);  // 11111111
+        if (result == 8) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_count_partial() -> i64 {
+        let result = bit_count(21);  // 10101 has 3 ones
+        if (result == 3) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_count_single() -> i64 {
+        let result = bit_count(1);  // 0001
+        if (result == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_bit_count_power_of_two() -> i64 {
+        let result = bit_count(64);  // 1000000
+        if (result == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // MAIN TEST HARNESS
+    // ========================================================================
+
+    fn main() -> i64 {
+        let passed = 0;
+        let failed = 0;
+
+        print("═══════════════════════════════════════════════════════════\n");
+        print("TIER 1 BIT OPERATIONS TESTS\n");
+        print("═══════════════════════════════════════════════════════════\n\n");
+
+        // Test bit_and()
+        print("Testing bit_and() function:\n");
+
+        if (test_bit_and_both_set() == 1) {
+            print("  ✓ bit_and(15, 7) == 7\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_and(15, 7) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_and_partial() == 1) {
+            print("  ✓ bit_and(12, 10) == 8\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_and(12, 10) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_and_none() == 1) {
+            print("  ✓ bit_and(12, 3) == 0\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_and(12, 3) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_and_all() == 1) {
+            print("  ✓ bit_and(255, 255) == 255\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_and(255, 255) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test bit_or()
+        print("Testing bit_or() function:\n");
+
+        if (test_bit_or_both_set() == 1) {
+            print("  ✓ bit_or(12, 10) == 14\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_or(12, 10) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_or_first_only() == 1) {
+            print("  ✓ bit_or(12, 0) == 12\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_or(12, 0) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_or_combine() == 1) {
+            print("  ✓ bit_or(8, 4) == 12\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_or(8, 4) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_or_all() == 1) {
+            print("  ✓ bit_or(255, 255) == 255\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_or(255, 255) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test bit_xor()
+        print("Testing bit_xor() function:\n");
+
+        if (test_bit_xor_different() == 1) {
+            print("  ✓ bit_xor(12, 10) == 6\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_xor(12, 10) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_xor_same() == 1) {
+            print("  ✓ bit_xor(15, 15) == 0\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_xor(15, 15) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_xor_with_zero() == 1) {
+            print("  ✓ bit_xor(42, 0) == 42\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_xor(42, 0) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_xor_toggle() == 1) {
+            print("  ✓ bit_xor(8, 12) == 4\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_xor(8, 12) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test bit_not()
+        print("Testing bit_not() function:\n");
+
+        if (test_bit_not_zero() == 1) {
+            print("  ✓ bit_not(0) == -1\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_not(0) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_not_one() == 1) {
+            print("  ✓ bit_not(1) == -2\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_not(1) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_not_all_bits() == 1) {
+            print("  ✓ bit_not(-1) == 0\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_not(-1) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_not_negative() == 1) {
+            print("  ✓ bit_not(-2) == 1\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_not(-2) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test bit_shl()
+        print("Testing bit_shl() function:\n");
+
+        if (test_bit_shl_basic() == 1) {
+            print("  ✓ bit_shl(1, 4) == 16\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_shl(1, 4) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_shl_zero_shift() == 1) {
+            print("  ✓ bit_shl(42, 0) == 42\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_shl(42, 0) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_shl_multiple() == 1) {
+            print("  ✓ bit_shl(3, 3) == 24\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_shl(3, 3) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_shl_overflow() == 1) {
+            print("  ✓ bit_shl(128, 1) == 256\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_shl(128, 1) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test bit_shr()
+        print("Testing bit_shr() function:\n");
+
+        if (test_bit_shr_basic() == 1) {
+            print("  ✓ bit_shr(16, 2) == 4\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_shr(16, 2) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_shr_zero_shift() == 1) {
+            print("  ✓ bit_shr(42, 0) == 42\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_shr(42, 0) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_shr_multiple() == 1) {
+            print("  ✓ bit_shr(32, 3) == 4\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_shr(32, 3) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_shr_all_zeros() == 1) {
+            print("  ✓ bit_shr(1, 4) == 0\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_shr(1, 4) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test bit_count()
+        print("Testing bit_count() function:\n");
+
+        if (test_bit_count_zero() == 1) {
+            print("  ✓ bit_count(0) == 0\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_count(0) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_count_all_ones_4() == 1) {
+            print("  ✓ bit_count(15) == 4\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_count(15) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_count_all_ones_8() == 1) {
+            print("  ✓ bit_count(255) == 8\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_count(255) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_count_partial() == 1) {
+            print("  ✓ bit_count(21) == 3\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_count(21) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_count_single() == 1) {
+            print("  ✓ bit_count(1) == 1\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_count(1) failed\n");
+            failed += 1;
+        }
+
+        if (test_bit_count_power_of_two() == 1) {
+            print("  ✓ bit_count(64) == 1\n");
+            passed += 1;
+        } else {
+            print("  ✗ bit_count(64) failed\n");
+            failed += 1;
+        }
+
+        // Summary
+        print("\n");
+        print("═══════════════════════════════════════════════════════════\n");
+        print("RESULTS:\n");
+        print("  Passed: ");
+        print(passed);
+        print("/30\n");
+        print("  Failed: ");
+        print(failed);
+        print("/30\n");
+
+        if (failed == 0) {
+            print("\n✓ ALL TESTS PASSED!\n");
+            print("═══════════════════════════════════════════════════════════\n");
+            return 1;
+        } else {
+            print("\n✗ SOME TESTS FAILED\n");
+            print("═══════════════════════════════════════════════════════════\n");
+            return 0;
+        }
+    }
+}

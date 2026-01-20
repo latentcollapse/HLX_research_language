@@ -1,0 +1,1021 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// HLX Native Runtime - Bytecode Interpreter in HLX
+// Executes compiled HLX bytecode without RustD dependency
+// ═══════════════════════════════════════════════════════════════════════════
+
+module hlx_runtime {
+
+// ============================================================================
+// VM State Definition (Using Contracts)
+// ============================================================================
+
+// Contract 200: VM State - Main execution context
+//   @0: bytecode - raw bytecode array
+//   @1: pc - program counter
+//   @2: registers - register file (64 registers)
+//   @3: call_stack - function call frames
+//   @4: halted - execution status (0=running, 1=halted)
+//   @5: return_value - last return value
+//   @6: inst_count - total instructions
+//   @7: handle_table - collapsed value storage
+//   @8: next_handle - next handle ID
+//   @9: loop_stack - loop tracking
+//  @10: function_table - function name → PC mapping
+
+// ============================================================================
+// VM State Initialization
+// ============================================================================
+
+fn init_registers() -> [i64] {
+    let regs = [];
+    let i = 0;
+    loop(i < 64, 64) {
+        regs = push(regs, 0);
+        i = i + 1;
+    }
+    return regs;
+}
+
+fn init_vm(bytecode: [i64]) -> [i64] {
+    let regs = init_registers();
+
+    let vm = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    vm = set_at(vm, 0, ptr_to_int(bytecode));      // @0: bytecode
+    vm = set_at(vm, 1, 0);                         // @1: pc = 0
+    vm = set_at(vm, 2, ptr_to_int(regs));          // @2: registers
+    vm = set_at(vm, 3, ptr_to_int([]));            // @3: call_stack
+    vm = set_at(vm, 4, 0);                         // @4: halted = false
+    vm = set_at(vm, 5, 0);                         // @5: return_value = 0
+    vm = set_at(vm, 6, array_len(bytecode));       // @6: inst_count
+    vm = set_at(vm, 7, ptr_to_int([]));            // @7: handle_table
+    vm = set_at(vm, 8, 0);                         // @8: next_handle = 0
+    vm = set_at(vm, 9, ptr_to_int([]));            // @9: loop_stack
+    vm = set_at(vm, 10, ptr_to_int([]));           // @10: function_table
+
+    return vm;
+}
+
+// ============================================================================
+// VM State Accessors (using indices instead of names)
+// ============================================================================
+
+fn vm_bytecode(vm: [i64]) -> [i64] {
+    return int_to_ptr(get_at(vm, 0));
+}
+
+fn vm_pc(vm: [i64]) -> i64 {
+    return get_at(vm, 1);
+}
+
+fn vm_registers(vm: [i64]) -> [i64] {
+    return int_to_ptr(get_at(vm, 2));
+}
+
+fn vm_call_stack(vm: [i64]) -> [i64] {
+    return int_to_ptr(get_at(vm, 3));
+}
+
+fn vm_halted(vm: [i64]) -> i64 {
+    return get_at(vm, 4);
+}
+
+fn vm_return_value(vm: [i64]) -> i64 {
+    return get_at(vm, 5);
+}
+
+fn vm_inst_count(vm: [i64]) -> i64 {
+    return get_at(vm, 6);
+}
+
+fn vm_handle_table(vm: [i64]) -> [i64] {
+    return int_to_ptr(get_at(vm, 7));
+}
+
+fn vm_next_handle(vm: [i64]) -> i64 {
+    return get_at(vm, 8);
+}
+
+fn vm_loop_stack(vm: [i64]) -> [i64] {
+    return int_to_ptr(get_at(vm, 9));
+}
+
+fn vm_function_table(vm: [i64]) -> [i64] {
+    return int_to_ptr(get_at(vm, 10));
+}
+
+// ============================================================================
+// VM State Mutators
+// ============================================================================
+
+fn set_vm_pc(vm: [i64], pc: i64) -> [i64] {
+    return set_at(vm, 1, pc);
+}
+
+fn set_vm_registers(vm: [i64], regs: [i64]) -> [i64] {
+    return set_at(vm, 2, ptr_to_int(regs));
+}
+
+fn set_vm_call_stack(vm: [i64], stack: [i64]) -> [i64] {
+    return set_at(vm, 3, ptr_to_int(stack));
+}
+
+fn set_vm_halted(vm: [i64], halted: i64) -> [i64] {
+    return set_at(vm, 4, halted);
+}
+
+fn set_vm_return_value(vm: [i64], value: i64) -> [i64] {
+    return set_at(vm, 5, value);
+}
+
+fn set_vm_handle_table(vm: [i64], table: [i64]) -> [i64] {
+    return set_at(vm, 7, ptr_to_int(table));
+}
+
+fn set_vm_next_handle(vm: [i64], handle: i64) -> [i64] {
+    return set_at(vm, 8, handle);
+}
+
+fn set_vm_loop_stack(vm: [i64], stack: [i64]) -> [i64] {
+    return set_at(vm, 9, ptr_to_int(stack));
+}
+
+fn set_vm_function_table(vm: [i64], table: [i64]) -> [i64] {
+    return set_at(vm, 10, ptr_to_int(table));
+}
+
+// ============================================================================
+// Register Access
+// ============================================================================
+
+fn get_register(vm: [i64], reg: i64) -> i64 {
+    let regs = vm_registers(vm);
+    if reg >= 64 {
+        return 0;  // Out of bounds, return 0
+    }
+    return get_at(regs, reg);
+}
+
+fn set_register(vm: [i64], reg: i64, value: i64) -> [i64] {
+    let regs = vm_registers(vm);
+    if reg >= 64 {
+        return vm;  // Out of bounds, no-op
+    }
+    regs = set_at(regs, reg, value);
+    return set_vm_registers(vm, regs);
+}
+
+// ============================================================================
+// Helper Functions for Function Calls
+// ============================================================================
+
+fn push(arr: [i64], value: i64) -> [i64] {
+    // Add element to end of array
+    let new_arr = [];
+    let i = 0;
+    loop(i < array_len(arr), 10000) {
+        new_arr = set_at(new_arr, i, get_at(arr, i));
+        i = i + 1;
+    }
+    new_arr = set_at(new_arr, array_len(arr), value);
+    return new_arr;
+}
+
+fn pop(arr: [i64]) -> [i64] {
+    // Remove last element from array
+    if array_len(arr) == 0 {
+        return arr;
+    }
+    let new_arr = [];
+    let i = 0;
+    loop(i < array_len(arr) - 1, 10000) {
+        new_arr = set_at(new_arr, i, get_at(arr, i));
+        i = i + 1;
+    }
+    return new_arr;
+}
+
+fn strings_equal(s1: [i64], s2: [i64]) -> i64 {
+    // Compare two strings for equality
+    if array_len(s1) != array_len(s2) {
+        return 0;
+    }
+    let i = 0;
+    loop(i < array_len(s1), 10000) {
+        if get_at(s1, i) != get_at(s2, i) {
+            return 0;
+        }
+        i = i + 1;
+    }
+    return 1;
+}
+
+fn lookup_function(vm: [i64], name: [i64]) -> i64 {
+    // Look up function by name, return entry PC or -1 if not found
+    let func_table = vm_function_table(vm);
+    let i = 0;
+
+    loop(i < array_len(func_table), 1000) {
+        let entry_ptr = get_at(func_table, i);
+        let entry = int_to_ptr(entry_ptr);
+        let func_name_ptr = get_at(entry, 0);
+        let func_name = int_to_ptr(func_name_ptr);
+
+        if strings_equal(func_name, name) == 1 {
+            return get_at(entry, 1);  // Return entry_pc
+        }
+
+        i = i + 1;
+    }
+
+    return -1;  // Not found
+}
+
+// ============================================================================
+// Instruction Decoding
+// ============================================================================
+
+// Instruction constants (must match lowerer/emitter)
+fn INST_CONSTANT() -> i64 { return 1; }
+fn INST_MOVE() -> i64 { return 2; }
+fn INST_ADD() -> i64 { return 10; }
+fn INST_SUB() -> i64 { return 11; }
+fn INST_MUL() -> i64 { return 12; }
+fn INST_DIV() -> i64 { return 13; }
+fn INST_MOD() -> i64 { return 14; }
+fn INST_EQ() -> i64 { return 20; }
+fn INST_NE() -> i64 { return 21; }
+fn INST_LT() -> i64 { return 22; }
+fn INST_LE() -> i64 { return 23; }
+fn INST_GT() -> i64 { return 24; }
+fn INST_GE() -> i64 { return 25; }
+fn INST_AND() -> i64 { return 30; }
+fn INST_OR() -> i64 { return 31; }
+fn INST_BIT_AND() -> i64 { return 32; }
+fn INST_BIT_OR() -> i64 { return 33; }
+fn INST_BIT_XOR() -> i64 { return 34; }
+fn INST_SHL() -> i64 { return 35; }
+fn INST_SHR() -> i64 { return 36; }
+fn INST_NOT() -> i64 { return 37; }
+fn INST_IF() -> i64 { return 40; }
+fn INST_JUMP() -> i64 { return 41; }
+fn INST_CALL() -> i64 { return 50; }
+fn INST_RETURN() -> i64 { return 51; }
+fn INST_LOOP() -> i64 { return 60; }
+fn INST_BREAK() -> i64 { return 61; }
+fn INST_CONTINUE() -> i64 { return 62; }
+fn INST_FUNCDEF() -> i64 { return 70; }
+fn INST_GET_ELEMENT() -> i64 { return 80; }
+fn INST_SET_ELEMENT() -> i64 { return 81; }
+fn INST_CONTRACT_CREATE() -> i64 { return 90; }
+fn INST_CONTRACT_GET() -> i64 { return 91; }
+fn INST_CONTRACT_SET() -> i64 { return 92; }
+fn INST_COLLAPSE() -> i64 { return 93; }
+fn INST_RESOLVE() -> i64 { return 94; }
+
+fn decode_u32(bytecode: [i64], pos: i64) -> i64 {
+    // Decode 32-bit little-endian value
+    let b0 = get_at(bytecode, pos);
+    let b1 = if (pos + 1 < array_len(bytecode)) { get_at(bytecode, pos + 1); } else { 0; };
+    let b2 = if (pos + 2 < array_len(bytecode)) { get_at(bytecode, pos + 2); } else { 0; };
+    let b3 = if (pos + 3 < array_len(bytecode)) { get_at(bytecode, pos + 3); } else { 0; };
+
+    return b0 + (b1 * 256) + (b2 * 65536) + (b3 * 16777216);
+}
+
+fn decode_instruction(vm: [i64]) -> [i64] {
+    let bytecode = vm_bytecode(vm);
+    let pc = vm_pc(vm);
+
+    if pc >= array_len(bytecode) {
+        let invalid = [0, 0, 0, 0, 0];
+        return invalid;
+    }
+
+    let opcode = get_at(bytecode, pc);
+
+    // Decode operands as 32-bit values
+    let op1 = decode_u32(bytecode, pc + 1);
+    let op2 = decode_u32(bytecode, pc + 5);
+    let op3 = decode_u32(bytecode, pc + 9);
+    let op4 = decode_u32(bytecode, pc + 13);
+
+    let inst = [0, 0, 0, 0, 0];
+    inst = set_at(inst, 0, opcode);
+    inst = set_at(inst, 1, op1);
+    inst = set_at(inst, 2, op2);
+    inst = set_at(inst, 3, op3);
+    inst = set_at(inst, 4, op4);
+
+    return inst;
+}
+
+// ============================================================================
+// Instruction Execution (Handlers)
+// ============================================================================
+
+fn execute_constant(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let value = get_at(inst, 2);
+    let is_string = get_at(inst, 3);
+
+    vm = set_register(vm, out, value);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);  // Skip instruction (1 + 4*4 bytes)
+    return vm;
+}
+
+fn execute_move(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let src = get_at(inst, 2);
+
+    let value = get_register(vm, src);
+    vm = set_register(vm, out, value);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_add(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = lhs_val + rhs_val;
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_sub(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = lhs_val - rhs_val;
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_mul(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = lhs_val * rhs_val;
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_eq(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = if (lhs_val == rhs_val) { 1; } else { 0; };
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_lt(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = if (lhs_val < rhs_val) { 1; } else { 0; };
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_if(vm: [i64], inst: [i64]) -> [i64] {
+    let cond_reg = get_at(inst, 1);
+    let then_pc = get_at(inst, 2);
+    let else_pc = get_at(inst, 3);
+
+    let cond = get_register(vm, cond_reg);
+
+    if cond != 0 {
+        vm = set_vm_pc(vm, then_pc);
+    } else {
+        vm = set_vm_pc(vm, else_pc);
+    }
+
+    return vm;
+}
+
+fn execute_return(vm: [i64], inst: [i64]) -> [i64] {
+    // RETURN format: [opcode=51, value_reg, ...]
+    let val_reg = get_at(inst, 1);
+    let return_value = get_register(vm, val_reg);
+
+    // Check if we're returning from top level
+    let call_stack = vm_call_stack(vm);
+    if array_len(call_stack) == 0 {
+        // Returning from main/entry - halt VM
+        vm = set_vm_return_value(vm, return_value);
+        vm = set_vm_halted(vm, 1);
+        return vm;
+    }
+
+    // Pop call frame
+    let frame_ptr = get_at(call_stack, array_len(call_stack) - 1);
+    let frame = int_to_ptr(frame_ptr);
+    call_stack = pop(call_stack);
+    vm = set_vm_call_stack(vm, call_stack);
+
+    // Extract frame info: [return_pc, saved_regs_ptr, out_reg]
+    let return_pc = get_at(frame, 0);
+    let saved_regs_ptr = get_at(frame, 1);
+    let saved_regs = int_to_ptr(saved_regs_ptr);
+    let out_reg = get_at(frame, 2);
+
+    // Restore registers
+    vm = set_vm_registers(vm, saved_regs);
+
+    // Store return value in output register
+    vm = set_register(vm, out_reg, return_value);
+
+    // Jump to return address
+    vm = set_vm_pc(vm, return_pc);
+
+    return vm;
+}
+
+fn execute_collapse(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let value_reg = get_at(inst, 2);
+
+    let value = get_register(vm, value_reg);
+
+    // Get handle table and allocate new handle
+    let table = vm_handle_table(vm);
+    let handle_id = vm_next_handle(vm);
+
+    // Store value in table at handle_id position
+    table = push(table, value);
+
+    // Update VM with new table and next_handle
+    vm = set_vm_handle_table(vm, table);
+    vm = set_vm_next_handle(vm, handle_id + 1);
+
+    // Store handle ID in output register
+    vm = set_register(vm, out, handle_id);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_resolve(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let handle_reg = get_at(inst, 2);
+
+    let handle_id = get_register(vm, handle_reg);
+
+    // Look up value in handle table
+    let table = vm_handle_table(vm);
+
+    let value = 0;
+    if handle_id >= 0 {
+        if handle_id < array_len(table) {
+            value = get_at(table, handle_id);
+        }
+    }
+
+    // Store recovered value in output register
+    vm = set_register(vm, out, value);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_contract_create(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let contract_id = get_at(inst, 2);
+    let field_count = get_at(inst, 3);
+
+    // Create contract structure: [contract_id, field0, field1, ...]
+    let contract = [0];
+    contract = set_at(contract, 0, contract_id);
+
+    // Load field values from consecutive registers starting at inst[4]
+    // Note: For variable-length instructions, we'd need a better encoding
+    // For now, assume fields are in registers (simplified approach)
+    let i = 0;
+    loop(i < field_count, 100) {
+        // This is a simplification - in real implementation would decode field reg from bytecode
+        // For now, just add placeholder 0 values
+        contract = push(contract, 0);
+        i = i + 1;
+    }
+
+    // Store contract in handle table and return handle ID
+    let table = vm_handle_table(vm);
+    let handle_id = vm_next_handle(vm);
+
+    table = push(table, ptr_to_int(contract));
+
+    vm = set_vm_handle_table(vm, table);
+    vm = set_vm_next_handle(vm, handle_id + 1);
+    vm = set_register(vm, out, handle_id);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_contract_get(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let container_reg = get_at(inst, 2);
+    let field_id = get_at(inst, 3);
+
+    let container = get_register(vm, container_reg);
+
+    // For now, treat container as a direct value (not a handle)
+    // In full implementation, would check if it's a handle and resolve first
+    // Contracts are stored as arrays: [contract_id, field0, field1, ...]
+    // So field N is at position N+1
+
+    // For MVP, just store field_id in output (placeholder)
+    vm = set_register(vm, out, field_id);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_contract_set(vm: [i64], inst: [i64]) -> [i64] {
+    let container_reg = get_at(inst, 1);
+    let field_id = get_at(inst, 2);
+    let value_reg = get_at(inst, 3);
+
+    // For immutable MVP, this is a no-op
+    // Full implementation would update contract field
+
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+// ============================================================================
+// Arithmetic Handlers
+// ============================================================================
+
+fn execute_div(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = if (rhs_val == 0) { 0; } else { lhs_val / rhs_val; };
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_mod(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = if (rhs_val == 0) { 0; } else { lhs_val % rhs_val; };
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+// ============================================================================
+// Comparison Handlers
+// ============================================================================
+
+fn execute_ne(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = if (lhs_val != rhs_val) { 1; } else { 0; };
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_le(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = if (lhs_val <= rhs_val) { 1; } else { 0; };
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_gt(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = if (lhs_val > rhs_val) { 1; } else { 0; };
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_ge(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = if (lhs_val >= rhs_val) { 1; } else { 0; };
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+// ============================================================================
+// Logical Handlers
+// ============================================================================
+
+fn execute_and(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = if ((lhs_val != 0) && (rhs_val != 0)) { 1; } else { 0; };
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_or(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = if ((lhs_val != 0) || (rhs_val != 0)) { 1; } else { 0; };
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_not(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let operand = get_at(inst, 2);
+
+    let val = get_register(vm, operand);
+    let result = if (val == 0) { 1; } else { 0; };
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+// ============================================================================
+// Bitwise Handlers
+// ============================================================================
+
+fn execute_bit_and(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = bit_and(lhs_val, rhs_val);
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_bit_or(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = bit_or(lhs_val, rhs_val);
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_bit_xor(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = bit_xor(lhs_val, rhs_val);
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_shl(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = bit_shl(lhs_val, rhs_val);
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_shr(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let lhs = get_at(inst, 2);
+    let rhs = get_at(inst, 3);
+
+    let lhs_val = get_register(vm, lhs);
+    let rhs_val = get_register(vm, rhs);
+    let result = bit_shr(lhs_val, rhs_val);
+
+    vm = set_register(vm, out, result);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+// ============================================================================
+// Control Flow Handlers
+// ============================================================================
+
+fn execute_jump(vm: [i64], inst: [i64]) -> [i64] {
+    let target = get_at(inst, 1);
+    vm = set_vm_pc(vm, target);
+    return vm;
+}
+
+fn execute_loop(vm: [i64], inst: [i64]) -> [i64] {
+    let cond_reg = get_at(inst, 1);
+    let body_pc = get_at(inst, 2);
+    let max_iter = get_at(inst, 3);
+
+    let cond = get_register(vm, cond_reg);
+
+    // Simple loop: if condition true, jump to body, else skip
+    if cond != 0 {
+        vm = set_vm_pc(vm, body_pc);
+    } else {
+        vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    }
+
+    return vm;
+}
+
+fn execute_break(vm: [i64], inst: [i64]) -> [i64] {
+    // Break: jump to end of loop (requires tracking loop nesting)
+    // For MVP, just advance PC (full impl would use loop_stack)
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_continue(vm: [i64], inst: [i64]) -> [i64] {
+    // Continue: jump back to loop condition
+    // For MVP, just advance PC (full impl would use loop_stack)
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+// ============================================================================
+// Array Handlers
+// ============================================================================
+
+fn execute_get_element(vm: [i64], inst: [i64]) -> [i64] {
+    let out = get_at(inst, 1);
+    let array_reg = get_at(inst, 2);
+    let index_reg = get_at(inst, 3);
+
+    let array_ptr = get_register(vm, array_reg);
+    let index = get_register(vm, index_reg);
+
+    // For MVP, assume array is stored as handle ID
+    // Look it up in handle table
+    let table = vm_handle_table(vm);
+    let value = 0;
+
+    if array_ptr >= 0 {
+        if array_ptr < array_len(table) {
+            // Get array from handle table
+            let array_ptr_val = get_at(table, array_ptr);
+            // In real implementation, would dereference and index
+            // For now, just return a placeholder
+            value = array_ptr_val;
+        }
+    }
+
+    vm = set_register(vm, out, value);
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+fn execute_set_element(vm: [i64], inst: [i64]) -> [i64] {
+    let array_reg = get_at(inst, 1);
+    let index_reg = get_at(inst, 2);
+    let value_reg = get_at(inst, 3);
+
+    // For immutable MVP, this is a no-op
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+    return vm;
+}
+
+// ============================================================================
+// Function Handlers (Stub implementations)
+// ============================================================================
+
+fn execute_funcdef(vm: [i64], inst: [i64]) -> [i64] {
+    // FUNCDEF format: [opcode=70, name_len, name_data..., param_count, entry_pc, max_depth]
+    // For simplicity, extract name from instruction fields
+    // The name is encoded in the instruction - we'll use inst[1] as name pointer
+
+    let name_ptr = get_at(inst, 1);
+    let name = int_to_ptr(name_ptr);
+    let param_count = get_at(inst, 2);
+    let entry_pc = get_at(inst, 3);
+    let max_depth = get_at(inst, 4);
+
+    // Create function entry: [name_ptr, entry_pc, max_depth]
+    let func_entry = [ptr_to_int(name), entry_pc, max_depth];
+
+    // Add to function table
+    let func_table = vm_function_table(vm);
+    func_table = push(func_table, ptr_to_int(func_entry));
+    vm = set_vm_function_table(vm, func_table);
+
+    // Advance PC past this instruction
+    vm = set_vm_pc(vm, vm_pc(vm) + 17);
+
+    return vm;
+}
+
+fn execute_call(vm: [i64], inst: [i64]) -> [i64] {
+    // CALL format: [opcode=50, out_reg, name_ptr, arg_count, arg_regs...]
+    let out_reg = get_at(inst, 1);
+    let name_ptr = get_at(inst, 2);
+    let name = int_to_ptr(name_ptr);
+    let arg_count = get_at(inst, 3);
+
+    // Look up function
+    let entry_pc = lookup_function(vm, name);
+
+    if entry_pc < 0 {
+        print("ERROR: Unknown function: ");
+        print(name);
+        print("\n");
+        vm = set_vm_halted(vm, 1);
+        return vm;
+    }
+
+    // Create call frame: [return_pc, saved_regs_ptr, out_reg]
+    let return_pc = vm_pc(vm) + 17;
+    let saved_regs = vm_registers(vm);
+    let call_frame = [return_pc, ptr_to_int(saved_regs), out_reg];
+
+    // Push call frame
+    let call_stack = vm_call_stack(vm);
+    call_stack = push(call_stack, ptr_to_int(call_frame));
+    vm = set_vm_call_stack(vm, call_stack);
+
+    // Copy arguments to registers r0, r1, r2, ...
+    let i = 0;
+    loop(i < arg_count, 20) {
+        let arg_reg = get_at(inst, 4 + i);
+        let arg_value = get_register(vm, arg_reg);
+        vm = set_register(vm, i, arg_value);
+        i = i + 1;
+    }
+
+    // Jump to function entry
+    vm = set_vm_pc(vm, entry_pc);
+
+    return vm;
+}
+
+// ============================================================================
+// Main Execution Loop
+// ============================================================================
+
+export fn execute_crate(bytecode: [i64]) -> i64 {
+    let vm = init_vm(bytecode);
+    let inst_limit = 1000000;  // Max instructions to prevent infinite loops
+    let inst_count = 0;
+
+    loop(vm_halted(vm) == 0, inst_limit) {
+        if vm_pc(vm) >= array_len(bytecode) {
+            break;
+        }
+
+        let inst = decode_instruction(vm);
+        let opcode = get_at(inst, 0);
+
+        // Dispatch to instruction handler
+        switch opcode {
+            1 => { vm = execute_constant(vm, inst); },
+            2 => { vm = execute_move(vm, inst); },
+            10 => { vm = execute_add(vm, inst); },
+            11 => { vm = execute_sub(vm, inst); },
+            12 => { vm = execute_mul(vm, inst); },
+            13 => { vm = execute_div(vm, inst); },
+            14 => { vm = execute_mod(vm, inst); },
+            20 => { vm = execute_eq(vm, inst); },
+            21 => { vm = execute_ne(vm, inst); },
+            22 => { vm = execute_lt(vm, inst); },
+            23 => { vm = execute_le(vm, inst); },
+            24 => { vm = execute_gt(vm, inst); },
+            25 => { vm = execute_ge(vm, inst); },
+            30 => { vm = execute_and(vm, inst); },
+            31 => { vm = execute_or(vm, inst); },
+            32 => { vm = execute_bit_and(vm, inst); },
+            33 => { vm = execute_bit_or(vm, inst); },
+            34 => { vm = execute_bit_xor(vm, inst); },
+            35 => { vm = execute_shl(vm, inst); },
+            36 => { vm = execute_shr(vm, inst); },
+            37 => { vm = execute_not(vm, inst); },
+            40 => { vm = execute_if(vm, inst); },
+            41 => { vm = execute_jump(vm, inst); },
+            50 => { vm = execute_call(vm, inst); },
+            51 => { vm = execute_return(vm, inst); },
+            60 => { vm = execute_loop(vm, inst); },
+            61 => { vm = execute_break(vm, inst); },
+            62 => { vm = execute_continue(vm, inst); },
+            70 => { vm = execute_funcdef(vm, inst); },
+            80 => { vm = execute_get_element(vm, inst); },
+            81 => { vm = execute_set_element(vm, inst); },
+            90 => { vm = execute_contract_create(vm, inst); },
+            91 => { vm = execute_contract_get(vm, inst); },
+            92 => { vm = execute_contract_set(vm, inst); },
+            93 => { vm = execute_collapse(vm, inst); },
+            94 => { vm = execute_resolve(vm, inst); },
+            _ => {
+                print("ERROR: Unknown opcode ");
+                print_int(opcode);
+                print("\n");
+                vm = set_vm_halted(vm, 1);
+            },
+        }
+
+        inst_count = inst_count + 1;
+    }
+
+    return vm_return_value(vm);
+}
+
+// ============================================================================
+// Test Harness
+// ============================================================================
+
+fn main() -> i64 {
+    print("═══════════════════════════════════════════════════════\n");
+    print("HLX Native Runtime - Bytecode Interpreter\n");
+    print("═══════════════════════════════════════════════════════\n");
+    print("\n");
+
+    // TODO: Add bytecode tests here
+    // This would require loading compiled bytecode from files
+
+    print("Runtime framework initialized successfully!\n");
+    print("Ready for bytecode execution.\n");
+
+    return 0;
+}
+
+}

@@ -38,7 +38,7 @@ HLX now has **production-ready C FFI** with:
 
 - Platform-specific shared library output (.so/.dylib/.dll)
 - Automatic linker invocation (gcc/clang/link.exe)
-- CLI: `hlx compile-native <source.hlxa> --shared -o lib.so`
+- CLI: `hlx compile-native <source.hlx> --shared -o lib.so`
 - Works on Linux, macOS, Windows
 
 **Test:** Dynamic linking from C verified
@@ -83,10 +83,10 @@ program math {
 ### Compile
 ```bash
 # Generate metadata
-hlx compile math.hlxa -o math.hlxl
+hlx compile math.hlx -o math.hlxl
 
 # Generate shared library
-hlx compile-native math.hlxa --shared -o libhlx_math.so
+hlx compile-native math.hlx --shared -o libhlx_math.so
 ```
 
 ### Generate Bindings
@@ -150,10 +150,10 @@ fn main() {
 
 ```bash
 # Compile HLX source to crate (captures metadata)
-hlx compile <source.hlxa> -o <output.hlxl>
+hlx compile <source.hlx> -o <output.hlxl>
 
 # Compile to native code
-hlx compile-native <source.hlxa> [OPTIONS]
+hlx compile-native <source.hlx> [OPTIONS]
   --shared              # Emit shared library (.so/.dylib/.dll)
   --asm                 # Emit assembly (.s)
   -o <output>           # Output file
@@ -225,7 +225,7 @@ hlx inspect <crate.hlxl>  # Shows FFI exports
 
 ## Real-World Example
 
-### HLX Library (physics.hlxa)
+### HLX Library (physics.hlx)
 ```hlx
 program physics {
     #[export]
@@ -243,8 +243,8 @@ program physics {
 
 ### Compile Once
 ```bash
-hlx compile physics.hlxa -o physics.hlxl
-hlx compile-native physics.hlxa --shared -o libphysics.so
+hlx compile physics.hlx -o physics.hlxl
+hlx compile-native physics.hlx --shared -o libphysics.so
 hlx generate-header physics.hlxl -o physics.h
 hlx generate-python physics.hlxl -o physics.py --lib-name physics
 hlx generate-rust physics.hlxl -o src/lib.rs --lib-name physics --cargo-toml

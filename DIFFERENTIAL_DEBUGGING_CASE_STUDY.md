@@ -303,7 +303,7 @@ This isn't achieved through testing—it's enforced by differential debugging du
 
 HLX compiles to bare-metal (no OS, no libc):
 ```bash
-hlx compile-native program.hlxa --target x86_64-unknown-none-elf
+hlx compile-native program.hlx --target x86_64-unknown-none-elf
 ```
 
 **Traditional problem:** How do you debug bare-metal code?
@@ -405,7 +405,7 @@ git clone https://github.com/yourusername/hlx-compiler
 cd hlx-compiler/hlx
 
 # Create test file
-cat > test.hlxa << 'EOF'
+cat > test.hlx << 'EOF'
 program test {
     fn main() {
         let arr = [-0.398, -1.0, -1.357];
@@ -418,10 +418,10 @@ EOF
 
 # Run on VM (truth)
 
-cargo run --release -- run test.hlxa
+cargo run --release -- run test.hlx
 
 # Compile to native (test)
-cargo run --release -- compile-native test.hlxa -o test.o
+cargo run --release -- compile-native test.hlx -o test.o
 gcc -no-pie test.o -o test
 ./test
 

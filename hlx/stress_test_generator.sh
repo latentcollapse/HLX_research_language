@@ -19,7 +19,7 @@ mkdir -p "$TEST_DIR"
 # ============================================
 generate_many_functions() {
     local count=$1
-    local file="$TEST_DIR/many_functions_${count}.hlxa"
+    local file="$TEST_DIR/many_functions_${count}.hlx"
 
     echo "// Stress test: $count simple functions" > "$file"
     echo "program stress_test {" >> "$file"
@@ -39,7 +39,7 @@ generate_many_functions() {
 # ============================================
 generate_deep_expr() {
     local depth=$1
-    local file="$TEST_DIR/deep_expr_${depth}.hlxa"
+    local file="$TEST_DIR/deep_expr_${depth}.hlx"
 
     echo "// Stress test: expression nesting depth $depth" > "$file"
     echo "program stress_test {" >> "$file"
@@ -67,7 +67,7 @@ generate_deep_expr() {
 # ============================================
 generate_long_function() {
     local statements=$1
-    local file="$TEST_DIR/long_function_${statements}.hlxa"
+    local file="$TEST_DIR/long_function_${statements}.hlx"
 
     echo "// Stress test: $statements statements in one function" > "$file"
     echo "program stress_test {" >> "$file"
@@ -90,7 +90,7 @@ generate_long_function() {
 # ============================================
 generate_wide_array() {
     local size=$1
-    local file="$TEST_DIR/wide_array_${size}.hlxa"
+    local file="$TEST_DIR/wide_array_${size}.hlx"
 
     echo "// Stress test: array with $size elements" > "$file"
     echo "program stress_test {" >> "$file"
@@ -117,7 +117,7 @@ generate_wide_array() {
 # ============================================
 generate_deep_calls() {
     local depth=$1
-    local file="$TEST_DIR/deep_calls_${depth}.hlxa"
+    local file="$TEST_DIR/deep_calls_${depth}.hlx"
 
     echo "// Stress test: call chain depth $depth" > "$file"
     echo "program stress_test {" >> "$file"
@@ -144,7 +144,7 @@ generate_deep_calls() {
 # ============================================
 generate_complex_generator() {
     local iterations=$1
-    local file="$TEST_DIR/complex_generator_${iterations}.hlxa"
+    local file="$TEST_DIR/complex_generator_${iterations}.hlx"
 
     echo "// Stress test: complex generator with $iterations iterations" > "$file"
     cat > "$file" << 'EOF'
@@ -328,4 +328,4 @@ echo -e "${GREEN}=== Stress Test Complete ===${NC}"
 echo "Test files saved in: $TEST_DIR/"
 echo ""
 echo "To profile a specific test:"
-echo "  ./perf_toolkit.sh profile $TEST_DIR/some_test.hlxa"
+echo "  ./perf_toolkit.sh profile $TEST_DIR/some_test.hlx"

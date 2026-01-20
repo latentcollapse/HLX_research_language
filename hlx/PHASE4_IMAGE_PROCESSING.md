@@ -464,7 +464,7 @@ struct ParamPushConstants {
 
 ### Testing
 
-**Test Program**: `test_gpu_live.hlxa`
+**Test Program**: `test_gpu_live.hlx`
 - Creates synthetic 4x4 RGB tensor using `tensor()` builtin
 - Executes all 6 GPU operations
 - Verifies Vulkan pipeline dispatch

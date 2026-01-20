@@ -75,7 +75,7 @@ cpu_profile() {
         return
     fi
 
-    local outname=$(basename "$file" .hlxa)
+    local outname=$(basename "$file" .hlx)
 
     echo "Recording perf data..."
     perf record -F 999 -g -- $COMPILER compile "$file" -o /tmp/perf_output.lcc 2>&1 | grep -v "Lowering"
@@ -109,7 +109,7 @@ memory_profile() {
         return
     fi
 
-    local outname=$(basename "$file" .hlxa)
+    local outname=$(basename "$file" .hlx)
 
     echo "Recording memory usage..."
     valgrind --tool=massif --massif-out-file="$RESULTS_DIR/${outname}_massif.out" \
@@ -142,7 +142,7 @@ cache_analysis() {
         return
     fi
 
-    local outname=$(basename "$file" .hlxa)
+    local outname=$(basename "$file" .hlx)
 
     valgrind --tool=cachegrind --cachegrind-out-file="$RESULTS_DIR/${outname}_cachegrind.out" \
         $COMPILER compile "$file" -o /tmp/cache_output.lcc 2>&1 | tail -1
@@ -210,11 +210,11 @@ regression_suite() {
     echo -e "${BLUE}=== Regression Test Suite ===${NC}"
 
     local examples=(
-        "examples/axiom_test.hlxa"
-        "examples/test_simple_math.hlxa"
-        "examples/factorial.hlxa"
-        "examples/fibonacci.hlxa"
-        "examples/showcase_math.hlxa"
+        "examples/axiom_test.hlx"
+        "examples/test_simple_math.hlx"
+        "examples/factorial.hlx"
+        "examples/fibonacci.hlx"
+        "examples/showcase_math.hlx"
     )
 
     echo "Benchmarking ${#examples[@]} examples..."
@@ -223,7 +223,7 @@ regression_suite() {
         local cmds=()
         for ex in "${examples[@]}"; do
             if [ -f "$ex" ]; then
-                cmds+=(-n "$(basename "$ex" .hlxa)" "$COMPILER compile $ex -o /tmp/reg_out.lcc")
+                cmds+=(-n "$(basename "$ex" .hlx)" "$COMPILER compile $ex -o /tmp/reg_out.lcc")
             fi
         done
 
@@ -235,7 +235,7 @@ regression_suite() {
     else
         for ex in "${examples[@]}"; do
             if [ -f "$ex" ]; then
-                echo -n "$(basename "$ex" .hlxa): "
+                echo -n "$(basename "$ex" .hlx): "
                 t=$( { time $COMPILER compile "$ex" -o /tmp/reg_out.lcc > /dev/null 2>&1; } 2>&1 )
                 echo "${t}s"
             fi
@@ -302,9 +302,9 @@ case "$1" in
         echo "  all <file>        - Run complete analysis"
         echo ""
         echo "Examples:"
-        echo "  $0 quick examples/factorial.hlxa"
-        echo "  $0 profile examples/showcase_math.hlxa"
-        echo "  $0 compare examples/fibonacci.hlxa examples/primes.hlxa"
+        echo "  $0 quick examples/factorial.hlx"
+        echo "  $0 profile examples/showcase_math.hlx"
+        echo "  $0 compare examples/fibonacci.hlx examples/primes.hlx"
         echo "  $0 regression"
         exit 1
         ;;

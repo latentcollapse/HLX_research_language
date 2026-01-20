@@ -140,7 +140,7 @@ Hash: 5b8fa2ee59205fbf6e8710570db3ab0ddf59a3b4c5cbbbe64312923ade111f20
 - [ ] Create `.vscode/extension/` folder
 - [ ] Add `package.json` with language ID `hlx`
 - [ ] Point to `hlx-lsp` binary
-- [ ] Test: Open `.hlxa` file, LSP activates
+- [ ] Test: Open `.hlx` file, LSP activates
 
 ### Step 4: Verify Nothing Broke
 - [ ] Run `./bootstrap.sh` successfully
@@ -179,7 +179,7 @@ Hash: 5b8fa2ee59205fbf6e8710570db3ab0ddf59a3b4c5cbbbe64312923ade111f20
 
 ### When You Finish a Phase:
 1. **Test the Ouroboros** - `./bootstrap.sh` must pass
-2. **Test the LSP** - open a `.hlxa` file, verify it works
+2. **Test the LSP** - open a `.hlx` file, verify it works
 3. **Commit with clear message** - `git commit -m "feat(lsp): Add basic syntax diagnostics"`
 4. **Tell Matthew** - "Phase 1 complete: LSP shows syntax errors"
 
@@ -205,7 +205,7 @@ cargo build --release --bin hlx-lsp
 
 ### Test a simple HLX program:
 ```bash
-./target/release/hlx run examples/test_simple_math.hlxa
+./target/release/hlx run examples/test_simple_math.hlx
 ```
 
 ### Revert a file if you broke something:
@@ -218,7 +218,7 @@ git restore hlx_compiler/src/hlxa.rs
 ## 🎯 GOAL: LSP V1 (PHASE 1 ONLY)
 
 **Success Criteria:**
-1. Open a `.hlxa` file in VS Code
+1. Open a `.hlx` file in VS Code
 2. Type invalid syntax (e.g., missing semicolon)
 3. See a red squiggle appear
 4. Hover over it, see error message

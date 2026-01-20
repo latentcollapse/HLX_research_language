@@ -47,7 +47,7 @@ The extension looks for the `hlx_lsp` binary at `../target/release/hlx_lsp` rela
 
 ## Supported File Extensions
 
-- `.hlxa` - HLX ASCII source files
+- `.hlx` - HLX ASCII source files
 - `.hlxc` - HLX compiled/canonical files
 
 ## Language Features

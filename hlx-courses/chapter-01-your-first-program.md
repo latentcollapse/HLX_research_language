@@ -14,7 +14,7 @@ The difference? Computers are very literal. They do *exactly* what you tell them
 
 Let's start with the simplest program possible: making the computer say "Hello!"
 
-Create a new file called `hello.hlxa` and type this:
+Create a new file called `hello.hlx` and type this:
 
 ```hlx
 program hello {
@@ -28,7 +28,7 @@ program hello {
 Now run it:
 ```bash
 cd /path/to/hlx-compiler/hlx
-./target/release/hlx run hello.hlxa
+./target/release/hlx run hello.hlx
 ```
 
 You should see:

@@ -6,7 +6,7 @@ Complete guide for using HLX functions from Rust with zero-cost FFI bindings.
 
 ### 1. Write HLX Library
 
-**math_ops.hlxa:**
+**math_ops.hlx:**
 ```hlx
 program math_ops {
     #[no_mangle]
@@ -28,10 +28,10 @@ program math_ops {
 
 ```bash
 # Compile HLX to crate (for metadata)
-hlx compile math_ops.hlxa -o math_ops.hlxl
+hlx compile math_ops.hlx -o math_ops.hlxl
 
 # Compile to shared library
-hlx compile-native math_ops.hlxa --shared -o libhlx_math.so
+hlx compile-native math_ops.hlx --shared -o libhlx_math.so
 ```
 
 ### 3. Generate Rust Wrapper
@@ -163,7 +163,7 @@ This is **~100x faster than Python FFI** due to:
 
 ```
 project/
-├── math_ops.hlxa           # HLX source
+├── math_ops.hlx           # HLX source
 ├── math_ops.hlxl           # Compiled crate
 ├── libhlx_math.so          # Shared library
 └── rust_bindings/
@@ -306,7 +306,7 @@ LD_LIBRARY_PATH=/path/to/lib cargo run
 
 3. **Consider static linking** for maximum performance (compile HLX to `.a`):
    ```bash
-   hlx compile-native math.hlxa -o libmath.a --static  # Future feature
+   hlx compile-native math.hlx -o libmath.a --static  # Future feature
    ```
 
 4. **Inline hot paths** - Mark frequently called Rust wrappers as `#[inline]`

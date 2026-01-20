@@ -30,7 +30,7 @@ Result (Value) ←─ LLVM JIT (Iron Backend) ←─ HLX Runtime (executor)
 
 ```bash
 # Compile source to crate
-hlx compile source.hlxa -o program.lcc
+hlx compile source.hlx -o program.lcc
 
 # Execute crate or source
 hlx run program.lcc

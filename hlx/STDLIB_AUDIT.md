@@ -7,7 +7,7 @@
 ## Executive Summary
 
 **Current State:**
-- 📁 **stdlib Directory:** 1 file (`math.hlxa` - 147 lines)
+- 📁 **stdlib Directory:** 1 file (`math.hlx` - 147 lines)
 - 📋 **Contract Catalogue:** 125 contracts defined (T0-T4)
 - 🔧 **Implemented:** ~25% (mostly CPU-based)
 - ⚠️  **Critical Gaps:** GPU/tensor operations, graphics shaders, high compute
@@ -18,7 +18,7 @@
 
 ## Current stdlib Implementation
 
-### `/stdlib/math.hlxa` (147 lines)
+### `/stdlib/math.hlx` (147 lines)
 **Status:** ✅ Implemented (pure HLX)
 
 **Functions:**
@@ -417,7 +417,7 @@ backends/vulkan/shaders/
 
 ## Performance Concerns
 
-### Current `stdlib/math.hlxa` Issues:
+### Current `stdlib/math.hlx` Issues:
 
 **1. `floor(x)` and `ceil(x)` - EXTREMELY SLOW**
 ```hlxa
@@ -499,9 +499,9 @@ loop(i < exp, 1000) {
    - [ ] Upgrade `pow()` to handle fractional exponents
 
 3. **New stdlib Files:**
-   - [ ] `stdlib/trig.hlxa` - Trigonometry (sin, cos, tan, asin, acos, atan, atan2)
-   - [ ] `stdlib/random.hlxa` - RNG (uniform, normal, exponential)
-   - [ ] `stdlib/complex.hlxa` - Complex numbers
+   - [ ] `stdlib/trig.hlx` - Trigonometry (sin, cos, tan, asin, acos, atan, atan2)
+   - [ ] `stdlib/random.hlx` - RNG (uniform, normal, exponential)
+   - [ ] `stdlib/complex.hlx` - Complex numbers
 
 **Deliverable:** Complete, fast math library
 
@@ -511,12 +511,12 @@ loop(i < exp, 1000) {
 
 1. **Array Operations (400-414):**
    - [ ] All 15 array contracts implemented
-   - [ ] `stdlib/array.hlxa` - High-level array utils
+   - [ ] `stdlib/array.hlx` - High-level array utils
    - [ ] GPU-accelerated map/filter/reduce
 
 2. **String Operations (300-314):**
    - [ ] All 15 string contracts implemented
-   - [ ] `stdlib/string.hlxa` - String manipulation
+   - [ ] `stdlib/string.hlx` - String manipulation
    - [ ] Unicode support
 
 **Deliverable:** Full data structure manipulation
@@ -551,17 +551,17 @@ loop(i < exp, 1000) {
 1. **Linear Algebra:**
    - [ ] Matrix operations (transpose, inverse, determinant)
    - [ ] Vector operations (dot, cross, norm)
-   - [ ] `stdlib/linalg.hlxa`
+   - [ ] `stdlib/linalg.hlx`
 
 2. **Image Processing:**
    - [ ] Convolution, pooling
    - [ ] Filters, transforms
-   - [ ] `stdlib/image.hlxa`
+   - [ ] `stdlib/image.hlx`
 
 3. **Signal Processing:**
    - [ ] FFT/IFFT
    - [ ] Correlation, convolution
-   - [ ] `stdlib/signal.hlxa`
+   - [ ] `stdlib/signal.hlx`
 
 **Deliverable:** Scientific computing toolkit
 
@@ -576,12 +576,12 @@ loop(i < exp, 1000) {
 2. **Parsing (800-809):**
    - [ ] JSON, XML, CSV parsers
    - [ ] Regex support
-   - [ ] `stdlib/parse.hlxa`
+   - [ ] `stdlib/parse.hlx`
 
 3. **Networking:**
    - [ ] HTTP client
    - [ ] TCP/UDP sockets
-   - [ ] `stdlib/net.hlxa`
+   - [ ] `stdlib/net.hlx`
 
 **Deliverable:** Full I/O and parsing capabilities
 
@@ -612,7 +612,7 @@ loop(i < exp, 1000) {
    - ReLU, GELU, Sigmoid, Tanh in one shader
    - Used constantly in neural networks
 
-3. **🔴 URGENT: Fix stdlib/math.hlxa performance**
+3. **🔴 URGENT: Fix stdlib/math.hlx performance**
    - Replace floor/ceil with intrinsic contracts
    - Benchmark and optimize hot paths
 

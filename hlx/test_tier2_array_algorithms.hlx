@@ -1,0 +1,792 @@
+// Test suite for Tier 2 Array Algorithms
+// Phase 6 of builtin library conversion
+
+program test_tier2_array_algorithms {
+
+    // ========================================================================
+    // EMBEDDED ARRAY ALGORITHM IMPLEMENTATIONS
+    // ========================================================================
+
+    #[max_depth(100)]
+    fn partition(arr: [i64], low: i64, high: i64) -> i64 {
+        let pivot = array_get(arr, high);
+        let i = low - 1;
+
+        let j = low;
+        loop(j < high, 100) {
+            let elem = array_get(arr, j);
+            if (elem < pivot) {
+                i = i + 1;
+                let temp = array_get(arr, i);
+                array_set(arr, i, elem);
+                array_set(arr, j, temp);
+            }
+            j = j + 1;
+        }
+
+        i = i + 1;
+        let temp = array_get(arr, i);
+        array_set(arr, i, pivot);
+        array_set(arr, high, temp);
+
+        return i;
+    }
+
+    #[max_depth(100)]
+    fn quicksort_helper(arr: [i64], low: i64, high: i64) -> i64 {
+        if (low < high) {
+            let pi = partition(arr, low, high);
+            let dummy1 = quicksort_helper(arr, low, pi - 1);
+            let dummy2 = quicksort_helper(arr, pi + 1, high);
+        }
+        return 0;
+    }
+
+    fn array_sort(arr: [i64]) -> [i64] {
+        let len = array_len(arr);
+        if (len <= 1) {
+            return arr;
+        }
+        let dummy = quicksort_helper(arr, 0, len - 1);
+        return arr;
+    }
+
+    fn array_slice(arr: [i64], start: i64, end: i64) -> [i64] {
+        let result = [];
+        let len = array_len(arr);
+        let actual_start = start;
+        let actual_end = end;
+
+        if (actual_start < 0) {
+            actual_start = 0;
+        }
+        if (actual_end > len) {
+            actual_end = len;
+        }
+        if (actual_start >= actual_end) {
+            return result;
+        }
+
+        let i = actual_start;
+        loop(i < actual_end, 100) {
+            let elem = array_get(arr, i);
+            result = array_push(result, elem);
+            i = i + 1;
+        }
+
+        return result;
+    }
+
+    fn array_find_index(arr: [i64], target: i64) -> i64 {
+        let len = array_len(arr);
+        let i = 0;
+
+        loop(i < len, 100) {
+            let elem = array_get(arr, i);
+            if (elem == target) {
+                return i;
+            }
+            i = i + 1;
+        }
+
+        return 0 - 1;
+    }
+
+    fn array_contains(arr: [i64], target: i64) -> i64 {
+        let idx = array_find_index(arr, target);
+        if (idx >= 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn array_filter_positive(arr: [i64]) -> [i64] {
+        let result = [];
+        let len = array_len(arr);
+        let i = 0;
+
+        loop(i < len, 100) {
+            let elem = array_get(arr, i);
+            if (elem > 0) {
+                result = array_push(result, elem);
+            }
+            i = i + 1;
+        }
+
+        return result;
+    }
+
+    fn array_filter_even(arr: [i64]) -> [i64] {
+        let result = [];
+        let len = array_len(arr);
+        let i = 0;
+
+        loop(i < len, 100) {
+            let elem = array_get(arr, i);
+            if (elem % 2 == 0) {
+                result = array_push(result, elem);
+            }
+            i = i + 1;
+        }
+
+        return result;
+    }
+
+    fn array_map_multiply(arr: [i64], factor: i64) -> [i64] {
+        let result = [];
+        let len = array_len(arr);
+        let i = 0;
+
+        loop(i < len, 100) {
+            let elem = array_get(arr, i);
+            result = array_push(result, elem * factor);
+            i = i + 1;
+        }
+
+        return result;
+    }
+
+    fn array_sum(arr: [i64]) -> i64 {
+        let total = 0;
+        let len = array_len(arr);
+        let i = 0;
+
+        loop(i < len, 100) {
+            let elem = array_get(arr, i);
+            total = total + elem;
+            i = i + 1;
+        }
+
+        return total;
+    }
+
+    fn array_min(arr: [i64]) -> i64 {
+        let len = array_len(arr);
+        if (len == 0) {
+            return 0;
+        }
+
+        let min_val = array_get(arr, 0);
+        let i = 1;
+
+        loop(i < len, 100) {
+            let elem = array_get(arr, i);
+            if (elem < min_val) {
+                min_val = elem;
+            }
+            i = i + 1;
+        }
+
+        return min_val;
+    }
+
+    fn array_max(arr: [i64]) -> i64 {
+        let len = array_len(arr);
+        if (len == 0) {
+            return 0;
+        }
+
+        let max_val = array_get(arr, 0);
+        let i = 1;
+
+        loop(i < len, 100) {
+            let elem = array_get(arr, i);
+            if (elem > max_val) {
+                max_val = elem;
+            }
+            i = i + 1;
+        }
+
+        return max_val;
+    }
+
+    fn array_reverse(arr: [i64]) -> [i64] {
+        let result = [];
+        let len = array_len(arr);
+        let i = len - 1;
+
+        loop(i >= 0, 100) {
+            let elem = array_get(arr, i);
+            result = array_push(result, elem);
+            i = i - 1;
+        }
+
+        return result;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR array_sort()
+    // ========================================================================
+
+    fn test_sort_empty() -> i64 {
+        let arr = [];
+        let sorted = array_sort(arr);
+        if (array_len(sorted) == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_sort_single() -> i64 {
+        let arr = [42];
+        let sorted = array_sort(arr);
+        if (array_len(sorted) == 1) {
+            if (array_get(sorted, 0) == 42) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    fn test_sort_already_sorted() -> i64 {
+        let arr = [1, 2, 3, 4, 5];
+        let sorted = array_sort(arr);
+        if (array_get(sorted, 0) == 1) {
+            if (array_get(sorted, 4) == 5) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    fn test_sort_reverse_order() -> i64 {
+        let arr = [5, 4, 3, 2, 1];
+        let sorted = array_sort(arr);
+        if (array_get(sorted, 0) == 1) {
+            if (array_get(sorted, 4) == 5) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    fn test_sort_with_duplicates() -> i64 {
+        let arr = [3, 1, 4, 1, 5];
+        let sorted = array_sort(arr);
+        if (array_get(sorted, 0) == 1) {
+            if (array_get(sorted, 1) == 1) {
+                if (array_get(sorted, 4) == 5) {
+                    return 1;
+                }
+            }
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR array_slice()
+    // ========================================================================
+
+    fn test_slice_full() -> i64 {
+        let arr = [1, 2, 3, 4, 5];
+        let sliced = array_slice(arr, 0, 5);
+        if (array_len(sliced) == 5) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_slice_middle() -> i64 {
+        let arr = [1, 2, 3, 4, 5];
+        let sliced = array_slice(arr, 1, 4);
+        if (array_len(sliced) == 3) {
+            if (array_get(sliced, 0) == 2) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    fn test_slice_start() -> i64 {
+        let arr = [1, 2, 3, 4, 5];
+        let sliced = array_slice(arr, 0, 2);
+        if (array_len(sliced) == 2) {
+            if (array_get(sliced, 0) == 1) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    fn test_slice_end() -> i64 {
+        let arr = [1, 2, 3, 4, 5];
+        let sliced = array_slice(arr, 3, 5);
+        if (array_len(sliced) == 2) {
+            if (array_get(sliced, 0) == 4) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR array_find_index() and array_contains()
+    // ========================================================================
+
+    fn test_find_index_first() -> i64 {
+        let arr = [10, 20, 30, 40];
+        let idx = array_find_index(arr, 10);
+        if (idx == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_find_index_middle() -> i64 {
+        let arr = [10, 20, 30, 40];
+        let idx = array_find_index(arr, 30);
+        if (idx == 2) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_find_index_not_found() -> i64 {
+        let arr = [10, 20, 30, 40];
+        let idx = array_find_index(arr, 99);
+        if (idx == 0 - 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_contains_true() -> i64 {
+        let arr = [1, 2, 3, 4, 5];
+        if (array_contains(arr, 3) == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_contains_false() -> i64 {
+        let arr = [1, 2, 3, 4, 5];
+        if (array_contains(arr, 99) == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR array_filter_*()
+    // ========================================================================
+
+    fn test_filter_positive() -> i64 {
+        let arr = [0 - 2, 0 - 1, 0, 1, 2];
+        let filtered = array_filter_positive(arr);
+        if (array_len(filtered) == 2) {
+            if (array_get(filtered, 0) == 1) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    fn test_filter_even() -> i64 {
+        let arr = [1, 2, 3, 4, 5, 6];
+        let filtered = array_filter_even(arr);
+        if (array_len(filtered) == 3) {
+            if (array_get(filtered, 0) == 2) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR array_map_multiply()
+    // ========================================================================
+
+    fn test_map_multiply_by_2() -> i64 {
+        let arr = [1, 2, 3];
+        let mapped = array_map_multiply(arr, 2);
+        if (array_get(mapped, 0) == 2) {
+            if (array_get(mapped, 2) == 6) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    fn test_map_multiply_by_0() -> i64 {
+        let arr = [1, 2, 3];
+        let mapped = array_map_multiply(arr, 0);
+        if (array_get(mapped, 0) == 0) {
+            if (array_get(mapped, 2) == 0) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR array_sum()
+    // ========================================================================
+
+    fn test_sum_empty() -> i64 {
+        let arr = [];
+        if (array_sum(arr) == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_sum_positive() -> i64 {
+        let arr = [1, 2, 3, 4, 5];
+        if (array_sum(arr) == 15) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_sum_mixed() -> i64 {
+        let arr = [0 - 5, 5, 0 - 2, 2];
+        if (array_sum(arr) == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR array_min() and array_max()
+    // ========================================================================
+
+    fn test_min_simple() -> i64 {
+        let arr = [5, 2, 8, 1, 9];
+        if (array_min(arr) == 1) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_max_simple() -> i64 {
+        let arr = [5, 2, 8, 1, 9];
+        if (array_max(arr) == 9) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_min_negative() -> i64 {
+        let arr = [0 - 5, 0 - 10, 0 - 3];
+        if (array_min(arr) == 0 - 10) {
+            return 1;
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // TEST SUITE FOR array_reverse()
+    // ========================================================================
+
+    fn test_reverse_empty() -> i64 {
+        let arr = [];
+        let rev = array_reverse(arr);
+        if (array_len(rev) == 0) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_reverse_single() -> i64 {
+        let arr = [42];
+        let rev = array_reverse(arr);
+        if (array_get(rev, 0) == 42) {
+            return 1;
+        }
+        return 0;
+    }
+
+    fn test_reverse_multiple() -> i64 {
+        let arr = [1, 2, 3, 4, 5];
+        let rev = array_reverse(arr);
+        if (array_get(rev, 0) == 5) {
+            if (array_get(rev, 4) == 1) {
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    // ========================================================================
+    // MAIN TEST HARNESS
+    // ========================================================================
+
+    fn main() -> i64 {
+        let passed = 0;
+        let failed = 0;
+
+        print("═══════════════════════════════════════════════════════════\n");
+        print("TIER 2 ARRAY ALGORITHMS TESTS\n");
+        print("═══════════════════════════════════════════════════════════\n\n");
+
+        // Test array_sort()
+        print("Testing array_sort() function:\n");
+
+        if (test_sort_empty() == 1) {
+            print("  ✓ sort([]) works\n");
+            passed += 1;
+        } else {
+            print("  ✗ sort([]) failed\n");
+            failed += 1;
+        }
+
+        if (test_sort_single() == 1) {
+            print("  ✓ sort([42]) works\n");
+            passed += 1;
+        } else {
+            print("  ✗ sort([42]) failed\n");
+            failed += 1;
+        }
+
+        if (test_sort_already_sorted() == 1) {
+            print("  ✓ sort([1,2,3,4,5]) works\n");
+            passed += 1;
+        } else {
+            print("  ✗ sort([1,2,3,4,5]) failed\n");
+            failed += 1;
+        }
+
+        if (test_sort_reverse_order() == 1) {
+            print("  ✓ sort([5,4,3,2,1]) works\n");
+            passed += 1;
+        } else {
+            print("  ✗ sort([5,4,3,2,1]) failed\n");
+            failed += 1;
+        }
+
+        if (test_sort_with_duplicates() == 1) {
+            print("  ✓ sort with duplicates works\n");
+            passed += 1;
+        } else {
+            print("  ✗ sort with duplicates failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test array_slice()
+        print("Testing array_slice() function:\n");
+
+        if (test_slice_full() == 1) {
+            print("  ✓ slice(arr, 0, 5) works\n");
+            passed += 1;
+        } else {
+            print("  ✗ slice(arr, 0, 5) failed\n");
+            failed += 1;
+        }
+
+        if (test_slice_middle() == 1) {
+            print("  ✓ slice(arr, 1, 4) works\n");
+            passed += 1;
+        } else {
+            print("  ✗ slice(arr, 1, 4) failed\n");
+            failed += 1;
+        }
+
+        if (test_slice_start() == 1) {
+            print("  ✓ slice(arr, 0, 2) works\n");
+            passed += 1;
+        } else {
+            print("  ✗ slice(arr, 0, 2) failed\n");
+            failed += 1;
+        }
+
+        if (test_slice_end() == 1) {
+            print("  ✓ slice(arr, 3, 5) works\n");
+            passed += 1;
+        } else {
+            print("  ✗ slice(arr, 3, 5) failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test finding
+        print("Testing array_find_index() and contains():\n");
+
+        if (test_find_index_first() == 1) {
+            print("  ✓ find_index finds first element\n");
+            passed += 1;
+        } else {
+            print("  ✗ find_index first failed\n");
+            failed += 1;
+        }
+
+        if (test_find_index_middle() == 1) {
+            print("  ✓ find_index finds middle element\n");
+            passed += 1;
+        } else {
+            print("  ✗ find_index middle failed\n");
+            failed += 1;
+        }
+
+        if (test_find_index_not_found() == 1) {
+            print("  ✓ find_index returns -1 when not found\n");
+            passed += 1;
+        } else {
+            print("  ✗ find_index not found failed\n");
+            failed += 1;
+        }
+
+        if (test_contains_true() == 1) {
+            print("  ✓ contains returns true correctly\n");
+            passed += 1;
+        } else {
+            print("  ✗ contains true failed\n");
+            failed += 1;
+        }
+
+        if (test_contains_false() == 1) {
+            print("  ✓ contains returns false correctly\n");
+            passed += 1;
+        } else {
+            print("  ✗ contains false failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test filtering
+        print("Testing array filtering functions:\n");
+
+        if (test_filter_positive() == 1) {
+            print("  ✓ filter_positive works\n");
+            passed += 1;
+        } else {
+            print("  ✗ filter_positive failed\n");
+            failed += 1;
+        }
+
+        if (test_filter_even() == 1) {
+            print("  ✓ filter_even works\n");
+            passed += 1;
+        } else {
+            print("  ✗ filter_even failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test mapping
+        print("Testing array_map_multiply():\n");
+
+        if (test_map_multiply_by_2() == 1) {
+            print("  ✓ map_multiply by 2 works\n");
+            passed += 1;
+        } else {
+            print("  ✗ map_multiply by 2 failed\n");
+            failed += 1;
+        }
+
+        if (test_map_multiply_by_0() == 1) {
+            print("  ✓ map_multiply by 0 works\n");
+            passed += 1;
+        } else {
+            print("  ✗ map_multiply by 0 failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test reduction
+        print("Testing array reduction functions:\n");
+
+        if (test_sum_empty() == 1) {
+            print("  ✓ sum([]) == 0\n");
+            passed += 1;
+        } else {
+            print("  ✗ sum([]) failed\n");
+            failed += 1;
+        }
+
+        if (test_sum_positive() == 1) {
+            print("  ✓ sum([1,2,3,4,5]) == 15\n");
+            passed += 1;
+        } else {
+            print("  ✗ sum positive failed\n");
+            failed += 1;
+        }
+
+        if (test_sum_mixed() == 1) {
+            print("  ✓ sum with mixed values works\n");
+            passed += 1;
+        } else {
+            print("  ✗ sum mixed failed\n");
+            failed += 1;
+        }
+
+        if (test_min_simple() == 1) {
+            print("  ✓ min finds minimum value\n");
+            passed += 1;
+        } else {
+            print("  ✗ min simple failed\n");
+            failed += 1;
+        }
+
+        if (test_max_simple() == 1) {
+            print("  ✓ max finds maximum value\n");
+            passed += 1;
+        } else {
+            print("  ✗ max simple failed\n");
+            failed += 1;
+        }
+
+        if (test_min_negative() == 1) {
+            print("  ✓ min works with negatives\n");
+            passed += 1;
+        } else {
+            print("  ✗ min negative failed\n");
+            failed += 1;
+        }
+
+        print("\n");
+
+        // Test reversal
+        print("Testing array_reverse() function:\n");
+
+        if (test_reverse_empty() == 1) {
+            print("  ✓ reverse([]) works\n");
+            passed += 1;
+        } else {
+            print("  ✗ reverse([]) failed\n");
+            failed += 1;
+        }
+
+        if (test_reverse_single() == 1) {
+            print("  ✓ reverse([42]) works\n");
+            passed += 1;
+        } else {
+            print("  ✗ reverse([42]) failed\n");
+            failed += 1;
+        }
+
+        if (test_reverse_multiple() == 1) {
+            print("  ✓ reverse([1,2,3,4,5]) works\n");
+            passed += 1;
+        } else {
+            print("  ✗ reverse multiple failed\n");
+            failed += 1;
+        }
+
+        // Summary
+        print("\n");
+        print("═══════════════════════════════════════════════════════════\n");
+        print("RESULTS:\n");
+        print("  Passed: ");
+        print(passed);
+        print("/28\n");
+        print("  Failed: ");
+        print(failed);
+        print("/28\n");
+
+        if (failed == 0) {
+            print("\n✓ ALL TESTS PASSED!\n");
+            print("═══════════════════════════════════════════════════════════\n");
+            return 1;
+        } else {
+            print("\n✗ SOME TESTS FAILED\n");
+            print("═══════════════════════════════════════════════════════════\n");
+            return 0;
+        }
+    }
+}

@@ -50,29 +50,29 @@ echo "Phase 1: Testing Individual Components"
 echo "════════════════════════════════════════════════════════════"
 
 echo ""
-echo "[1/4] Compiling lexer.hlxa..."
-$CLI compile hlx_bootstrap/lexer.hlxa -o /tmp/lexer.hlxb
+echo "[1/4] Compiling lexer.hlx..."
+$CLI compile hlx_bootstrap/lexer.hlx -o /tmp/lexer.hlxb
 
 echo "[1/4] Running lexer (testing tokenize)..."
 $CLI run /tmp/lexer.hlxb
 
 echo ""
-echo "[2/4] Compiling parser.hlxa..."
-$CLI compile hlx_bootstrap/parser.hlxa -o /tmp/parser.hlxb
+echo "[2/4] Compiling parser.hlx..."
+$CLI compile hlx_bootstrap/parser.hlx -o /tmp/parser.hlxb
 
 echo "[2/4] Running parser (testing parse_program)..."
 $CLI run /tmp/parser.hlxb
 
 echo ""
-echo "[3/4] Compiling lower.hlxa..."
-$CLI compile hlx_bootstrap/lower.hlxa -o /tmp/lower.hlxb
+echo "[3/4] Compiling lower.hlx..."
+$CLI compile hlx_bootstrap/lower.hlx -o /tmp/lower.hlxb
 
 echo "[3/4] Running lower (testing lower_program)..."
 $CLI run /tmp/lower.hlxb
 
 echo ""
-echo "[4/4] Compiling emit.hlxa..."
-$CLI compile hlx_bootstrap/emit.hlxa -o /tmp/emit.hlxb
+echo "[4/4] Compiling emit.hlx..."
+$CLI compile hlx_bootstrap/emit.hlx -o /tmp/emit.hlxb
 
 echo "[4/4] Running emit (testing emit_bytecode)..."
 $CLI run /tmp/emit.hlxb

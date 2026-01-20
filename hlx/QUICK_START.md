@@ -13,8 +13,8 @@ cargo build --release
 ## Using the Compiler
 
 ```bash
-# Compile a .hlxa file to bytecode
-./target/release/hlx compile examples/factorial.hlxa
+# Compile a .hlx file to bytecode
+./target/release/hlx compile examples/factorial.hlx
 
 # This creates factorial.lcc (bytecode)
 
@@ -22,7 +22,7 @@ cargo build --release
 ./target/release/hlx run examples/factorial.lcc
 
 # One-liner (compile + run)
-./target/release/hlx compile examples/factorial.hlxa && \
+./target/release/hlx compile examples/factorial.hlx && \
 ./target/release/hlx run examples/factorial.lcc
 
 # Inspect bytecode
@@ -33,13 +33,13 @@ cargo build --release
 
 ```bash
 # Quick benchmark
-./perf_toolkit.sh quick examples/fibonacci.hlxa
+./perf_toolkit.sh quick examples/fibonacci.hlx
 
 # Full analysis (CPU, memory, cache, everything)
-./perf_toolkit.sh all examples/showcase_math.hlxa
+./perf_toolkit.sh all examples/showcase_math.hlx
 
 # Compare two files
-./perf_toolkit.sh compare old.hlxa new.hlxa
+./perf_toolkit.sh compare old.hlx new.hlx
 
 # Test all examples
 ./perf_toolkit.sh regression
@@ -66,15 +66,15 @@ rm -f *.lcc *.lcb perf.data
 
 ```
 examples/
-├── axiom_test.hlxa          # Basic language tests
-├── factorial.hlxa           # Recursive + iterative factorial
-├── fibonacci.hlxa           # Fibonacci sequence
-├── fizzbuzz.hlxa            # Classic FizzBuzz
-├── primes.hlxa              # Prime number generation
-├── showcase_math.hlxa       # Comprehensive math examples
-├── test_simple_math.hlxa    # Basic arithmetic
-├── test_stdlib.hlxa         # Standard library functions
-└── test_tensor.hlxa         # Tensor operations
+├── axiom_test.hlx          # Basic language tests
+├── factorial.hlx           # Recursive + iterative factorial
+├── fibonacci.hlx           # Fibonacci sequence
+├── fizzbuzz.hlx            # Classic FizzBuzz
+├── primes.hlx              # Prime number generation
+├── showcase_math.hlx       # Comprehensive math examples
+├── test_simple_math.hlx    # Basic arithmetic
+├── test_stdlib.hlx         # Standard library functions
+└── test_tensor.hlx         # Tensor operations
 ```
 
 ## Language Syntax Cheat Sheet
@@ -149,7 +149,7 @@ return value;             // Return from function
 
 ### "Slow compilation"
 - Run stress tests to find bottlenecks: `./stress_test_generator.sh`
-- Profile the slow file: `./perf_toolkit.sh profile your_file.hlxa`
+- Profile the slow file: `./perf_toolkit.sh profile your_file.hlx`
 - Check for O(n²) patterns (see PERFORMANCE_GUIDE.md)
 
 ### "Runtime error: stack overflow"
@@ -167,10 +167,10 @@ chmod +x benchmark.sh
 
 ## Learning Path
 
-1. **Start here**: Read `examples/axiom_test.hlxa`
-2. **Basic examples**: `factorial.hlxa`, `fibonacci.hlxa`
-3. **Complex example**: `showcase_math.hlxa`
-4. **Real application**: `HLX_Training_Examples/Synthetic_Vault/scripts/generator.hlxa`
+1. **Start here**: Read `examples/axiom_test.hlx`
+2. **Basic examples**: `factorial.hlx`, `fibonacci.hlx`
+3. **Complex example**: `showcase_math.hlx`
+4. **Real application**: `HLX_Training_Examples/Synthetic_Vault/scripts/generator.hlx`
 5. **Performance tuning**: Read `PERFORMANCE_GUIDE.md`
 6. **Parallel execution**: Read `HLX-SCALE-QUICKSTART.md` (HLX-Scale Phase 1B)
 
