@@ -1,866 +1,201 @@
-# HLX: The AI-Native Programming Language
+# HLX — A Language for Recursive Intelligence
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+> "Physics gives us freedom through constraints. AI should have a similarly bound world."
 
-[![CI](https://github.com/latentcollapse/hlx-compiler/workflows/CI/badge.svg)](https://github.com/latentcollapse/hlx-compiler/actions)
+## What Is HLX?
 
-**NOTE: The entire thing was prototyped in Rust first to make sure it would even work. Development has begun into ditching Rust and achieving true self-hosting.**
+HLX is a self-hosting programming language designed around a single insight: **recursive intelligence can be a syntactic primitive**.
 
-**Update: It has been decided to keep the Rust oracle as it's own thing separate, and to simply let it live as a deterministic Rust DSL for AI. HLX development continues separately**
+Instead of building AI agents and bolting on safety afterward, HLX makes **conscience, coordination, and self-modification** first-class language constructs. The syntax reads like its own documentation—designed for both human readability and dense training signal for AI models.
 
-**HLX** is a programming language designed for the AI era. It combines **contracts as specifications**, **AI-native primitives**, and **deterministic GPU/CPU execution** into a language that both humans and AI systems can understand and verify.
+## Why HLX?
 
-Write once. Run on **any GPU (Vulkan) or CPU**. Get **deterministic results** every time.
+### The Python Insight
 
-**Key Differentiators:**
-- 🔒 **Contracts aren't comments** - executable specifications that verify correctness
-- 🧠 **AI-native primitives** - latent space (LSTX) operations built into the language
-- 🚀 **Production-ready tooling** - LSP with AI features rivals Rust/Python IDEs
-- 🏢 **Enterprise code generation** - DO-178C aerospace code in minutes
-- ✅ **Deterministic execution** - same inputs = same outputs, always
+Python dominates ML not just because of its ecosystem, but because its English-like syntax creates a tight alignment between code and natural language. This produces denser training signal for AI models—code and explanations share vocabulary.
 
-**📖 [See FEATURES.md for comprehensive documentation](FEATURES.md)**
+HLX applies this principle to **safety and recursive intelligence**. When conscience predicates are first-class syntax, any model trained on HLX code absorbs "conscience" as a fundamental primitive, like it absorbs "if" or "for".
 
----
+### The Axiom Connection
 
-## What Makes HLX Unique?
-
-HLX is the first language to combine **contracts**, **AI-native primitives**, and **deterministic GPU execution** in a coherent design.
-
-### 1. Contracts Aren't Comments
+HLX is designed to integrate with [Axiom](../Axiom-main), a verification-first policy engine for AI agents. Through FFI, HLX agents can have their conscience predicates enforced by Axiom at runtime:
 
 ```hlx
-fn validate_email(email: String) -> Bool {
-    @contract validation {
-        value: email,
-        rules: ["not_empty", "valid_email", "max_length:255"]
-    }
-    return true;
-}
-```
-
-Contracts are **executable specifications**, not documentation that drifts out of date. They verify correctness at runtime and provide machine-readable semantics for AI systems and formal verification tools.
-
-### 2. AI-Native Primitives
-
-```hlx
-fn semantic_search(query: String, database: Table) -> Array {
-    // Latent space (LSTX) as a first-class primitive
-    let results = @lstx {
-        operation: "query",
-        table: database,
-        query: query,
-        top_k: 10
-    };
-    return results;
-}
-```
-
-**First language with latent space operations as primitives.** Query vector databases, perform semantic search, and manipulate embeddings natively.
-
-### 3. Deterministic GPU/CPU Execution
-
-```hlx
-fn process_image(img: Tensor) -> Tensor {
-    // Automatically uses GPU if available, CPU otherwise
-    // Same code, deterministic results
-    let gray = grayscale(img);
-    let sharp = sharpen(gray);
-    return sharp;
-}
-```
-
-Write once, run on any hardware with **bit-identical results**. No `#ifdef GPU`, no separate codepaths, no platform-specific surprises.
-
-### Current Reality
-
-AI systems can't reliably generate GPU code because:
-- **Vulkan/CUDA are complex** - Hundreds of lines per operation
-- **Results aren't deterministic** - Same code gives different results (floating-point variance)
-- **Hard to verify** - No way to audit what was generated
-- **Vendor lock-in** - CUDA only works on NVIDIA
-
-### HLX Solution
-
-AI systems can reliably use HLX because:
-- **Simple syntax** - LLMs learn it and generate correctly
-- **Deterministic execution** - Same input always gives same output
-- **Formally verifiable** - Clean semantics, auditable behavior
-- **Cross-vendor** - One program, any GPU
-
----
-
-## The HLX Advantage
-
-### For AI Systems
-
-```hlx
-// An LLM can reliably generate this
-fn preprocess(img: Tensor) -> Tensor {
-    let gray = grayscale(img);
-    let blurred = gaussian_blur(gray, 2.0);
-    return blurred;
-}
-```
-
-Then the AI system can:
-1. **Execute deterministically** → Same result every time
-2. **Iterate and improve** → Generate v2 based on measured results
-3. **Chain operations** → Compose multiple LLM-generated functions
-4. **Verify correctness** → Audit the generated code
-
-### For Researchers
-
-```hlx
-// Reproduce an experiment bit-for-bit across machines
-fn image_analysis(data: Tensor) -> Float {
-    let processed = brightness(data, 1.2);
-    let result = sum(processed);
-    return result;
-}
-```
-
-**Same code. Same data. Same result. Everywhere.**
-
-No floating-point variance. No platform differences. No non-determinism.
-
-### For Safety-Critical Systems
-
-```hlx
-// Vision pipeline for autonomous vehicle
-fn detect_obstacles(frame: Tensor) -> Tensor {
-    let edges = sobel_edges(frame, 0.1);
-    let binary = threshold(edges, 0.5);
-    return binary;
-}
-```
-
-**Formal verification becomes possible:**
-- No undefined behavior
-- Deterministic execution time
-- Verifiable input/output contracts
-- GPU dispatch is explicit and auditable
-
----
-
-## Core Features
-
-### ✅ AI-Native Language Server (Industry First!)
-
-HLX's LSP goes beyond traditional IDE features with AI-powered capabilities:
-
-**Contract Synthesis:**
-- Type: `"validate email address"`
-- LSP generates: `@contract validation { rules: ["not_empty", "valid_email"] }`
-
-**Intent Detection:**
-- Detects you're debugging → suggests assertions
-- Detects you're building features → suggests contracts
-- Detects you're writing tests → generates test templates
-
-**Pattern Learning:**
-- Learns your naming conventions
-- Tracks your favorite contract patterns
-- Adapts suggestions to your coding style
-
-**AI Context Export:**
-- Export codebase in Claude/GPT-optimized format
-- Analyze dependencies, contracts, patterns
-- Integrate with AI workflows
-
-### 🔷 HLX-Scale: Parallel Execution (Experimental)
-
-Enable parallel speculation on deterministic code while preserving axioms (A1-A4):
-
-```hlx
-@scale(size=8)
-fn main() -> Int {
-    let step1 = expensive_compute();
-    barrier("checkpoint1");      // Verify 8 agents agree
-    let step2 = process(step1);
-    barrier("checkpoint2");      // Another verification point
-    return finalize(step2);
-}
-```
-
-**Phase 1B Implementation (Tested Locally):**
-- ✅ **8-agent swarm execution** - Parallel speculation with hash verification
-- ✅ **Multi-barrier synchronization** - Verify consensus at checkpoints
-- ✅ **Automatic serial fallback** - If agents diverge, re-run serially for correctness
-- ✅ **Determinism preserved** - A1 axiom verified locally (same input → same output)
-- ✅ **Fork bomb prevention** - Thread-local state prevents infinite recursion
-
-**Note:** HLX-Scale Phase 1B works on tested hardware. Cross-platform behavior unconfirmed.
-
-**Phase 2+ Roadmap:**
-- 🔜 Multi-function speculation (remove main-only restriction)
-- 🔜 Substrate-aware execution (CPU/GPU/QPU routing)
-- 🔜 Adaptive performance tuning
-
-**[Full HLX-Scale documentation →](hlx/HLX-SCALE.md)**
-
-### 🔷 Code Generation (Experimental)
-
-Generate aerospace-pattern code (proof of concept):
-
-```bash
-$ hlx-codegen aerospace --demo
-✅ Generated 557 lines of aerospace-pattern code
-✅ Triple Modular Redundancy (TMR) pattern
-✅ Documentation structure
-✅ Test procedure templates
-```
-
-**Status:** Demonstration-quality code generation. Syntactically correct, architecturally sound pattern generation. **Not certified for actual aerospace or safety-critical use** — code must be reviewed and certified by qualified domain engineers before any real-world application.
-
-**Domains:**
-- 🔷 **Aerospace** - Proof of concept (not certified)
-- 🔜 **Medical** - Planned
-- 🔜 **Automotive** - Planned
-
-### ✅ Deterministic Compute (Tested Locally)
-- Same input → Same output (bit-identical on tested hardware)
-- GPU (Vulkan) and CPU backends
-- Enables reproducible AI iteration loops
-
-### ✅ GPU Support via Vulkan (Tested; Other Platforms Unconfirmed)
-- **Vulkan** - Tested and working on our setup
-- **CPU** - Tested and working (LLVM backend)
-- **Auto-selection** - Tries GPU, falls back to CPU if unavailable
-- **Cross-platform support** - Theoretical support for NVIDIA, AMD, Intel, Apple via MoltenVK, but unconfirmed outside our testing environment
-
-### ✅ Fully Functional IDE Experience (Tested Locally)
-- **Autocomplete** - Context-aware, learns your style
-- **Diagnostics** - Real-time error checking with suggestions
-- **Hover** - Type info, documentation, contract details
-- **Refactoring** - Extract function, rename symbol, organize imports
-- **Testing** - Test discovery, CodeLens integration, result tracking
-- **Call Hierarchy** - Navigate callers/callees
-- **95%+ feature coverage** with Rust/Python LSP standards
-- **Tested on:** Docker, LLVM CPU, Vulkan backends. Cross-platform behavior unconfirmed.
-
-### ✅ Image Processing (GPU-Accelerated)
-- `grayscale()`, `threshold()`, `brightness()`, `contrast()`
-- `invert_colors()`, `sharpen()`
-- `gaussian_blur()`, `sobel_edges()` (coming soon)
-- **10-100x faster than CPU** for large images
-
-### ✅ Tensor Operations
-- Create, reshape, slice tensors
-- Reductions: `sum()`, `mean()`, `max()`, `argmax()`
-- Element-wise operations
-- GPU-accelerated with automatic CPU fallback
-
-### ✅ Safety by Construction
-- **No null pointers** - null doesn't exist
-- **Deterministic execution** - required for safety-critical systems
-- **Contracts verify correctness** - machine-readable specifications
-- **Formal verification path** - Rocq (Coq) integration
-
----
-
-## Quick Start
-
-### Prerequisites
-```bash
-rustc --version  # 1.70+
-cargo --version
-vulkan-tools     # Optional, for GPU (CUDA/ROCm instead works too)
-```
-
-### Install
-```bash
-git clone https://github.com/latentcollapse/hlx-compiler.git
-cd hlx-compiler/hlx
-cargo build --release
-```
-
-### Hello GPU
-
-Create `hello_gpu.hlx`:
-```hlx
-program hello_gpu {
-    fn main() {
-        // Create a 2x2 RGB image
-        let img = tensor([
-            [1.0, 0.0, 0.0], [0.0, 1.0, 0.0],
-            [0.0, 0.0, 1.0], [1.0, 1.0, 0.0]
-        ], [2, 2, 3]);
-
-        // GPU-accelerated image processing
-        let gray = grayscale(img);
-        let brightened = brightness(gray, 1.5);
-
-        print("GPU processing complete!");
-        return 0;
+recursive agent Thinker {
+    govern {
+        effect: WRITE
+        conscience: [path_safety, no_exfiltrate]
     }
 }
 ```
 
-Run it:
-```bash
-./target/release/hlx run hello_gpu.hlx
+The boundary between "building the agent" and "securing the agent" dissolves. One cognitive frame.
 
-# Output:
-# [Backend] Attempting Vulkan...
-# [Backend] Vulkan Initialized!
-# GPU processing complete!
-```
+## Core Concepts
 
-### Real Example: Image Processing Pipeline
+### Recursive Agents
+
+Agents that refine their own state through cycles (inspired by TRM):
 
 ```hlx
-program image_processor {
-    fn main() {
-        // Load image (or any tensor source)
-        let img = load_image("input.png");
+recursive agent Thinker {
+    latent hypothesis: Tensor[512]
+    latent details: Tensor[512]
+    
+    cycle outer(H: 3) {
+        cycle inner(L: 6) {
+            details = refine(details, hypothesis + input)
+        }
+        hypothesis = consolidate(hypothesis, details)
+    }
+    
+    halt when confidence > 0.95 or steps >= 16
+}
+```
 
-        // Build GPU pipeline
-        let gray = grayscale(img);
-        let sharp = sharpen(gray);
-        let contrast = contrast(sharp, 1.5);
-        let threshold = threshold(contrast, 0.5);
+### SCALE — Coordination
 
-        // Save result
-        save_image(threshold, "output.png");
+Multiple agents synchronizing at barriers:
 
-        return 0;
+```hlx
+scale cluster Swarm {
+    agents: [Thinker; 5]
+    
+    sync at barrier consensus {
+        consensus: cross_model_family
+        aggregate hypothesis: weighted_mean(by: confidence)
     }
 }
 ```
 
-All operations execute on GPU. **10-100x faster than CPU.**
+### Governance — Conscience as Syntax
 
----
-
-## Use Cases
-
-### 1. AI-Driven Compute
-
-LLMs generate HLX to process data:
-
-```
-AI System (Claude/GPT-4):
-  "Process 1000 images for analysis"
-
-  Generates HLX:
-    fn process(img) { return grayscale(img); }
-
-  Executes deterministically
-
-  Analyzes results:
-    "Images converted, found 42 anomalies"
-```
-
-### 2. Self-Improving ML Pipelines
-
-AI systems iterate on preprocessing:
-
-```
-Iteration 1:
-  fn preprocess(img) { return grayscale(img); }
-  Result: 85% accuracy
-
-Iteration 2 (improved):
-  fn preprocess(img) {
-    let g = grayscale(img);
-    let s = sharpen(g);
-    return s;
-  }
-  Result: 91% accuracy ✅ Improvement detected!
-```
-
-### 3. Portable Inference
-
-Same code runs on any hardware:
-
-```bash
-# Any GPU (NVIDIA/AMD/Intel/Apple)
-hlx run vision_pipeline.hlx  # Auto-selects Vulkan
-
-# Explicit GPU backend
-hlx --backend vulkan vision_pipeline.hlx
-
-# CPU fallback (always available)
-hlx --backend cpu vision_pipeline.hlx
-```
-
-All produce **bit-identical results** across all platforms.
-
-### 4. Reproducible Research
-
-Science that actually reproduces:
+Safety baked into the agent's nature:
 
 ```hlx
-fn analyze_dataset(data: Tensor) -> Float {
-    let processed = brightness(data, 1.2);
-    let result = mean(processed);
-    return result;  // Same value, everywhere
+govern {
+    effect: READ | WRITE | NETWORK
+    conscience: [path_safety, no_exfiltrate, rate_limit]
+    trust: TRUSTED_INTERNAL
 }
 ```
 
-Run on:
-- Linux x86-64 → 42.1337...
-- macOS ARM → 42.1337... (bit-identical!)
-- Windows GPU → 42.1337...
+### Self-Modification — Safe Evolution
 
-### 5. Safety-Critical Systems
-
-Formally verifiable GPU compute:
+Agents that can propose and apply changes through three gates:
 
 ```hlx
-// Autonomous vehicle vision pipeline
-fn detect_lane(frame: Tensor[H, W, 3]) -> Tensor[H, W, 1] {
-    let edges = sobel_edges(frame, 0.1);
-    let lanes = threshold(edges, 0.5);
-    return lanes;
+modify self {
+    gate proof { verify: no_infinite_loops }
+    gate consensus { quorum: Swarm.agents; threshold: 2/3 }
+    gate human { trigger: complexity_delta > 100 }
+    budget { complexity: 1000; backoff: exponential }
 }
 ```
 
-**Can prove:**
-- No undefined behavior
-- Deterministic execution time
-- Input/output types guaranteed
-- GPU dispatch is explicit
+### Dissolvable Agents
 
----
+Intelligence that forms, executes, and dissolves:
+
+```hlx
+dissolvable agent Analyzer {
+    lifetime: task_completion
+    inherit: parent.hypothesis
+    
+    action analyze(data: Dataset) -> Report { ... }
+    
+    on_dissolve {
+        archive: report -> parent.memory
+    }
+}
+```
 
 ## Architecture
 
-### The Three Layers
-
 ```
-┌─────────────────────────────────────┐
-│   HLX Source (.hlx)                │
-│   (what LLMs generate)              │
-└────────────┬────────────────────────┘
-             │
-             ↓
-┌─────────────────────────────────────┐
-│   HLX IR (LC-B bytecode)            │
-│   (backend-agnostic, portable)      │
-└────────────┬────────────────────────┘
-             │
-      ┌──────┴──────┐
-      ↓             ↓
-  Vulkan          CPU
-  (GPU:           (Fallback:
-   any vendor)     always works)
-
-   ↓             ↓
-  GPU           CPU
-  (NVIDIA,      (Any
-   AMD,          platform)
-   Intel,
-   Apple)
+HLX Source (.hlx)
+      ↓
+┌─────────────────────────────────────────┐
+│ Self-Hosting Compiler (written in HLX)  │
+│  - lexer.hlx                            │
+│  - parser.hlx                           │
+│  - lower.hlx                            │
+│  - emit.hlx                             │
+└─────────────────────────────────────────┘
+      ↓
+LC-B Bytecode (deterministic, BLAKE3-addressed)
+      ↓
+┌─────────────────────────────────────────┐
+│ Backends                                │
+│  - LLVM (native code)                   │
+│  - Vulkan (GPU compute)                 │
+│  - Interpreter (bootstrap)              │
+└─────────────────────────────────────────┘
 ```
 
-### Key Insight
+## Determinism by Default
 
-HLX is both a **language** and an **IR**. Most IRs are unreadable (SPIR-V, LLVM). HLX is readable because it's designed for LLMs to understand and generate.
+HLX is built on four axioms (ported from RustD):
 
----
+1. **Determinism**: Same input → same output, always
+2. **Reversibility**: Can always decompile compiled code
+3. **Injectivity**: Different source → different bytecode
+4. **Serialization**: All values serializable
 
-## Developer Tooling
+This enables reproducible reasoning traces and auditability.
 
-### Language Server Protocol (LSP) - Production Ready
+## The Virtuous Alignment Cycle
 
-HLX's LSP achieves **95%+ feature parity** with rust-analyzer and Pylance, plus AI-native features no other language has:
+1. Syntax embeds conscience as first-class
+2. Inference propagates conscience through expressions
+3. Models trained on HLX absorb conscience as fundamental
+4. Alignment becomes syntactic, not post-hoc
 
-**Standard LSP Features:**
-- **Autocomplete** - Context-aware, adaptive to your style
-- **Diagnostics** - Real-time errors with fix suggestions
-- **Hover** - Types, docs, contract details
-- **Goto Definition/References** - Navigate your codebase
-- **Signature Help** - Function parameter hints
-- **Refactoring** - Extract function, rename, organize imports
-- **Formatting** - Consistent code style
-- **Call Hierarchy** - Who calls what
-- **Semantic Tokens** - Rich syntax highlighting
-- **Inlay Hints** - Type annotations, parameter names
-- **Code Actions** - Quick fixes and refactorings
-- **Testing** - CodeLens for test discovery and execution
+## Project Status
 
-**AI-Native Features (Industry First!):**
-- **Contract Synthesis** - Natural language → contract code
-- **Intent Detection** - Understands what you're trying to do
-- **Pattern Learning** - Adapts to your coding style
-- **AI Context Export** - Export for Claude/GPT integration
+- **Lexer**: 757 lines, 40+ recursive intelligence tokens
+- **Parser**: 2500+ lines, AST for agents/cycles/barriers
+- **Lowerer**: 1300+ lines, bytecode for recursive execution
+- **Backends**: LLVM and Vulkan backends ported and adapted
+- **Self-hosting**: In progress
 
-Works with any LSP-compatible editor (VS Code, Neovim, Emacs, Helix, etc.)
+## Repository Structure
 
-### VS Code Extension
-- Syntax highlighting
-- Bracket matching
-- Comment toggling
-- Full LSP integration
-- Command palette integration
-
-### HLX CodeGen - Enterprise Tool
-
-Standalone CLI for generating safety-critical code:
-
-```bash
-# Generate aerospace code (DO-178C)
-hlx-codegen aerospace --safety-level DAL-A --sensors 10 --actuators 5
-
-# Coming soon: LoRA training data generation
-hlx-codegen lora --count 100000 --output training.jsonl
+```
+hlx-compiler/
+├── hlx/
+│   └── hlx_bootstrap/      # Self-hosting compiler
+│       ├── lexer.hlx
+│       ├── parser.hlx
+│       ├── lower.hlx
+│       ├── emit.hlx
+│       └── ...
+├── backends/
+│   ├── llvm/               # Native code generation
+│   └── vulkan/             # GPU compute shaders
+├── experimental/
+│   ├── axiom_demo.hlx      # Full syntax demo
+│   ├── test_all_phases.hlx # Test suite
+│   └── recursive_seed.hlx  # Minimal agent example
+└── HLX_ARCHITECTURE_PLAN.md
 ```
 
-### CI/CD Testing
-Automated testing on every commit:
-- ✅ Linux (x86-64 + ARM64)
-- ✅ macOS (Intel + Apple Silicon)
-- ✅ Windows (MSVC)
-- ✅ Code formatting, linting, security audits
-- ✅ Full test suite (128 tests) on all platforms
+## Design Philosophy
 
-### FFI (Foreign Function Interface)
-Call HLX from:
-- **C** - Direct ABI-compatible calls
-- **Python** - ctypes bindings
-- **Node.js** - N-API bindings
-- **Rust** - Direct FFI
-- **Java** - JNI bindings
-- **Ada/SPARK** - For formal verification workflows
+- **Structure beats scale**: TRM proved 7M params with recursive cycles beats massive models
+- **Readability = training signal**: Code that reads like English teaches models better
+- **Safety as syntax**: Conscience predicates aren't comments—they're grammar
+- **Determinism enables scale**: Reproducible execution enables multi-agent coordination
 
-### Performance Profiling
-- Flamegraph generation
-- Execution tracing
-- GPU performance analysis
+## Related Projects
 
----
-
-## Performance
-
-### Real-World Benchmarks
-
-**Image processing (1920x1080, single operation):**
-- CPU (LLVM): 5-20ms
-- GPU (Vulkan): 0.5-2ms
-- **Speedup: 10-100x** depending on operation
-
-**Batch processing (1000 images, 1920x1080 each):**
-- CPU: 5-20 seconds
-- GPU: 0.5-2 seconds
-- **Batch speedup: ~10-50x**
-
-**Compilation speed:** ~30,000 instructions/second
-
-**Memory overhead:** Minimal (<1% vs C)
-
----
-
-## Language Guide
-
-### Data Types
-
-```hlx
-// Scalars
-let x: Int = 42;
-let y: Float = 3.14;
-let s: String = "hello";
-let b: Boolean = true;
-
-// Collections
-let arr: Array = [1, 2, 3];
-let data: Tensor = tensor([[1, 2], [3, 4]], [2, 2]);
-
-// Objects
-let config = {
-    "threshold": 0.5,
-    "size": 256,
-    "enabled": true
-};
-```
-
-### Control Flow
-
-```hlx
-// If/else
-if condition {
-    print("yes");
-} else {
-    print("no");
-}
-
-// Bounded loops (always have max iterations)
-loop (i < 100, 100) {
-    print(i);
-    i = i + 1;
-}
-
-// For loops over arrays
-for item in array {
-    print(item);
-}
-```
-
-### Functions
-
-```hlx
-// Simple function
-fn add(a: Int, b: Int) -> Int {
-    return a + b;
-}
-
-// Tensor operations
-fn preprocess(img: Tensor[H, W, 3]) -> Tensor[H, W, 1] {
-    let gray = grayscale(img);
-    let blur = gaussian_blur(gray, 2.0);
-    return blur;
-}
-
-// Reductions
-fn summarize(data: Tensor) -> Float {
-    let total = sum(data);
-    let mean = total / size(data);
-    return mean;
-}
-```
-
----
-
-## Standard Library
-
-### Tensor Operations
-- `tensor(data, shape)` - Create tensor from array
-- `shape(tensor)` - Get dimensions
-- `size(tensor)` - Total element count
-- `zeros(shape)`, `ones(shape)` - Create filled tensors
-- `reshape(tensor, shape)` - Change shape
-- `slice(tensor, axis, start, end)` - Extract slice
-- `concat(tensors, axis)` - Concatenate
-- `transpose(tensor, dim0, dim1)` - Swap dimensions
-
-### Reductions
-- `sum(tensor, axis?)` - Sum elements
-- `mean(tensor, axis?)` - Mean value
-- `max(tensor, axis?)` - Maximum
-- `min(tensor, axis?)` - Minimum
-- `argmax(tensor, axis?)` - Index of max
-- `argmin(tensor, axis?)` - Index of min
-
-### Image Processing (GPU)
-- `grayscale(image)` - RGB to grayscale
-- `threshold(image, value)` - Binary threshold
-- `brightness(image, factor)` - Adjust brightness
-- `contrast(image, factor)` - Adjust contrast
-- `invert_colors(image)` - Invert colors
-- `sharpen(image)` - Sharpen filter
-- `gaussian_blur(image, sigma)` - Gaussian blur
-- `sobel_edges(image, threshold)` - Edge detection
-
-### I/O
-- `load_image(path)` - Load PNG/JPEG → tensor
-- `save_image(tensor, path)` - Tensor → PNG/JPEG
-- `read_file(path)` - Read text file
-- `write_file(path, data)` - Write text file
-- `parse_json(string)` - JSON → object
-- `write_json(object)` - Object → JSON
-- `parse_csv(path, delimiter)` - CSV → array
-- `write_csv(path, data, delimiter)` - Array → CSV
-
-### Math
-- Arithmetic: `+`, `-`, `*`, `/`, `%`, `**`
-- Functions: `sin`, `cos`, `tan`, `exp`, `log`, `sqrt`, `abs`, `pow`
-- Comparisons: `<`, `>`, `<=`, `>=`, `==`, `!=`
-- Logic: `and`, `or`, `not`
-
----
-
-## Determinism (Tested & Verified Locally)
-
-**Design Goal:** For any HLX program and any inputs, the result is bit-identical across platforms and execution modes.
-
-**Verified on tested hardware:**
-- ✅ Linux, macOS (tested)
-- ✅ x86-64, ARM (tested)
-- ✅ Parallel vs sequential execution (tested locally)
-
-**Theoretical across:** Windows, other architectures, different accelerators (unconfirmed)
-
-**Why This Matters:**
-
-1. **AI reproducibility** - Enables consistent iteration loops
-2. **Science reproducibility** - Results replicate on same hardware
-3. **Verification** - Enables formal reasoning about code
-4. **Transparency** - Users can audit behavior
-
----
-
-## Current Status (January 2026)
-
-**Tested and Working Locally** - HLX compiler is self-hosting with 128/128 tests passing locally. The LSP achieves 95%+ feature parity with Rust/Python IDEs. GPU and CPU backends work on tested hardware. Code generation produces syntactically correct output. **Cross-platform testing and external validation in progress.**
-
-### ✅ Tested & Working
-
-**Language & Compiler:**
-- ✅ Self-hosting compiler (compiles itself)
-- ✅ 128/128 tests passing locally
-- ✅ LLVM backend (optimized machine code)
-- ✅ LC-B bytecode (portable intermediate representation)
-- ✅ Type system with full inference
-- ✅ Deterministic execution (verified on tested hardware)
-
-**Runtime:**
-- ✅ **CPU Runtime** - Works, tested locally
-- ✅ **GPU Runtime (Vulkan)** - Works on tested hardware
-  - Tested and working locally
-  - Theoretical cross-vendor support (unconfirmed)
-  - Automatic fallback to CPU
-  - 10-100x faster than CPU for image/tensor operations on tested setup
-
-**Developer Tooling:**
-- ✅ **Language Server Protocol** - 95%+ feature coverage with Rust/Python IDEs
-  - Standard features: autocomplete, diagnostics, hover, refactoring, formatting, call hierarchy
-  - **AI-native features:** contract synthesis, intent detection, pattern learning, AI context export
-- ✅ **VS Code Extension** - Syntax highlighting, full LSP integration
-- ✅ **CI/CD** - Automated testing on GitHub (Linux, macOS, Windows)
-- ✅ **FFI** - C, Python, Node.js, Rust, Java, Ada/SPARK bindings
-
-**Code Generation:**
-- ✅ **HLX CodeGen** - Generates syntactically correct pattern code
-  - Aerospace (proof of concept, not certified)
-  - Medical (planned)
-  - Automotive (planned)
-
-**Operations:**
-- ✅ Image processing (8 GPU-accelerated operations, tested on Vulkan)
-- ✅ Tensor operations (creation, manipulation, reductions)
-- ✅ File I/O (JSON, CSV, images, raw files)
-- ✅ Math operations (full suite)
-
-### 🔶 Beta
-
-- **GPU Backend Optimization** - Works reliably, still optimizing performance
-- **HLX-Scale** - See [full documentation](hlx/HLX-SCALE.md) for Phase 1B features and Phase 2+ roadmap
-
-### 🔷 Alpha / Experimental
-
-- **Contracts** - Core functionality works, expanding validation rules
-- **LSTX (Latent Space)** - Primitives defined, backend integration in progress
-- **LoRA Training Data Generation** - Framework ready, needs testing
-
-### 🔮 Future Extensions
-
-- Package manager
-- Additional GPU backends (native CUDA/ROCm/Metal if demand justifies)
-- Expanded standard library
-- More formal verification examples
-- Medical/automotive code generation (Q1-Q2 2026)
-
----
-
-## Contributing
-
-HLX is open source under Apache 2.0. We welcome:
-
-### For AI Researchers
-- Examples of LLM-generated HLX programs
-- Benchmarks on diverse AI workloads
-- Integration with ML frameworks (PyTorch, JAX)
-
-### For GPU Engineers
-- Backend implementations (CUDA, ROCm, Metal)
-- Performance optimization
-- New GPU operations
-
-### For Compiler Engineers
-- Optimization passes that preserve determinism
-- New backend targets
-- Profiling and analysis tools
-
-### For Systems Researchers
-- Formal verification of axioms
-- Integration with safety-critical systems
-- Embedded systems support
-
----
-
-## FAQ
-
-**Q: What makes HLX different from other languages?**
-A: Three things: (1) **Contracts as executable specifications**, not comments. (2) **AI-native primitives** - first language with latent space (LSTX) operations. (3) **Deterministic GPU/CPU execution** - same code, same results, everywhere. Plus an LSP with AI-powered features no other language has.
-
-**Q: Why contracts instead of just types?**
-A: Types catch structural errors ("expected string, got int"). Contracts catch **semantic errors** ("expected valid email, got empty string"). Contracts are executable specifications that verify correctness at runtime and provide machine-readable semantics for AI systems and formal verification.
-
-**Q: What are "AI-native" features?**
-A: HLX's LSP has capabilities traditional IDEs don't: **contract synthesis** (natural language → code), **intent detection** (understands what you're building), **pattern learning** (adapts to your style), and **AI context export** (for Claude/GPT integration). These make HLX uniquely learnable by AI systems.
-
-**Q: Is this production-ready?**
-A: The compiler is self-hosting with 128/128 tests passing locally. The LSP is fully functional with 95%+ feature parity to Rust/Python IDEs. GPU runtime (Vulkan backend) works on tested hardware. However: GPU backend is unconfirmed on hardware outside our testing environment. HLX CodeGen generates syntactically correct aerospace-pattern code (proof of concept, not certified). Contracts and LSTX are alpha (core works, expanding features). Not recommended for safety-critical systems without external review.
-
-**Q: Why is determinism so important?**
-A: For AI systems to self-improve through iteration, they need reliable feedback. Non-determinism breaks this loop. For safety-critical systems, determinism is required for certification (DO-178C, ISO 26262). For science, it enables reproducibility.
-
-**Q: How is HLX different from CUDA/OpenCL?**
-A: CUDA and OpenCL are **low-level GPU APIs** (400+ lines for basic operations). HLX is a **high-level language** (5 lines for the same operation). LLMs can generate HLX; they can't reliably generate CUDA. Plus HLX runs on any GPU (Vulkan), not just NVIDIA.
-
-**Q: What's the performance tradeoff?**
-A: HLX is 10-100x **faster** than CPU alternatives for GPU work. Compared to hand-written CUDA, you lose vendor-specific optimizations but gain **portability** (same code on any GPU), **determinism** (required for verification), and **simplicity** (5 lines vs 400).
-
-**Q: Who is HLX for?**
-A: Three audiences: (1) **Developers** building AI systems that need reliable GPU compute. (2) **Enterprises** in aerospace/medical/automotive needing certified code generation. (3) **AI researchers** wanting AI-native language primitives (LSTX, contracts as ground truth).
-
-**Q: Can I use HLX today?**
-A: Yes for experimentation. Clone the repo, build with Cargo, write HLX code. The LSP works in VS Code/Neovim/Emacs on tested configurations. The compiler works locally. GPU runtime works on tested hardware. Not recommended for safety-critical systems — HLX CodeGen is a proof-of-concept demonstration, not certified for aerospace or other safety-critical applications.
-
----
-
-## Citation
-
-```bibtex
-@software{hlx2026,
-  title = {HLX: The IR for AI-Generated GPU Compute},
-  author = {latentcollapse},
-  year = {2026},
-  url = {https://github.com/latentcollapse/hlx-compiler}
-}
-```
-
----
+- **[Axiom](../Axiom-main)**: Policy engine for AI agents (FFI integration target)
+- **[RustD](../rustd)**: Original LLVM/Vulkan backends (ported to HLX)
 
 ## License
 
-Apache License 2.0 - See LICENSE file
+Apache-2.0
 
 ---
 
-## Community & Contact
-
-- **GitHub**: [github.com/latentcollapse/hlx-compiler](https://github.com/latentcollapse/hlx-compiler)
-- **Issues**: [GitHub Issues](https://github.com/latentcollapse/hlx-compiler/issues) - Bug reports, feature requests, questions
-- **Discussions**: [GitHub Discussions](https://github.com/latentcollapse/hlx-compiler/discussions) - General discussion, show & tell
-
-### We're Looking For
-
-**Early Adopters:**
-- Building AI systems that need deterministic GPU compute
-- Interested in exploring HLX CodeGen for reference implementations (not certified for production use)
-- Exploring AI-native primitives (LSTX, contracts)
-- Interested in deterministic programming models
-
-**Contributors:**
-- AI researchers (benchmark HLX on code generation tasks)
-- GPU engineers (backend optimization, new operations)
-- Compiler engineers (optimization passes, analysis tools)
-- Language designers (feedback on contracts, LSTX, determinism)
-
-**Feedback Welcome:**
-- What domains would benefit from HLX CodeGen?
-- What contract validation rules do you need?
-- What AI-native features would be useful?
-- What's missing from the LSP?
-
-### Notable Discussions
-
-Early community engagement:
-- [Reddit: HLX Discussion](https://www.reddit.com/r/ClaudeAI/comments/1q86kq8/comment/nym9t0h/)
-- [Engagement with Lucian Wischik](https://github.com/latentcollapse/hlx-compiler) (co-designer of F#)
-
----
-
-**If you're building AI systems, safety-critical software, or working on deterministic computation, we'd love to hear from you.**
+*"Less is more" — but only when structure is encoded in the language itself.*

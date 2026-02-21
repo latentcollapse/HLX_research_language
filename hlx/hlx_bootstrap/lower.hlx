@@ -43,6 +43,31 @@ fn INST_CONTRACT_GET() -> i64 { return 91; }
 fn INST_CONTRACT_SET() -> i64 { return 92; }
 fn INST_COLLAPSE() -> i64 { return 93; }
 fn INST_RESOLVE() -> i64 { return 94; }
+// ============================================================================
+// PHASE 1: RECURSIVE INTELLIGENCE INSTRUCTIONS
+// ============================================================================
+// Agent lifecycle
+fn INST_AGENT_SPAWN() -> i64 { return 200; }
+fn INST_AGENT_HALT() -> i64 { return 201; }
+fn INST_AGENT_DISSOLVE() -> i64 { return 202; }
+fn INST_AGENT_INHERIT() -> i64 { return 203; }
+// Cycle execution
+fn INST_CYCLE_BEGIN() -> i64 { return 220; }
+fn INST_CYCLE_END() -> i64 { return 221; }
+fn INST_LATENT_GET() -> i64 { return 222; }
+fn INST_LATENT_SET() -> i64 { return 223; }
+// SCALE coordination
+fn INST_BARRIER_SYNC() -> i64 { return 230; }
+fn INST_BARRIER_WAIT() -> i64 { return 231; }
+fn INST_CONSENSUS_VOTE() -> i64 { return 232; }
+fn INST_CONSENSUS_AGG() -> i64 { return 233; }
+fn INST_EPOCH_ADVANCE() -> i64 { return 236; }
+// Governance
+fn INST_GOVERN_CHECK() -> i64 { return 250; }
+fn INST_EFFECT_CLASSIFY() -> i64 { return 251; }
+fn INST_TRUST_VERIFY() -> i64 { return 252; }
+fn INST_MODIFY_PROPOSE() -> i64 { return 253; }
+fn INST_MODIFY_APPLY() -> i64 { return 254; }
 
 // AST Node Type Constants (from parser.hlx)
 fn EXPR_INT() -> i64 { return 1; }
@@ -67,6 +92,13 @@ fn STMT_RETURN() -> i64 { return 14; }
 fn STMT_EXPR() -> i64 { return 15; }
 fn STMT_BREAK() -> i64 { return 16; }
 fn STMT_CONTINUE() -> i64 { return 17; }
+// Phase 1
+fn STMT_AGENT() -> i64 { return 30; }
+fn STMT_CYCLE() -> i64 { return 31; }
+fn STMT_HALT() -> i64 { return 32; }
+fn STMT_GOVERN() -> i64 { return 34; }
+fn STMT_LATENT() -> i64 { return 40; }
+fn STMT_ACTION() -> i64 { return 41; }
 
 fn NODE_FUNCTION() -> i64 { return 20; }
 fn NODE_PROGRAM() -> i64 { return 21; }
@@ -365,6 +397,73 @@ fn make_inst_return(val: i64) -> [i64] {
     let inst = [0, 0];
     inst = set_at(inst, 0, INST_RETURN());
     inst = set_at(inst, 1, val);
+    return inst;
+}
+
+// ============================================================================
+// PHASE 1: RECURSIVE INTELLIGENCE INSTRUCTION CONSTRUCTORS
+// ============================================================================
+
+fn make_inst_cycle_begin(level: String, count: i64) -> [i64] {
+    let inst = [0, 0, 0];
+    inst = set_at(inst, 0, INST_CYCLE_BEGIN());
+    inst = set_at(inst, 1, ptr_to_int(level));
+    inst = set_at(inst, 2, count);
+    return inst;
+}
+
+fn make_inst_cycle_end(level: String) -> [i64] {
+    let inst = [0, 0];
+    inst = set_at(inst, 0, INST_CYCLE_END());
+    inst = set_at(inst, 1, ptr_to_int(level));
+    return inst;
+}
+
+fn make_inst_latent_get(name: String, dest: i64) -> [i64] {
+    let inst = [0, 0, 0];
+    inst = set_at(inst, 0, INST_LATENT_GET());
+    inst = set_at(inst, 1, ptr_to_int(name));
+    inst = set_at(inst, 2, dest);
+    return inst;
+}
+
+fn make_inst_latent_set(name: String, src: i64) -> [i64] {
+    let inst = [0, 0, 0];
+    inst = set_at(inst, 0, INST_LATENT_SET());
+    inst = set_at(inst, 1, ptr_to_int(name));
+    inst = set_at(inst, 2, src);
+    return inst;
+}
+
+fn make_inst_halt(cond: i64, max_steps: i64) -> [i64] {
+    let inst = [0, 0, 0];
+    inst = set_at(inst, 0, INST_AGENT_HALT());
+    inst = set_at(inst, 1, cond);
+    inst = set_at(inst, 2, max_steps);
+    return inst;
+}
+
+fn make_inst_govern_check(effect: String, conscience: [i64]) -> [i64] {
+    let inst = [0, 0, 0];
+    inst = set_at(inst, 0, INST_GOVERN_CHECK());
+    inst = set_at(inst, 1, ptr_to_int(effect));
+    inst = set_at(inst, 2, ptr_to_int(conscience));
+    return inst;
+}
+
+fn make_inst_barrier_sync(barrier_id: i64, consensus_type: String) -> [i64] {
+    let inst = [0, 0, 0];
+    inst = set_at(inst, 0, INST_BARRIER_SYNC());
+    inst = set_at(inst, 1, barrier_id);
+    inst = set_at(inst, 2, ptr_to_int(consensus_type));
+    return inst;
+}
+
+fn make_inst_agent_spawn(agent_type: String, latent_count: i64) -> [i64] {
+    let inst = [0, 0, 0];
+    inst = set_at(inst, 0, INST_AGENT_SPAWN());
+    inst = set_at(inst, 1, ptr_to_int(agent_type));
+    inst = set_at(inst, 2, latent_count);
     return inst;
 }
 
@@ -898,6 +997,223 @@ fn lower_stmt(state: [i64], stmt_node: [i64]) -> [i64] {
             // Lower the exported item (typically a function declaration)
             // The item itself handles the lowering
             state = lower_stmt(state, item_node);
+        },
+        // ============================================================================
+        // PHASE 1: RECURSIVE INTELLIGENCE STATEMENTS
+        // ============================================================================
+        30 => {  // STMT_AGENT
+            // [kind(30), name, latents, takes, gives, cycles, body, govern, modify]
+            let name = int_to_ptr(get_at(stmt_node, 1));
+            let latents = int_to_ptr(get_at(stmt_node, 2));
+            let takes = int_to_ptr(get_at(stmt_node, 3));
+            let gives = int_to_ptr(get_at(stmt_node, 4));
+            let cycles = int_to_ptr(get_at(stmt_node, 5));
+            let body = int_to_ptr(get_at(stmt_node, 6));
+            let govern = int_to_ptr(get_at(stmt_node, 7));
+            let modify = int_to_ptr(get_at(stmt_node, 8));
+            
+            // Emit AGENT_SPAWN instruction
+            let latent_count = array_len(latents);
+            let inst = make_inst_agent_spawn(name, latent_count);
+            state = emit(state, inst);
+            
+            // Bind latent variables
+            let i = 0;
+            loop(i < latent_count, 100) {
+                let latent_node = int_to_ptr(get_at(latents, i));
+                let latent_name = int_to_ptr(get_at(latent_node, 1));
+                let alloc_result = alloc_reg(state);
+                let latent_reg = get_at(alloc_result, 0);
+                state = int_to_ptr(get_at(alloc_result, 1));
+                state = bind_var(state, latent_name, latent_reg);
+                i = i + 1;
+            }
+            
+            // Bind takes parameters
+            let takes_count = array_len(takes);
+            let j = 0;
+            loop(j < takes_count, 100) {
+                let param_name = int_to_ptr(get_at(takes, j));
+                let alloc_result = alloc_reg(state);
+                let param_reg = get_at(alloc_result, 0);
+                state = int_to_ptr(get_at(alloc_result, 1));
+                state = bind_var(state, param_name, param_reg);
+                j = j + 1;
+            }
+            
+            // Lower cycle blocks
+            let cycle_count = array_len(cycles);
+            let k = 0;
+            loop(k < cycle_count, 100) {
+                let cycle_node = int_to_ptr(get_at(cycles, k));
+                state = lower_stmt(state, cycle_node);
+                k = k + 1;
+            }
+            
+            // Lower body statements
+            let body_len = array_len(body);
+            let l = 0;
+            loop(l < body_len, 1000) {
+                let stmt = int_to_ptr(get_at(body, l));
+                state = lower_stmt(state, stmt);
+                l = l + 1;
+            }
+            
+            // Lower govern block if present
+            let govern_len = array_len(govern);
+            let m = 0;
+            loop(m < govern_len, 100) {
+                let g = int_to_ptr(get_at(govern, m));
+                state = lower_stmt(state, g);
+                m = m + 1;
+            }
+        },
+        31 => {  // STMT_CYCLE
+            let level = int_to_ptr(get_at(stmt_node, 1));
+            let count = get_at(stmt_node, 2);
+            let body = int_to_ptr(get_at(stmt_node, 3));
+            
+            // Emit CYCLE_BEGIN
+            let inst_begin = make_inst_cycle_begin(level, count);
+            state = emit(state, inst_begin);
+            
+            // Lower body (repeated count times conceptually, but emit once)
+            // Runtime will handle repetition
+            let i = 0;
+            let body_len = array_len(body);
+            loop(i < body_len, 1000) {
+                let stmt = int_to_ptr(get_at(body, i));
+                state = lower_stmt(state, stmt);
+                i = i + 1;
+            }
+            
+            // Emit CYCLE_END
+            let inst_end = make_inst_cycle_end(level);
+            state = emit(state, inst_end);
+        },
+        32 => {  // STMT_HALT
+            let cond_node = int_to_ptr(get_at(stmt_node, 1));
+            let max_steps = get_at(stmt_node, 2);
+            
+            // Lower condition
+            let cond_result = lower_expr(state, cond_node);
+            let cond_reg = get_at(cond_result, 0);
+            state = int_to_ptr(get_at(cond_result, 1));
+            
+            // Emit HALT instruction
+            let inst = make_inst_halt(cond_reg, max_steps);
+            state = emit(state, inst);
+        },
+        34 => {  // STMT_GOVERN
+            let effect = int_to_ptr(get_at(stmt_node, 1));
+            let conscience = int_to_ptr(get_at(stmt_node, 2));
+            
+            // Emit GOVERN_CHECK
+            let inst = make_inst_govern_check(effect, conscience);
+            state = emit(state, inst);
+        },
+        40 => {  // STMT_LATENT
+            let name = int_to_ptr(get_at(stmt_node, 1));
+            let init_node = int_to_ptr(get_at(stmt_node, 3));
+            
+            // Lower initializer
+            let init_result = lower_expr(state, init_node);
+            let init_reg = get_at(init_result, 0);
+            state = int_to_ptr(get_at(init_result, 1));
+            
+            // Emit LATENT_SET
+            let inst = make_inst_latent_set(name, init_reg);
+            state = emit(state, inst);
+            
+            // Bind to variable
+            state = bind_var(state, name, init_reg);
+        },
+        41 => {  // STMT_ACTION
+            let name = int_to_ptr(get_at(stmt_node, 1));
+            let params = int_to_ptr(get_at(stmt_node, 2));
+            let body = int_to_ptr(get_at(stmt_node, 3));
+            
+            // Bind parameters
+            let i = 0;
+            let param_count = array_len(params);
+            loop(i < param_count, 100) {
+                let param_name = int_to_ptr(get_at(params, i));
+                let alloc_result = alloc_reg(state);
+                let param_reg = get_at(alloc_result, 0);
+                state = int_to_ptr(get_at(alloc_result, 1));
+                state = bind_var(state, param_name, param_reg);
+                i = i + 1;
+            }
+            
+            // Lower body
+            let j = 0;
+            let body_len = array_len(body);
+            loop(j < body_len, 1000) {
+                let stmt = int_to_ptr(get_at(body, j));
+                state = lower_stmt(state, stmt);
+                j = j + 1;
+            }
+        },
+        // ============================================================================
+        // PHASE 2: SCALE CLUSTER
+        // ============================================================================
+        33 => {  // STMT_SYNC
+            let barrier_id = get_at(stmt_node, 1);
+            let consensus = int_to_ptr(get_at(stmt_node, 2));
+            
+            // Emit BARRIER_SYNC
+            let inst = make_inst_barrier_sync(barrier_id, consensus);
+            state = emit(state, inst);
+        },
+        62 => {  // NODE_CLUSTER
+            let name = int_to_ptr(get_at(stmt_node, 1));
+            let agents = int_to_ptr(get_at(stmt_node, 2));
+            let barriers = int_to_ptr(get_at(stmt_node, 3));
+            
+            // Emit spawn for each agent
+            let i = 0;
+            let agent_count = array_len(agents);
+            loop(i < agent_count, 100) {
+                let agent_name = int_to_ptr(get_at(agents, i));
+                let inst = make_inst_agent_spawn(agent_name, 0);
+                state = emit(state, inst);
+                i = i + 1;
+            }
+            
+            // Lower barriers
+            let j = 0;
+            let barrier_count = array_len(barriers);
+            loop(j < barrier_count, 100) {
+                let barrier_node = int_to_ptr(get_at(barriers, j));
+                // Barrier nodes are emitted as sync points
+                j = j + 1;
+            }
+        },
+        // ============================================================================
+        // PHASE 5: DISSOLVABLE AGENT
+        // ============================================================================
+        36 => {  // STMT_DISSOLVABLE
+            let name = int_to_ptr(get_at(stmt_node, 1));
+            let body = int_to_ptr(get_at(stmt_node, 4));
+            
+            // Emit AGENT_SPAWN with dissolvable flag
+            let inst = make_inst_agent_spawn(name, 0);
+            state = emit(state, inst);
+            
+            // Lower body
+            let i = 0;
+            let body_len = array_len(body);
+            loop(i < body_len, 1000) {
+                let stmt = int_to_ptr(get_at(body, i));
+                state = lower_stmt(state, stmt);
+                i = i + 1;
+            }
+            
+            // Emit AGENT_DISSOLVE
+            let dissolve_inst = [0, 0];
+            dissolve_inst = set_at(dissolve_inst, 0, INST_AGENT_DISSOLVE());
+            dissolve_inst = set_at(dissolve_inst, 1, 0);  // agent id
+            state = emit(state, dissolve_inst);
         },
         _ => {
             print("Error: unknown statement type ");

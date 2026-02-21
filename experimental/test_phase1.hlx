@@ -1,0 +1,35 @@
+// HLX Phase 1 Test - Recursive Intelligence Syntax
+// Tests: recursive agent, latent, cycle, halt, govern
+
+module test_recursive {
+
+    recursive agent Thinker {
+        latent z_high: Tensor
+        latent z_low: Tensor
+        
+        cycle outer(3) {
+            cycle inner(6) {
+                z_low = refine(z_low, z_high)
+            }
+            z_high = consolidate(z_high, z_low)
+        }
+        
+        halt when confidence > 0.95 or steps >= 16
+        
+        govern {
+            effect: READ
+            conscience: [path_safety, no_exfiltrate]
+            trust: TRUSTED_INTERNAL
+        }
+        
+        action process(input: Tensor) -> Tensor {
+            let result = transform(input)
+            return result
+        }
+    }
+    
+    fn main() -> i64 {
+        print("HLX Phase 1 Test Complete")
+        return 0
+    }
+}

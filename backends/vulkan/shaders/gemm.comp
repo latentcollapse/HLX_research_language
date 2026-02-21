@@ -1,0 +1,95 @@
+#version 450
+
+// GEMM - General Matrix Multiply
+// Computes: C = alpha * (A @ B) + beta * C
+// A: (M x K), B: (K x N), C: (M x N)
+//
+// Tiled implementation for cache efficiency
+// Workgroup size: 16x16 threads
+// Tile size: 16x16
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// Push constants for small parameters
+layout(push_constant) uniform PushConstants {
+    uint M;        // Rows of A and C
+    uint N;        // Columns of B and C
+    uint K;        // Columns of A, rows of B
+    float alpha;   // Scaling factor for A*B
+    float beta;    // Scaling factor for C
+} params;
+
+// Storage buffers
+layout(std430, binding = 0) readonly buffer MatrixA {
+    float A[];
+};
+
+layout(std430, binding = 1) readonly buffer MatrixB {
+    float B[];
+};
+
+layout(std430, binding = 2) buffer MatrixC {
+    float C[];
+};
+
+// Shared memory tiles for cache blocking
+shared float tileA[16][16];
+shared float tileB[16][16];
+
+void main() {
+    // Global position
+    uint row = gl_GlobalInvocationID.y;
+    uint col = gl_GlobalInvocationID.x;
+
+    // Local position within workgroup
+    uint localRow = gl_LocalInvocationID.y;
+    uint localCol = gl_LocalInvocationID.x;
+
+    // Accumulator for this thread's result
+    float sum = 0.0;
+
+    // Number of tiles needed
+    uint numTiles = (params.K + 15) / 16;
+
+    // Iterate over tiles
+    for (uint t = 0; t < numTiles; t++) {
+        // Load tile from A into shared memory
+        uint aCol = t * 16 + localCol;
+        if (row < params.M && aCol < params.K) {
+            tileA[localRow][localCol] = A[row * params.K + aCol];
+        } else {
+            tileA[localRow][localCol] = 0.0;
+        }
+
+        // Load tile from B into shared memory
+        uint bRow = t * 16 + localRow;
+        if (bRow < params.K && col < params.N) {
+            tileB[localRow][localCol] = B[bRow * params.N + col];
+        } else {
+            tileB[localRow][localCol] = 0.0;
+        }
+
+        // Synchronize to ensure tile is loaded
+        barrier();
+
+        // Compute partial dot product for this tile
+        for (uint k = 0; k < 16; k++) {
+            sum += tileA[localRow][k] * tileB[k][localCol];
+        }
+
+        // Synchronize before loading next tile
+        barrier();
+    }
+
+    // Write result
+    if (row < params.M && col < params.N) {
+        uint idx = row * params.N + col;
+
+        if (params.beta == 0.0) {
+            // Don't read C if beta is zero (allows uninitialized C)
+            C[idx] = params.alpha * sum;
+        } else {
+            C[idx] = params.alpha * sum + params.beta * C[idx];
+        }
+    }
+}

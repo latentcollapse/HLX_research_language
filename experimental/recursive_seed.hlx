@@ -1,0 +1,313 @@
+// ════════════════════════════════════════════════════════════════════════════════
+// Recursive Intelligence Seed (RIS)
+// A minimal self-improving agent written in HLX
+// ════════════════════════════════════════════════════════════════════════════════
+//
+// This is the "genome" of a recursive intelligence:
+// - It can reason (refine its state through cycles)
+// - It can coordinate (multiple instances sync at barriers)
+// - It can evolve (propose and apply self-modifications)
+// - It is bounded (Axiom predicates govern all actions)
+//
+// The goal: Start simple, prove the concept, then iterate.
+// ════════════════════════════════════════════════════════════════════════════════
+
+module recursive_seed {
+
+// ============================================================================
+// CORE STATE: The "Mind"
+// ============================================================================
+
+// Latent state vectors (TRM-inspired)
+// Small for MVP - can grow through self-modification
+let z_high: [f64; 64] = zeros(64);  // Hypothesis state
+let z_low: [f64; 64] = zeros(64);   // Detail state
+
+// Working memory
+let memory: [i64; 256] = zeros(256);
+let memory_ptr: i64 = 0;
+
+// Cycle counters
+let h_cycles: i64 = 3;
+let l_cycles: i64 = 6;
+let current_h: i64 = 0;
+let current_l: i64 = 0;
+
+// Halting state (ACT-inspired)
+let confidence: f64 = 0.0;
+let max_steps: i64 = 16;
+let step_count: i64 = 0;
+let halted: i64 = 0;
+
+// Self-modification state
+let generation: i64 = 0;
+let fitness: f64 = 0.0;
+let pending_proposal: i64 = 0;
+
+// ============================================================================
+// PRIMITIVES: Operations on state
+// ============================================================================
+
+// Zero vector initialization
+fn zeros(n: i64) -> [f64; 64] {
+    let result: [f64; 64];
+    let i = 0;
+    loop(i < 64, 100) {
+        set_at(result, i, 0.0);
+        i = i + 1;
+    }
+    return result;
+}
+
+// Vector addition (deterministic)
+fn vec_add(a: [f64; 64], b: [f64; 64]) -> [f64; 64] {
+    let result: [f64; 64];
+    let i = 0;
+    loop(i < 64, 100) {
+        let va = get_at(a, i);
+        let vb = get_at(b, i);
+        set_at(result, i, va + vb);
+        i = i + 1;
+    }
+    return result;
+}
+
+// Scalar multiplication (deterministic)
+fn vec_scale(v: [f64; 64], s: f64) -> [f64; 64] {
+    let result: [f64; 64];
+    let i = 0;
+    loop(i < 64, 100) {
+        set_at(result, i, get_at(v, i) * s);
+        i = i + 1;
+    }
+    return result;
+}
+
+// Norm (for confidence calculation)
+fn vec_norm(v: [f64; 64]) -> f64 {
+    let sum: f64 = 0.0;
+    let i = 0;
+    loop(i < 64, 100) {
+        let x = get_at(v, i);
+        sum = sum + x * x;
+        i = i + 1;
+    }
+    return sqrt(sum);
+}
+
+// ============================================================================
+// REFINEMENT: The core recursive operation (TRM-inspired)
+// ============================================================================
+
+// Low-level refinement: z_low <- refine(z_low, z_high + input)
+fn refine_low(input: [f64; 64]) -> [f64; 64] {
+    // Combine high-level hypothesis with input
+    let combined = vec_add(z_high, input);
+    
+    // Update low-level details (simple weighted sum for MVP)
+    let alpha: f64 = 0.1;  // Learning rate (fixed for determinism)
+    let scaled = vec_scale(combined, alpha);
+    let result = vec_add(z_low, scaled);
+    
+    return result;
+}
+
+// High-level consolidation: z_high <- consolidate(z_high, z_low)
+fn consolidate_high() -> [f64; 64] {
+    // Absorb low-level refinements into hypothesis
+    let beta: f64 = 0.05;  // Slower update for stability
+    let scaled = vec_scale(z_low, beta);
+    let result = vec_add(z_high, scaled);
+    
+    return result;
+}
+
+// ============================================================================
+// REASONING CYCLE: One forward pass
+// ============================================================================
+
+fn reasoning_cycle(input: [f64; 64]) -> i64 {
+    // H_cycles-1 without accumulating gradients (conceptually)
+    // In HLX, we don't have autograd, so we just iterate
+    
+    let h = 0;
+    loop(h < h_cycles - 1, 100) {
+        // Inner refinement loops
+        let l = 0;
+        loop(l < l_cycles, 100) {
+            z_low = refine_low(input);
+            l = l + 1;
+        }
+        z_high = consolidate_high();
+        h = h + 1;
+    }
+    
+    // Final cycle (the one we "learn from")
+    let l = 0;
+    loop(l < l_cycles, 100) {
+        z_low = refine_low(input);
+        l = l + 1;
+    }
+    z_high = consolidate_high();
+    
+    // Update confidence based on state magnitude
+    confidence = vec_norm(z_high) / 64.0;
+    
+    // Check halting condition (ACT-style)
+    step_count = step_count + 1;
+    if confidence > 0.95 {
+        halted = 1;
+    }
+    if step_count >= max_steps {
+        halted = 1;
+    }
+    
+    return halted;
+}
+
+// ============================================================================
+// SELF-MODIFICATION: Propose improvements
+// ============================================================================
+
+// Evaluate current fitness
+fn evaluate_fitness() -> f64 {
+    // Simple fitness: confidence / steps taken
+    if step_count == 0 {
+        return 0.0;
+    }
+    return confidence / (step_count as f64);
+}
+
+// Propose a self-modification
+fn propose_modification() -> i64 {
+    // MVP: Propose adjusting hyperparameters
+    // Real version would propose AST changes
+    
+    fitness = evaluate_fitness();
+    
+    // Only propose if fitness is improving
+    if fitness > 0.1 {
+        pending_proposal = 1;
+        return 1;  // Proposal created
+    }
+    
+    return 0;  // No proposal
+}
+
+// Apply a modification (after gates approve)
+fn apply_modification() -> i64 {
+    if pending_proposal == 0 {
+        return 0;
+    }
+    
+    // MVP: Adjust cycle counts based on fitness
+    if fitness > 0.5 && h_cycles < 10 {
+        h_cycles = h_cycles + 1;  // More reasoning depth
+    }
+    if fitness > 0.3 && l_cycles < 12 {
+        l_cycles = l_cycles + 1;  // More refinement
+    }
+    
+    generation = generation + 1;
+    pending_proposal = 0;
+    
+    return 1;  // Applied
+}
+
+// ============================================================================
+// CONSCIENCE: Axiom predicates for self-modification
+// ============================================================================
+
+fn check_modification_safety() -> i64 {
+    // Gate 1: Bounds check
+    if h_cycles > 20 || l_cycles > 24 {
+        return 0;  // Rejected: too complex
+    }
+    
+    // Gate 2: Determinism preserved
+    // (All our operations are deterministic by construction)
+    
+    // Gate 3: Conscience check
+    // (No external effects in this MVP)
+    
+    return 1;  // Approved
+}
+
+// ============================================================================
+// BARRIER SYNC: SCALE-style coordination
+// ============================================================================
+
+// State for barrier synchronization
+let barrier_generation: i64 = 0;
+let barrier_count: i64 = 0;
+let barrier_target: i64 = 1;  // Number of agents (1 for single agent)
+
+fn barrier_sync(agent_id: i64) -> i64 {
+    // Signal arrival at barrier
+    barrier_count = barrier_count + 1;
+    
+    // Check if all agents have arrived
+    if barrier_count >= barrier_target {
+        // All agents synced - proceed
+        barrier_count = 0;
+        barrier_generation = barrier_generation + 1;
+        return 1;  // Sync complete
+    }
+    
+    // Wait for others (in single-agent, always returns immediately)
+    return 1;
+}
+
+// ============================================================================
+// MAIN: The agent loop
+// ============================================================================
+
+export fn main(input_data: [f64; 64]) -> [f64; 64] {
+    // Reset state for new run
+    step_count = 0;
+    halted = 0;
+    confidence = 0.0;
+    
+    // Run reasoning until halt
+    loop(halted == 0, 1000) {
+        reasoning_cycle(input_data);
+    }
+    
+    // After reasoning, consider self-modification
+    if propose_modification() == 1 {
+        if check_modification_safety() == 1 {
+            apply_modification();
+        }
+    }
+    
+    // Sync at barrier (for multi-agent coordination)
+    barrier_sync(0);
+    
+    // Return the hypothesis as output
+    return z_high;
+}
+
+// ============================================================================
+// INTROSPECTION: Report agent state
+// ============================================================================
+
+export fn get_generation() -> i64 {
+    return generation;
+}
+
+export fn get_fitness() -> f64 {
+    return fitness;
+}
+
+export fn get_cycles() -> [i64; 2] {
+    let result: [i64; 2];
+    set_at(result, 0, h_cycles);
+    set_at(result, 1, l_cycles);
+    return result;
+}
+
+export fn get_confidence() -> f64 {
+    return confidence;
+}
+
+} // module recursive_seed

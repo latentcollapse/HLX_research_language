@@ -1,9 +1,0 @@
-// Chapter 1: Your First Program
-// This is the classic "Hello, World!" program
-
-program hello_world {
-    fn main() {
-        print("Hello, World!");
-        return 0;
-    }
-}

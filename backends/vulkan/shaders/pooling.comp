@@ -1,0 +1,110 @@
+#version 450
+
+// Pooling Operations (MaxPool and AvgPool)
+// Computes: output[b,h,w,c] = pool(input[b,h*s:(h*s+k),w*s:(w*s+k),c])
+//
+// Supports:
+// - Max pooling
+// - Average pooling
+// - Arbitrary pool sizes
+// - Stride
+// - Padding
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// Pooling modes
+const uint MODE_MAX = 0;
+const uint MODE_AVG = 1;
+
+layout(push_constant) uniform PushConstants {
+    uint batch_size;
+    uint in_height;
+    uint in_width;
+    uint channels;
+    uint out_height;
+    uint out_width;
+    uint pool_height;
+    uint pool_width;
+    uint stride_y;
+    uint stride_x;
+    uint pad_y;
+    uint pad_x;
+    uint mode;  // MODE_MAX or MODE_AVG
+} params;
+
+// Input tensor: [batch, height, width, channels]
+layout(std430, binding = 0) readonly buffer InputBuffer {
+    float input_data[];
+};
+
+// Output tensor: [batch, out_height, out_width, channels]
+layout(std430, binding = 1) buffer OutputBuffer {
+    float output_data[];
+};
+
+void main() {
+    uint out_x = gl_GlobalInvocationID.x;
+    uint out_y = gl_GlobalInvocationID.y;
+    uint batch_and_channel = gl_GlobalInvocationID.z;
+
+    // Decode batch and channel
+    uint batch = batch_and_channel / params.channels;
+    uint channel = batch_and_channel % params.channels;
+
+    // Check bounds
+    if (out_x >= params.out_width || out_y >= params.out_height || batch >= params.batch_size) {
+        return;
+    }
+
+    // Initialize based on pooling mode
+    float result;
+    uint valid_count = 0;
+
+    if (params.mode == MODE_MAX) {
+        result = -1.0 / 0.0;  // -infinity
+    } else {
+        result = 0.0;  // For average pooling
+    }
+
+    // Pool over window
+    for (uint ph = 0; ph < params.pool_height; ph++) {
+        for (uint pw = 0; pw < params.pool_width; pw++) {
+            // Input position
+            int in_y = int(out_y * params.stride_y + ph) - int(params.pad_y);
+            int in_x = int(out_x * params.stride_x + pw) - int(params.pad_x);
+
+            // Skip if out of bounds
+            if (in_y < 0 || in_y >= int(params.in_height) || in_x < 0 || in_x >= int(params.in_width)) {
+                continue;
+            }
+
+            // Input index: [batch, in_y, in_x, channel]
+            uint input_idx = batch * (params.in_height * params.in_width * params.channels)
+                           + uint(in_y) * (params.in_width * params.channels)
+                           + uint(in_x) * params.channels
+                           + channel;
+
+            float val = input_data[input_idx];
+
+            if (params.mode == MODE_MAX) {
+                result = max(result, val);
+            } else {
+                result += val;
+                valid_count++;
+            }
+        }
+    }
+
+    // For average pooling, divide by count
+    if (params.mode == MODE_AVG && valid_count > 0) {
+        result /= float(valid_count);
+    }
+
+    // Output index: [batch, out_y, out_x, channel]
+    uint output_idx = batch * (params.out_height * params.out_width * params.channels)
+                    + out_y * (params.out_width * params.channels)
+                    + out_x * params.channels
+                    + channel;
+
+    output_data[output_idx] = result;
+}

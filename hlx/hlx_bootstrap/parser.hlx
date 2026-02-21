@@ -21,6 +21,21 @@ fn EXPR_CONTRACT_FIELD() -> i64 { return 25; }
 fn EXPR_FIELD_ACCESS() -> i64 { return 26; }
 fn EXPR_COLLAPSE() -> i64 { return 27; }
 fn EXPR_RESOLVE() -> i64 { return 28; }
+fn EXPR_ADDRESS_OF() -> i64 { return 29; }
+fn EXPR_DEREF() -> i64 { return 30; }
+// ============================================================================
+// PHASE 1: RECURSIVE INTELLIGENCE EXPRESSIONS
+// ============================================================================
+fn EXPR_LATENT_REF() -> i64 { return 31; }      // Reference to latent state
+fn EXPR_EPOCH_REF() -> i64 { return 32; }       // Reference to epoch
+fn EXPR_BARRIER_WAIT() -> i64 { return 33; }    // Barrier wait expression
+fn EXPR_CONSENSUS() -> i64 { return 34; }       // Consensus result
+fn EXPR_FITNESS() -> i64 { return 35; }         // Fitness evaluation
+
+// Type node types
+fn TYPE_IDENT() -> i64 { return 100; }
+fn TYPE_POINTER() -> i64 { return 101; }
+fn TYPE_ARRAY() -> i64 { return 102; }
 
 // Statement types
 fn STMT_LET() -> i64 { return 10; }
@@ -34,10 +49,32 @@ fn STMT_CONTINUE() -> i64 { return 17; }
 fn STMT_MODULE() -> i64 { return 18; }
 fn STMT_IMPORT() -> i64 { return 19; }
 fn STMT_EXPORT() -> i64 { return 20; }
+// ============================================================================
+// PHASE 1: RECURSIVE INTELLIGENCE STATEMENTS
+// ============================================================================
+fn STMT_AGENT() -> i64 { return 30; }          // recursive agent definition
+fn STMT_CYCLE() -> i64 { return 31; }          // cycle block
+fn STMT_HALT() -> i64 { return 32; }           // halt when condition
+fn STMT_SYNC() -> i64 { return 33; }           // sync at barrier
+fn STMT_GOVERN() -> i64 { return 34; }         // govern block
+fn STMT_MODIFY() -> i64 { return 35; }         // modify self block
+fn STMT_DISSOLVABLE() -> i64 { return 36; }    // dissolvable agent
+fn STMT_ON_DISSOLVE() -> i64 { return 37; }    // on_dissolve handler
+fn STMT_CHANNEL() -> i64 { return 38; }        // channel declaration
+fn STMT_AGGREGATE() -> i64 { return 39; }      // aggregate at barrier
+fn STMT_LATENT() -> i64 { return 40; }         // latent state declaration
+fn STMT_ACTION() -> i64 { return 41; }         // action definition
 
 // Block/Function types
 fn NODE_FUNCTION() -> i64 { return 60; }
 fn NODE_PROGRAM() -> i64 { return 61; }
+// ============================================================================
+// PHASE 1: RECURSIVE INTELLIGENCE TOP-LEVEL NODES
+// ============================================================================
+fn NODE_CLUSTER() -> i64 { return 62; }        // scale cluster definition
+fn NODE_BARRIER() -> i64 { return 63; }        // barrier definition
+fn NODE_CHANNEL() -> i64 { return 64; }        // channel definition
+fn NODE_AGENT() -> i64 { return 65; }          // agent instance
 
 // Binary operators
 fn OP_ADD() -> i64 { return 30; }
@@ -234,11 +271,56 @@ fn make_expr_resolve(handle: [i64]) -> [i64] {
     return node;
 }
 
-fn make_stmt_let(name: String, value: [i64]) -> [i64] {
+fn make_expr_address_of(operand: [i64]) -> [i64] {
+    let node = [0, 0];
+    node = set_at(node, 0, EXPR_ADDRESS_OF());
+    node = set_at(node, 1, ptr_to_int(operand));
+    return node;
+}
+
+fn make_expr_deref(operand: [i64]) -> [i64] {
+    let node = [0, 0];
+    node = set_at(node, 0, EXPR_DEREF());
+    node = set_at(node, 1, ptr_to_int(operand));
+    return node;
+}
+
+// ============================================================================
+// Type Node Constructors
+// ============================================================================
+
+fn make_type_ident(name: String) -> [i64] {
+    let node = [0, 0];
+    node = set_at(node, 0, TYPE_IDENT());
+    node = set_at(node, 1, ptr_to_int(name));
+    return node;
+}
+
+fn make_type_pointer(is_mut: i64, inner_type: [i64]) -> [i64] {
     let node = [0, 0, 0];
+    node = set_at(node, 0, TYPE_POINTER());
+    node = set_at(node, 1, is_mut);
+    node = set_at(node, 2, ptr_to_int(inner_type));
+    return node;
+}
+
+fn make_type_array(element_type: [i64]) -> [i64] {
+    let node = [0, 0];
+    node = set_at(node, 0, TYPE_ARRAY());
+    node = set_at(node, 1, ptr_to_int(element_type));
+    return node;
+}
+
+// ============================================================================
+// Statement Node Constructors
+// ============================================================================
+
+fn make_stmt_let(name: String, type_ann: [i64], value: [i64]) -> [i64] {
+    let node = [0, 0, 0, 0];
     node = set_at(node, 0, STMT_LET());
     node = set_at(node, 1, ptr_to_int(name));
-    node = set_at(node, 2, ptr_to_int(value));
+    node = set_at(node, 2, ptr_to_int(type_ann));  // Can be 0 for no type annotation
+    node = set_at(node, 3, ptr_to_int(value));
     return node;
 }
 
@@ -334,6 +416,222 @@ fn make_program(functions: [i64]) -> [i64] {
 }
 
 // ============================================================================
+// PHASE 1: RECURSIVE INTELLIGENCE AST NODES
+// ============================================================================
+
+// STMT_AGENT: [kind(30), name_ptr, latents_ptr, takes_ptr, gives_ptr, cycles_ptr, body_ptr, govern_ptr, modify_ptr]
+// recursive agent Name { latent* takes? gives? cycle* stmt* govern? modify? }
+fn make_stmt_agent(
+    name: String, 
+    latents: [i64],
+    takes: [i64],
+    gives: [i64],
+    cycles: [i64],
+    body: [i64], 
+    govern: [i64],
+    modify: [i64]
+) -> [i64] {
+    let node = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    node = set_at(node, 0, STMT_AGENT());
+    node = set_at(node, 1, ptr_to_int(name));
+    node = set_at(node, 2, ptr_to_int(latents));
+    node = set_at(node, 3, ptr_to_int(takes));
+    node = set_at(node, 4, ptr_to_int(gives));
+    node = set_at(node, 5, ptr_to_int(cycles));
+    node = set_at(node, 6, ptr_to_int(body));
+    node = set_at(node, 7, ptr_to_int(govern));
+    node = set_at(node, 8, ptr_to_int(modify));
+    return node;
+}
+
+// STMT_CYCLE: [kind(31), level_ptr, count, body_ptr]
+// cycle outer(3) { ... }
+fn make_stmt_cycle(level: String, count: i64, body: [i64]) -> [i64] {
+    let node = [0, 0, 0, 0];
+    node = set_at(node, 0, STMT_CYCLE());
+    node = set_at(node, 1, ptr_to_int(level));
+    node = set_at(node, 2, count);
+    node = set_at(node, 3, ptr_to_int(body));
+    return node;
+}
+
+// STMT_HALT: [kind(32), condition_ptr, max_steps]
+// halt when condition or steps >= N
+fn make_stmt_halt(condition: [i64], max_steps: i64) -> [i64] {
+    let node = [0, 0, 0];
+    node = set_at(node, 0, STMT_HALT());
+    node = set_at(node, 1, ptr_to_int(condition));
+    node = set_at(node, 2, max_steps);
+    return node;
+}
+
+// STMT_GOVERN: [kind(34), effect_ptr, conscience_ptr, trust_ptr]
+// govern { effect: WRITE; conscience: [path_safety]; trust: INTERNAL; }
+fn make_stmt_govern(effect: String, conscience: [i64], trust: String) -> [i64] {
+    let node = [0, 0, 0, 0];
+    node = set_at(node, 0, STMT_GOVERN());
+    node = set_at(node, 1, ptr_to_int(effect));
+    node = set_at(node, 2, ptr_to_int(conscience));
+    node = set_at(node, 3, ptr_to_int(trust));
+    return node;
+}
+
+// STMT_LATENT: [kind(40), name_ptr, type_ptr, init_value_ptr]
+// latent z_high: Tensor[512] = zeros(512)
+fn make_stmt_latent(name: String, type_ann: [i64], init: [i64]) -> [i64] {
+    let node = [0, 0, 0, 0];
+    node = set_at(node, 0, STMT_LATENT());
+    node = set_at(node, 1, ptr_to_int(name));
+    node = set_at(node, 2, ptr_to_int(type_ann));
+    node = set_at(node, 3, ptr_to_int(init));
+    return node;
+}
+
+// STMT_ACTION: [kind(41), name_ptr, params_ptr, body_ptr, govern_ptr]
+// action name(params) { body } govern { ... }
+fn make_stmt_action(name: String, params: [i64], body: [i64], govern: [i64]) -> [i64] {
+    let node = [0, 0, 0, 0, 0];
+    node = set_at(node, 0, STMT_ACTION());
+    node = set_at(node, 1, ptr_to_int(name));
+    node = set_at(node, 2, ptr_to_int(params));
+    node = set_at(node, 3, ptr_to_int(body));
+    node = set_at(node, 4, ptr_to_int(govern));
+    return node;
+}
+
+// ============================================================================
+// PHASE 2: SCALE CLUSTER NODES
+// ============================================================================
+
+// NODE_CLUSTER: [kind(62), name_ptr, agents_ptr, barriers_ptr, channels_ptr]
+// scale cluster Name { agents: [...]; barriers: [...]; channels: [...]; }
+fn make_node_cluster(name: String, agents: [i64], barriers: [i64], channels: [i64]) -> [i64] {
+    let node = [0, 0, 0, 0, 0];
+    node = set_at(node, 0, NODE_CLUSTER());
+    node = set_at(node, 1, ptr_to_int(name));
+    node = set_at(node, 2, ptr_to_int(agents));
+    node = set_at(node, 3, ptr_to_int(barriers));
+    node = set_at(node, 4, ptr_to_int(channels));
+    return node;
+}
+
+// NODE_BARRIER: [kind(63), id, consensus_ptr, timeout, aggregation_ptr]
+// barrier sync { consensus: cross_model_family; timeout: 30; aggregate: mean; }
+fn make_node_barrier(id: i64, consensus: String, timeout: i64, aggregation: String) -> [i64] {
+    let node = [0, 0, 0, 0, 0];
+    node = set_at(node, 0, NODE_BARRIER());
+    node = set_at(node, 1, id);
+    node = set_at(node, 2, ptr_to_int(consensus));
+    node = set_at(node, 3, timeout);
+    node = set_at(node, 4, ptr_to_int(aggregation));
+    return node;
+}
+
+// NODE_CHANNEL: [kind(64), name_ptr, capacity, policy_ptr]
+// channel broadcast { capacity: 100; policy: fifo; }
+fn make_node_channel(name: String, capacity: i64, policy: String) -> [i64] {
+    let node = [0, 0, 0, 0];
+    node = set_at(node, 0, NODE_CHANNEL());
+    node = set_at(node, 1, ptr_to_int(name));
+    node = set_at(node, 2, capacity);
+    node = set_at(node, 3, ptr_to_int(policy));
+    return node;
+}
+
+// STMT_SYNC: [kind(33), barrier_id, consensus_type_ptr, timeout]
+// sync at barrier { consensus: cross_model_family; timeout: 30; }
+fn make_stmt_sync(barrier_id: i64, consensus: String, timeout: i64) -> [i64] {
+    let node = [0, 0, 0, 0];
+    node = set_at(node, 0, STMT_SYNC());
+    node = set_at(node, 1, barrier_id);
+    node = set_at(node, 2, ptr_to_int(consensus));
+    node = set_at(node, 3, timeout);
+    return node;
+}
+
+// STMT_CHANNEL: [kind(38), name_ptr, capacity, policy_ptr]
+fn make_stmt_channel(name: String, capacity: i64, policy: String) -> [i64] {
+    let node = [0, 0, 0, 0];
+    node = set_at(node, 0, STMT_CHANNEL());
+    node = set_at(node, 1, ptr_to_int(name));
+    node = set_at(node, 2, capacity);
+    node = set_at(node, 3, ptr_to_int(policy));
+    return node;
+}
+
+// ============================================================================
+// PHASE 4: SELF-MODIFICATION NODES
+// ============================================================================
+
+// STMT_MODIFY: [kind(35), target_ptr, gates_ptr, budget_ptr, cooldown, body_ptr]
+// modify self { gate proof { ... } budget { ... } cooldown: 5; }
+fn make_stmt_modify(target: String, gates: [i64], budget: [i64], cooldown: i64, body: [i64]) -> [i64] {
+    let node = [0, 0, 0, 0, 0, 0];
+    node = set_at(node, 0, STMT_MODIFY());
+    node = set_at(node, 1, ptr_to_int(target));
+    node = set_at(node, 2, ptr_to_int(gates));
+    node = set_at(node, 3, ptr_to_int(budget));
+    node = set_at(node, 4, cooldown);
+    node = set_at(node, 5, ptr_to_int(body));
+    return node;
+}
+
+// ============================================================================
+// PHASE 5: DISSOLVABLE AGENT NODES
+// ============================================================================
+
+// STMT_DISSOLVABLE: [kind(36), name_ptr, lifetime_ptr, inherit_ptr, body_ptr, on_dissolve_ptr]
+// dissolvable agent Name { lifetime: task_completion; inherit: parent.x; ... }
+fn make_stmt_dissolvable(
+    name: String, 
+    lifetime: [i64], 
+    inherit: [i64], 
+    body: [i64], 
+    on_dissolve: [i64]
+) -> [i64] {
+    let node = [0, 0, 0, 0, 0, 0];
+    node = set_at(node, 0, STMT_DISSOLVABLE());
+    node = set_at(node, 1, ptr_to_int(name));
+    node = set_at(node, 2, ptr_to_int(lifetime));
+    node = set_at(node, 3, ptr_to_int(inherit));
+    node = set_at(node, 4, ptr_to_int(body));
+    node = set_at(node, 5, ptr_to_int(on_dissolve));
+    return node;
+}
+
+// STMT_ON_DISSOLVE: [kind(37), archive_ptr, report_ptr]
+// on_dissolve { archive: state -> parent.memory; report: summary -> parent.channel; }
+fn make_stmt_on_dissolve(archive: [i64], report: [i64]) -> [i64] {
+    let node = [0, 0, 0];
+    node = set_at(node, 0, STMT_ON_DISSOLVE());
+    node = set_at(node, 1, ptr_to_int(archive));
+    node = set_at(node, 2, ptr_to_int(report));
+    return node;
+}
+
+// ============================================================================
+// EXPRESSION NODES
+// ============================================================================
+
+// EXPR_LATENT_REF: [kind(31), name_ptr]
+// Reference to a latent state variable
+fn make_expr_latent_ref(name: String) -> [i64] {
+    let node = [0, 0];
+    node = set_at(node, 0, EXPR_LATENT_REF());
+    node = set_at(node, 1, ptr_to_int(name));
+    return node;
+}
+
+// EXPR_EPOCH_REF: [kind(32), epoch_num]
+// Reference to an epoch number
+fn make_expr_epoch_ref(num: i64) -> [i64] {
+    let node = [0, 0];
+    node = set_at(node, 0, EXPR_EPOCH_REF());
+    node = set_at(node, 1, num);
+    return node;
+}
+
+// ============================================================================
 // Token Kind Constants (must match lexer.hlx)
 // ============================================================================
 
@@ -392,6 +690,115 @@ fn TOK_EXPORT() -> i64 { return 59; }
 fn TOK_AT() -> i64 { return 60; }
 fn TOK_COLLAPSE() -> i64 { return 61; }
 fn TOK_RESOLVE() -> i64 { return 62; }
+fn TOK_CONST() -> i64 { return 63; }
+fn TOK_MUT() -> i64 { return 64; }
+// ============================================================================
+// PHASE 1: RECURSIVE INTELLIGENCE TOKENS
+// ============================================================================
+fn TOK_RECURSIVE() -> i64 { return 70; }
+fn TOK_AGENT() -> i64 { return 71; }
+fn TOK_LATENT() -> i64 { return 72; }
+fn TOK_CYCLE() -> i64 { return 73; }
+fn TOK_HALT() -> i64 { return 74; }
+fn TOK_DISSOLVABLE() -> i64 { return 75; }
+fn TOK_INHERIT() -> i64 { return 76; }
+fn TOK_ON_DISSOLVE() -> i64 { return 77; }
+fn TOK_LIFETIME() -> i64 { return 78; }
+fn TOK_GENERATION() -> i64 { return 79; }
+fn TOK_SCALE() -> i64 { return 80; }
+fn TOK_CLUSTER() -> i64 { return 81; }
+fn TOK_SYNC() -> i64 { return 82; }
+fn TOK_BARRIER() -> i64 { return 83; }
+fn TOK_CONSENSUS() -> i64 { return 84; }
+fn TOK_EPOCH() -> i64 { return 85; }
+fn TOK_AGENTS() -> i64 { return 86; }
+fn TOK_AGGREGATE() -> i64 { return 87; }
+fn TOK_CHANNEL() -> i64 { return 88; }
+fn TOK_BROADCAST() -> i64 { return 89; }
+fn TOK_GOVERN() -> i64 { return 90; }
+fn TOK_CONSCIENCE() -> i64 { return 91; }
+fn TOK_EFFECT() -> i64 { return 92; }
+fn TOK_TRUST() -> i64 { return 93; }
+fn TOK_MODIFY() -> i64 { return 94; }
+fn TOK_GATE() -> i64 { return 95; }
+fn TOK_PROOF() -> i64 { return 96; }
+fn TOK_BUDGET() -> i64 { return 97; }
+fn TOK_COOLDOWN() -> i64 { return 98; }
+fn TOK_APPROVE() -> i64 { return 99; }
+fn TOK_PATH_SAFETY() -> i64 { return 100; }
+fn TOK_NO_EXFILTRATE() -> i64 { return 101; }
+fn TOK_NO_HARM() -> i64 { return 102; }
+fn TOK_NO_BYPASS() -> i64 { return 103; }
+fn TOK_RATE_LIMIT() -> i64 { return 104; }
+fn TOK_TAKES() -> i64 { return 105; }
+fn TOK_GIVES() -> i64 { return 106; }
+fn TOK_ACTION() -> i64 { return 107; }
+fn TOK_WHEN() -> i64 { return 108; }
+fn TOK_OR_KW() -> i64 { return 109; }
+
+// ============================================================================
+// Type Parsing
+// ============================================================================
+
+fn parse_type(state: [i64]) -> [i64] {
+    let kind = peek_kind(state);
+    let type_node = 0;
+
+    // Pointer type: *const T or *mut T
+    if kind == TOK_STAR() {
+        state = advance(state);
+        let is_mut = 0;
+
+        // Check for const or mut
+        if peek_kind(state) == TOK_CONST() {
+            state = advance(state);
+            is_mut = 0;
+        } else if peek_kind(state) == TOK_MUT() {
+            state = advance(state);
+            is_mut = 1;
+        } else {
+            // Default to const if neither specified
+            is_mut = 0;
+        }
+
+        // Parse inner type recursively
+        let inner_result = parse_type(state);
+        let inner_type = int_to_ptr(get_at(inner_result, 0));
+        state = int_to_ptr(get_at(inner_result, 1));
+
+        type_node = ptr_to_int(make_type_pointer(is_mut, inner_type));
+    }
+    // Array type: [T]
+    else if kind == TOK_LBRACKET() {
+        state = advance(state);
+        let elem_result = parse_type(state);
+        let elem_type = int_to_ptr(get_at(elem_result, 0));
+        state = int_to_ptr(get_at(elem_result, 1));
+        state = expect(state, TOK_RBRACKET());
+        type_node = ptr_to_int(make_type_array(elem_type));
+    }
+    // Simple identifier type: i64, String, etc.
+    else if kind == TOK_IDENT() {
+        let tokens = parser_tokens(state);
+        let pos = parser_pos(state);
+        let tok = get_at(tokens, pos);
+        let name = int_to_ptr(get_at(tok, 1));
+        state = advance(state);
+        type_node = ptr_to_int(make_type_ident(name));
+    }
+    else {
+        // Error: expected a type
+        print("ERROR: Expected type, got token kind: ");
+        print_int(kind);
+        print("\n");
+        type_node = ptr_to_int(make_type_ident("error"));
+    }
+
+    let ret = [0, 0];
+    ret = set_at(ret, 0, type_node);
+    ret = set_at(ret, 1, ptr_to_int(state));
+    return ret;
+}
 
 // ============================================================================
 // Expression Parsing (Recursive Descent with Precedence)
@@ -411,6 +818,34 @@ fn parse_primary_expr(state: [i64]) -> [i64] {
         let operand = get_at(operand_result, 0);
         state = int_to_ptr(get_at(operand_result, 1));
         expr = ptr_to_int(make_expr_unary(OP_NOT(), int_to_ptr(operand)));
+
+        let ret = [0, 0];
+        ret = set_at(ret, 0, expr);
+        ret = set_at(ret, 1, ptr_to_int(state));
+        return ret;
+    }
+
+    // Address-of operator: &var
+    if kind == TOK_AMP() {
+        state = advance(state);
+        let operand_result = parse_primary_expr(state);
+        let operand = get_at(operand_result, 0);
+        state = int_to_ptr(get_at(operand_result, 1));
+        expr = ptr_to_int(make_expr_address_of(int_to_ptr(operand)));
+
+        let ret = [0, 0];
+        ret = set_at(ret, 0, expr);
+        ret = set_at(ret, 1, ptr_to_int(state));
+        return ret;
+    }
+
+    // Dereference operator: *ptr
+    if kind == TOK_STAR() {
+        state = advance(state);
+        let operand_result = parse_primary_expr(state);
+        let operand = get_at(operand_result, 0);
+        state = int_to_ptr(get_at(operand_result, 1));
+        expr = ptr_to_int(make_expr_deref(int_to_ptr(operand)));
 
         let ret = [0, 0];
         ret = set_at(ret, 0, expr);
@@ -914,10 +1349,13 @@ fn parse_statement(state: [i64]) -> [i64] {
         let ident_tok = get_at(tokens, pos);
         let name = int_to_ptr(get_at(ident_tok, 1));
 
-        // Optional type annotation: : i64
+        // Optional type annotation: : Type
+        let type_ann = 0;
         if peek_kind(state) == TOK_COLON() {
             state = advance(state);  // Skip colon
-            state = expect(state, TOK_IDENT());  // Skip type name (we ignore types for now)
+            let type_result = parse_type(state);
+            type_ann = get_at(type_result, 0);
+            state = int_to_ptr(get_at(type_result, 1));
         }
 
         state = expect(state, TOK_EQ());
@@ -926,7 +1364,7 @@ fn parse_statement(state: [i64]) -> [i64] {
         state = int_to_ptr(get_at(value_result, 1));
         state = expect(state, TOK_SEMICOLON());
 
-        stmt = ptr_to_int(make_stmt_let(name, int_to_ptr(value)));
+        stmt = ptr_to_int(make_stmt_let(name, int_to_ptr(type_ann), int_to_ptr(value)));
     }
     // return statement
     else if kind == TOK_RETURN() {
@@ -1078,6 +1516,110 @@ fn parse_statement(state: [i64]) -> [i64] {
 
         stmt = ptr_to_int(make_stmt_loop(int_to_ptr(cond), max_iter, body));
     }
+    // ============================================================================
+    // PHASE 1: RECURSIVE INTELLIGENCE STATEMENTS
+    // ============================================================================
+    // recursive agent definition
+    else if kind == TOK_RECURSIVE() {
+        let agent_result = parse_agent_def(state);
+        stmt = get_at(agent_result, 0);
+        state = int_to_ptr(get_at(agent_result, 1));
+    }
+    // halt statement
+    else if kind == TOK_HALT() {
+        let halt_result = parse_halt_stmt(state);
+        stmt = get_at(halt_result, 0);
+        state = int_to_ptr(get_at(halt_result, 1));
+    }
+    // action definition
+    else if kind == TOK_ACTION() {
+        let action_result = parse_action_def(state);
+        stmt = get_at(action_result, 0);
+        state = int_to_ptr(get_at(action_result, 1));
+    }
+    // latent declaration
+    else if kind == TOK_LATENT() {
+        let latent_result = parse_latent_decl(state);
+        stmt = get_at(latent_result, 0);
+        state = int_to_ptr(get_at(latent_result, 1));
+    }
+    // cycle block
+    else if kind == TOK_CYCLE() {
+        let cycle_result = parse_cycle_block(state);
+        stmt = get_at(cycle_result, 0);
+        state = int_to_ptr(get_at(cycle_result, 1));
+    }
+    // govern block (standalone)
+    else if kind == TOK_GOVERN() {
+        let govern_result = parse_govern_block(state);
+        stmt = get_at(govern_result, 0);
+        state = int_to_ptr(get_at(govern_result, 1));
+    }
+    // ============================================================================
+    // PHASE 2: SCALE CLUSTER
+    // ============================================================================
+    else if kind == TOK_SCALE() {
+        let cluster_result = parse_cluster_def(state);
+        stmt = get_at(cluster_result, 0);
+        state = int_to_ptr(get_at(cluster_result, 1));
+    }
+    // sync at barrier
+    else if kind == TOK_SYNC() {
+        state = advance(state);
+        state = expect(state, TOK_BARRIER());
+        
+        // Optional barrier id
+        let barrier_id = 0;
+        if peek_kind(state) == TOK_IDENT() {
+            state = advance(state);
+        }
+        
+        state = expect(state, TOK_LBRACE());
+        
+        // Parse consensus
+        let consensus = "";
+        if peek_kind(state) == TOK_CONSENSUS() {
+            state = advance(state);
+            state = expect(state, TOK_COLON());
+            state = expect(state, TOK_IDENT());
+            let tokens = parser_tokens(state);
+            let pos = parser_pos(state) - 1;
+            let tok = get_at(tokens, pos);
+            consensus = int_to_ptr(get_at(tok, 1));
+        }
+        
+        // Parse timeout
+        let timeout = 0;
+        if peek_kind(state) == TOK_IDENT() {
+            state = advance(state);
+            state = expect(state, TOK_COLON());
+            let to_result = parse_expression(state);
+            let to_expr = int_to_ptr(get_at(to_result, 0));
+            timeout = get_at(to_expr, 1);
+            state = int_to_ptr(get_at(to_result, 1));
+        }
+        
+        state = expect(state, TOK_RBRACE());
+        state = expect(state, TOK_SEMICOLON());
+        
+        stmt = ptr_to_int(make_stmt_sync(0, consensus, timeout));
+    }
+    // ============================================================================
+    // PHASE 4: SELF-MODIFICATION
+    // ============================================================================
+    else if kind == TOK_MODIFY() {
+        let modify_result = parse_modify_block(state);
+        stmt = get_at(modify_result, 0);
+        state = int_to_ptr(get_at(modify_result, 1));
+    }
+    // ============================================================================
+    // PHASE 5: DISSOLVABLE AGENT
+    // ============================================================================
+    else if kind == TOK_DISSOLVABLE() {
+        let dissolvable_result = parse_dissolvable_agent(state);
+        stmt = get_at(dissolvable_result, 0);
+        state = int_to_ptr(get_at(dissolvable_result, 1));
+    }
     // Expression statement or assignment
     else {
         let expr_result = parse_expression(state);
@@ -1142,6 +1684,608 @@ fn parse_statement(state: [i64]) -> [i64] {
 
     let ret = [0, 0];
     ret = set_at(ret, 0, stmt);
+    ret = set_at(ret, 1, ptr_to_int(state));
+    return ret;
+}
+
+// ============================================================================
+// PHASE 1: RECURSIVE AGENT PARSING
+// ============================================================================
+
+// Parse latent state declaration: latent name: Type = value
+fn parse_latent_decl(state: [i64]) -> [i64] {
+    state = expect(state, TOK_LATENT());
+    
+    // Get name
+    state = expect(state, TOK_IDENT());
+    let tokens = parser_tokens(state);
+    let pos = parser_pos(state) - 1;
+    let name_tok = get_at(tokens, pos);
+    let name = int_to_ptr(get_at(name_tok, 1));
+    
+    // Optional type annotation
+    let type_ann = 0;
+    if peek_kind(state) == TOK_COLON() {
+        state = advance(state);
+        let type_result = parse_type(state);
+        type_ann = get_at(type_result, 0);
+        state = int_to_ptr(get_at(type_result, 1));
+    }
+    
+    // Optional initializer
+    let init = 0;
+    if peek_kind(state) == TOK_EQ() {
+        state = advance(state);
+        let init_result = parse_expression(state);
+        init = get_at(init_result, 0);
+        state = int_to_ptr(get_at(init_result, 1));
+    }
+    
+    state = expect(state, TOK_SEMICOLON());
+    
+    let latent = make_stmt_latent(name, int_to_ptr(type_ann), int_to_ptr(init));
+    let ret = [0, 0];
+    ret = set_at(ret, 0, latent);
+    ret = set_at(ret, 1, ptr_to_int(state));
+    return ret;
+}
+
+// Parse cycle block: cycle level(count) { body }
+fn parse_cycle_block(state: [i64]) -> [i64] {
+    state = expect(state, TOK_CYCLE());
+    
+    // Get level name (identifier)
+    state = expect(state, TOK_IDENT());
+    let tokens = parser_tokens(state);
+    let pos = parser_pos(state) - 1;
+    let level_tok = get_at(tokens, pos);
+    let level = int_to_ptr(get_at(level_tok, 1));
+    
+    // Parse (count)
+    state = expect(state, TOK_LPAREN());
+    let count_result = parse_expression(state);
+    let count_expr = int_to_ptr(get_at(count_result, 0));
+    state = int_to_ptr(get_at(count_result, 1));
+    // Extract integer value
+    let count = get_at(count_expr, 1);
+    state = expect(state, TOK_RPAREN());
+    
+    // Parse body
+    state = expect(state, TOK_LBRACE());
+    let body = [];
+    loop(peek_kind(state) != TOK_RBRACE(), 1000) {
+        if peek_kind(state) == TOK_RBRACE() { break; }
+        let stmt_result = parse_statement(state);
+        let s = get_at(stmt_result, 0);
+        state = int_to_ptr(get_at(stmt_result, 1));
+        body = push(body, s);
+    }
+    state = expect(state, TOK_RBRACE());
+    
+    let cycle = make_stmt_cycle(level, count, body);
+    let ret = [0, 0];
+    ret = set_at(ret, 0, cycle);
+    ret = set_at(ret, 1, ptr_to_int(state));
+    return ret;
+}
+
+// Parse halt statement: halt when condition or steps >= N
+fn parse_halt_stmt(state: [i64]) -> [i64] {
+    state = expect(state, TOK_HALT());
+    state = expect(state, TOK_WHEN());
+    
+    // Parse condition
+    let cond_result = parse_expression(state);
+    let condition = get_at(cond_result, 0);
+    state = int_to_ptr(get_at(cond_result, 1));
+    
+    // Check for "or steps >= N"
+    let max_steps = 0;
+    if peek_kind(state) == TOK_OR_KW() {
+        state = advance(state);
+        state = expect(state, TOK_IDENT());  // "steps"
+        state = expect(state, TOK_GE());      // ">="
+        let steps_result = parse_expression(state);
+        let steps_expr = int_to_ptr(get_at(steps_result, 0));
+        max_steps = get_at(steps_expr, 1);
+        state = int_to_ptr(get_at(steps_result, 1));
+    }
+    
+    state = expect(state, TOK_SEMICOLON());
+    
+    let halt = make_stmt_halt(int_to_ptr(condition), max_steps);
+    let ret = [0, 0];
+    ret = set_at(ret, 0, halt);
+    ret = set_at(ret, 1, ptr_to_int(state));
+    return ret;
+}
+
+// Parse govern block: govern { effect: X; conscience: [...]; trust: Y; }
+fn parse_govern_block(state: [i64]) -> [i64] {
+    state = expect(state, TOK_GOVERN());
+    state = expect(state, TOK_LBRACE());
+    
+    let effect = "";
+    let conscience = [];
+    let trust = "";
+    
+    // Parse effect
+    if peek_kind(state) == TOK_EFFECT() {
+        state = advance(state);
+        state = expect(state, TOK_COLON());
+        state = expect(state, TOK_IDENT());
+        let tokens = parser_tokens(state);
+        let pos = parser_pos(state) - 1;
+        let tok = get_at(tokens, pos);
+        effect = int_to_ptr(get_at(tok, 1));
+        state = expect(state, TOK_SEMICOLON());
+    }
+    
+    // Parse conscience predicates
+    if peek_kind(state) == TOK_CONSCIENCE() {
+        state = advance(state);
+        state = expect(state, TOK_COLON());
+        state = expect(state, TOK_LBRACKET());
+        
+        loop(peek_kind(state) != TOK_RBRACKET(), 100) {
+            if peek_kind(state) == TOK_RBRACKET() { break; }
+            
+            // Get predicate name (could be keyword or identifier)
+            let tok = current_token(state);
+            let pred_ptr = get_at(tok, 1);
+            conscience = push(conscience, pred_ptr);
+            state = advance(state);
+            
+            if peek_kind(state) == TOK_COMMA() {
+                state = advance(state);
+            }
+        }
+        state = expect(state, TOK_RBRACKET());
+        state = expect(state, TOK_SEMICOLON());
+    }
+    
+    // Parse trust level
+    if peek_kind(state) == TOK_TRUST() {
+        state = advance(state);
+        state = expect(state, TOK_COLON());
+        state = expect(state, TOK_IDENT());
+        let tokens = parser_tokens(state);
+        let pos = parser_pos(state) - 1;
+        let tok = get_at(tokens, pos);
+        trust = int_to_ptr(get_at(tok, 1));
+        state = expect(state, TOK_SEMICOLON());
+    }
+    
+    state = expect(state, TOK_RBRACE());
+    
+    let govern = make_stmt_govern(effect, conscience, trust);
+    let ret = [0, 0];
+    ret = set_at(ret, 0, govern);
+    ret = set_at(ret, 1, ptr_to_int(state));
+    return ret;
+}
+
+// Parse action definition: action name(params) { body } govern?
+fn parse_action_def(state: [i64]) -> [i64] {
+    state = expect(state, TOK_ACTION());
+    
+    // Get name
+    state = expect(state, TOK_IDENT());
+    let tokens = parser_tokens(state);
+    let pos = parser_pos(state) - 1;
+    let name_tok = get_at(tokens, pos);
+    let name = int_to_ptr(get_at(name_tok, 1));
+    
+    // Parse parameters
+    state = expect(state, TOK_LPAREN());
+    let params = [];
+    loop(peek_kind(state) != TOK_RPAREN(), 100) {
+        if peek_kind(state) == TOK_RPAREN() { break; }
+        
+        state = expect(state, TOK_IDENT());
+        let param_pos = parser_pos(state) - 1;
+        let param_tok = get_at(tokens, param_pos);
+        let param_name = get_at(param_tok, 1);
+        params = push(params, param_name);
+        
+        // Optional type
+        if peek_kind(state) == TOK_COLON() {
+            state = advance(state);
+            state = expect(state, TOK_IDENT());
+        }
+        
+        if peek_kind(state) == TOK_COMMA() {
+            state = advance(state);
+        }
+    }
+    state = expect(state, TOK_RPAREN());
+    
+    // Parse body
+    state = expect(state, TOK_LBRACE());
+    let body = [];
+    loop(peek_kind(state) != TOK_RBRACE(), 1000) {
+        if peek_kind(state) == TOK_RBRACE() { break; }
+        let stmt_result = parse_statement(state);
+        let s = get_at(stmt_result, 0);
+        state = int_to_ptr(get_at(stmt_result, 1));
+        body = push(body, s);
+    }
+    state = expect(state, TOK_RBRACE());
+    
+    // Optional govern block
+    let govern = [];
+    if peek_kind(state) == TOK_GOVERN() {
+        let govern_result = parse_govern_block(state);
+        let g = get_at(govern_result, 0);
+        state = int_to_ptr(get_at(govern_result, 1));
+        govern = push(govern, g);
+    }
+    
+    let action = make_stmt_action(name, params, body, govern);
+    let ret = [0, 0];
+    ret = set_at(ret, 0, action);
+    ret = set_at(ret, 1, ptr_to_int(state));
+    return ret;
+}
+
+// Parse recursive agent: recursive agent Name { latent* cycle* stmt* govern? modify? }
+fn parse_agent_def(state: [i64]) -> [i64] {
+    state = expect(state, TOK_RECURSIVE());
+    state = expect(state, TOK_AGENT());
+    
+    // Get name
+    state = expect(state, TOK_IDENT());
+    let tokens = parser_tokens(state);
+    let pos = parser_pos(state) - 1;
+    let name_tok = get_at(tokens, pos);
+    let name = int_to_ptr(get_at(name_tok, 1));
+    
+    state = expect(state, TOK_LBRACE());
+    
+    // Parse latent declarations
+    let latents = [];
+    loop(peek_kind(state) == TOK_LATENT(), 100) {
+        let latent_result = parse_latent_decl(state);
+        let l = get_at(latent_result, 0);
+        state = int_to_ptr(get_at(latent_result, 1));
+        latents = push(latents, l);
+    }
+    
+    // Parse takes declarations (intent inputs)
+    let takes = [];
+    if peek_kind(state) == TOK_TAKES() {
+        state = advance(state);
+        loop(peek_kind(state) == TOK_IDENT(), 100) {
+            state = expect(state, TOK_IDENT());
+            let tpos = parser_pos(state) - 1;
+            let ttok = get_at(tokens, tpos);
+            let param_name = get_at(ttok, 1);
+            takes = push(takes, param_name);
+            
+            if peek_kind(state) == TOK_COLON() {
+                state = advance(state);
+                state = expect(state, TOK_IDENT());  // type
+            }
+            if peek_kind(state) == TOK_COMMA() {
+                state = advance(state);
+            }
+            if peek_kind(state) != TOK_IDENT() { break; }
+        }
+    }
+    
+    // Parse gives declarations (intent outputs)
+    let gives = [];
+    if peek_kind(state) == TOK_GIVES() {
+        state = advance(state);
+        state = expect(state, TOK_IDENT());
+        let gpos = parser_pos(state) - 1;
+        let gtok = get_at(tokens, gpos);
+        let output_name = get_at(gtok, 1);
+        gives = push(gives, output_name);
+        
+        if peek_kind(state) == TOK_COLON() {
+            state = advance(state);
+            state = expect(state, TOK_IDENT());  // type
+        }
+    }
+    
+    // Parse cycle blocks
+    let cycles = [];
+    loop(peek_kind(state) == TOK_CYCLE(), 100) {
+        let cycle_result = parse_cycle_block(state);
+        let c = get_at(cycle_result, 0);
+        state = int_to_ptr(get_at(cycle_result, 1));
+        cycles = push(cycles, c);
+    }
+    
+    // Parse body statements (until govern, modify, or })
+    let body = [];
+    loop(peek_kind(state) != TOK_RBRACE() 
+         && peek_kind(state) != TOK_GOVERN() 
+         && peek_kind(state) != TOK_MODIFY(), 1000) {
+        if peek_kind(state) == TOK_RBRACE() { break; }
+        if peek_kind(state) == TOK_GOVERN() { break; }
+        if peek_kind(state) == TOK_MODIFY() { break; }
+        
+        let stmt_result = parse_statement(state);
+        let s = get_at(stmt_result, 0);
+        state = int_to_ptr(get_at(stmt_result, 1));
+        body = push(body, s);
+    }
+    
+    // Parse optional govern block
+    let govern = [];
+    if peek_kind(state) == TOK_GOVERN() {
+        let govern_result = parse_govern_block(state);
+        let g = get_at(govern_result, 0);
+        state = int_to_ptr(get_at(govern_result, 1));
+        govern = push(govern, g);
+    }
+    
+    // Parse optional modify block (placeholder for now)
+    let modify = [];
+    if peek_kind(state) == TOK_MODIFY() {
+        state = advance(state);
+        state = expect(state, TOK_IDENT());  // "self"
+        state = expect(state, TOK_LBRACE());
+        // Skip modify contents for now
+        loop(peek_kind(state) != TOK_RBRACE(), 1000) {
+            if peek_kind(state) == TOK_RBRACE() { break; }
+            state = advance(state);
+        }
+        state = expect(state, TOK_RBRACE());
+    }
+    
+    state = expect(state, TOK_RBRACE());
+    
+    let agent = make_stmt_agent(name, latents, takes, gives, cycles, body, govern, modify);
+    let ret = [0, 0];
+    ret = set_at(ret, 0, agent);
+    ret = set_at(ret, 1, ptr_to_int(state));
+    return ret;
+}
+
+// ============================================================================
+// PHASE 2: SCALE CLUSTER PARSING
+// ============================================================================
+
+// Parse scale cluster (simplified for now)
+fn parse_cluster_def(state: [i64]) -> [i64] {
+    state = expect(state, TOK_SCALE());
+    state = expect(state, TOK_CLUSTER());
+    
+    state = expect(state, TOK_IDENT());
+    let tokens = parser_tokens(state);
+    let pos = parser_pos(state) - 1;
+    let name_tok = get_at(tokens, pos);
+    let name = int_to_ptr(get_at(name_tok, 1));
+    
+    state = expect(state, TOK_LBRACE());
+    
+    let agents = [];
+    let barriers = [];
+    let channels = [];
+    
+    loop(peek_kind(state) != TOK_RBRACE(), 1000) {
+        if peek_kind(state) == TOK_RBRACE() { break; }
+        
+        let kind = peek_kind(state);
+        if kind == TOK_AGENTS() {
+            state = advance(state);
+            state = expect(state, TOK_COLON());
+            state = expect(state, TOK_LBRACKET());
+            loop(peek_kind(state) != TOK_RBRACKET(), 100) {
+                if peek_kind(state) == TOK_RBRACKET() { break; }
+                state = expect(state, TOK_IDENT());
+                if peek_kind(state) == TOK_COMMA() { state = advance(state); }
+            }
+            state = expect(state, TOK_RBRACKET());
+            state = expect(state, TOK_SEMICOLON());
+        } else if kind == TOK_SYNC() || kind == TOK_BARRIER() {
+            if kind == TOK_SYNC() { state = advance(state); }
+            state = expect(state, TOK_BARRIER());
+            if peek_kind(state) == TOK_IDENT() { state = advance(state); }
+            state = expect(state, TOK_LBRACE());
+            loop(peek_kind(state) != TOK_RBRACE(), 100) {
+                if peek_kind(state) == TOK_RBRACE() { break; }
+                state = advance(state);
+            }
+            state = expect(state, TOK_RBRACE());
+        } else if kind == TOK_CHANNEL() {
+            state = advance(state);
+            state = expect(state, TOK_IDENT());
+            state = expect(state, TOK_LBRACE());
+            loop(peek_kind(state) != TOK_RBRACE(), 100) {
+                if peek_kind(state) == TOK_RBRACE() { break; }
+                state = advance(state);
+            }
+            state = expect(state, TOK_RBRACE());
+        } else {
+            state = advance(state);
+        }
+    }
+    
+    state = expect(state, TOK_RBRACE());
+    
+    let cluster = make_node_cluster(name, agents, barriers, channels);
+    let ret = [0, 0];
+    ret = set_at(ret, 0, cluster);
+    ret = set_at(ret, 1, ptr_to_int(state));
+    return ret;
+}
+
+// ============================================================================
+// PHASE 4: SELF-MODIFICATION PARSING
+// ============================================================================
+
+// Parse modify block: modify self { gate proof { ... } budget { ... } cooldown: N; }
+fn parse_modify_block(state: [i64]) -> [i64] {
+    state = expect(state, TOK_MODIFY());
+    
+    // Target (usually "self")
+    state = expect(state, TOK_IDENT());
+    let tokens = parser_tokens(state);
+    let pos = parser_pos(state) - 1;
+    let target_tok = get_at(tokens, pos);
+    let target = int_to_ptr(get_at(target_tok, 1));
+    
+    state = expect(state, TOK_LBRACE());
+    
+    // Parse gates
+    let gates = [];
+    loop(peek_kind(state) == TOK_GATE(), 10) {
+        state = advance(state);
+        
+        state = expect(state, TOK_IDENT()); // gate type (proof, consensus, human)
+        let gpos = parser_pos(state) - 1;
+        let gtok = get_at(tokens, gpos);
+        let gate_type = get_at(gtok, 1);
+        gates = push(gates, gate_type);
+        
+        state = expect(state, TOK_LBRACE());
+        
+        // Parse gate content (skip for now)
+        loop(peek_kind(state) != TOK_RBRACE(), 100) {
+            if peek_kind(state) == TOK_RBRACE() { break; }
+            state = advance(state);
+        }
+        
+        state = expect(state, TOK_RBRACE());
+    }
+    
+    // Parse budget
+    let budget = [];
+    if peek_kind(state) == TOK_BUDGET() {
+        state = advance(state);
+        state = expect(state, TOK_LBRACE());
+        
+        loop(peek_kind(state) != TOK_RBRACE(), 100) {
+            if peek_kind(state) == TOK_RBRACE() { break; }
+            state = advance(state);
+        }
+        
+        state = expect(state, TOK_RBRACE());
+    }
+    
+    // Parse cooldown
+    let cooldown = 0;
+    if peek_kind(state) == TOK_COOLDOWN() {
+        state = advance(state);
+        state = expect(state, TOK_COLON());
+        let cd_result = parse_expression(state);
+        let cd_expr = int_to_ptr(get_at(cd_result, 0));
+        cooldown = get_at(cd_expr, 1);
+        state = int_to_ptr(get_at(cd_result, 1));
+        state = expect(state, TOK_SEMICOLON());
+    }
+    
+    // Parse body (proposals)
+    let body = [];
+    loop(peek_kind(state) != TOK_RBRACE(), 1000) {
+        if peek_kind(state) == TOK_RBRACE() { break; }
+        let stmt_result = parse_statement(state);
+        let s = get_at(stmt_result, 0);
+        state = int_to_ptr(get_at(stmt_result, 1));
+        body = push(body, s);
+    }
+    
+    state = expect(state, TOK_RBRACE());
+    
+    let modify = make_stmt_modify(target, gates, budget, cooldown, body);
+    let ret = [0, 0];
+    ret = set_at(ret, 0, modify);
+    ret = set_at(ret, 1, ptr_to_int(state));
+    return ret;
+}
+
+// ============================================================================
+// PHASE 5: DISSOLVABLE AGENT PARSING
+// ============================================================================
+
+// Parse dissolvable agent: dissolvable agent Name { lifetime: X; inherit: Y; body on_dissolve? }
+fn parse_dissolvable_agent(state: [i64]) -> [i64] {
+    state = expect(state, TOK_DISSOLVABLE());
+    state = expect(state, TOK_AGENT());
+    
+    // Get name
+    state = expect(state, TOK_IDENT());
+    let tokens = parser_tokens(state);
+    let pos = parser_pos(state) - 1;
+    let name_tok = get_at(tokens, pos);
+    let name = int_to_ptr(get_at(name_tok, 1));
+    
+    state = expect(state, TOK_LBRACE());
+    
+    // Parse lifetime
+    let lifetime = [];
+    if peek_kind(state) == TOK_LIFETIME() {
+        state = advance(state);
+        state = expect(state, TOK_COLON());
+        
+        // task_completion | timeout(N)
+        if peek_kind(state) == TOK_IDENT() {
+            state = advance(state);
+        } else if peek_kind(state) == TOK_INT() {
+            let lt_result = parse_expression(state);
+            let lt = get_at(lt_result, 0);
+            state = int_to_ptr(get_at(lt_result, 1));
+            lifetime = push(lifetime, lt);
+        }
+        state = expect(state, TOK_SEMICOLON());
+    }
+    
+    // Parse inherit
+    let inherit = [];
+    if peek_kind(state) == TOK_INHERIT() {
+        state = advance(state);
+        state = expect(state, TOK_COLON());
+        
+        loop(peek_kind(state) == TOK_IDENT(), 100) {
+            state = expect(state, TOK_IDENT());
+            let ipos = parser_pos(state) - 1;
+            let itok = get_at(tokens, ipos);
+            let inherited = get_at(itok, 1);
+            inherit = push(inherit, inherited);
+            
+            if peek_kind(state) == TOK_COMMA() {
+                state = advance(state);
+            }
+        }
+        state = expect(state, TOK_SEMICOLON());
+    }
+    
+    // Parse body
+    let body = [];
+    loop(peek_kind(state) != TOK_RBRACE() && peek_kind(state) != TOK_ON_DISSOLVE(), 1000) {
+        if peek_kind(state) == TOK_RBRACE() { break; }
+        if peek_kind(state) == TOK_ON_DISSOLVE() { break; }
+        
+        let stmt_result = parse_statement(state);
+        let s = get_at(stmt_result, 0);
+        state = int_to_ptr(get_at(stmt_result, 1));
+        body = push(body, s);
+    }
+    
+    // Parse on_dissolve
+    let on_dissolve = [];
+    if peek_kind(state) == TOK_ON_DISSOLVE() {
+        state = advance(state);
+        state = expect(state, TOK_LBRACE());
+        
+        // Parse archive and report (simplified)
+        loop(peek_kind(state) != TOK_RBRACE(), 100) {
+            if peek_kind(state) == TOK_RBRACE() { break; }
+            state = advance(state);
+        }
+        
+        state = expect(state, TOK_RBRACE());
+    }
+    
+    state = expect(state, TOK_RBRACE());
+    
+    let dissolvable = make_stmt_dissolvable(name, lifetime, inherit, body, on_dissolve);
+    let ret = [0, 0];
+    ret = set_at(ret, 0, dissolvable);
     ret = set_at(ret, 1, ptr_to_int(state));
     return ret;
 }
@@ -1278,21 +2422,68 @@ fn parse_function(state: [i64]) -> [i64] {
 export fn parse_program(tokens: [i64]) -> [i64] {
     let state = make_parser(tokens);
 
-    // Expect "program" keyword
-    state = expect(state, TOK_PROGRAM());
-    state = expect(state, TOK_IDENT());  // program name
+    // Accept "program" or "module" keyword
+    let kind = peek_kind(state);
+    if kind == TOK_PROGRAM() {
+        state = advance(state);
+        state = expect(state, TOK_IDENT());
+    } else if kind == TOK_MODULE() {
+        state = advance(state);
+        state = expect(state, TOK_IDENT());
+    } else {
+        print("Error: expected 'program' or 'module'\n");
+    }
+    
     state = expect(state, TOK_LBRACE());
 
-    // Parse functions
+    // Parse top-level items: functions, agents, clusters
     let functions = [];
+    let agents = [];
+    let clusters = [];
+    
     loop(peek_kind(state) != TOK_RBRACE(), 1000) {
         if peek_kind(state) == TOK_RBRACE() { break; }
         if peek_kind(state) == TOK_EOF() { break; }
 
-        let func_result = parse_function(state);
-        let func = get_at(func_result, 0);
-        state = int_to_ptr(get_at(func_result, 1));
-        functions = push(functions, func);
+        let item_kind = peek_kind(state);
+        
+        // Recursive agent at top level
+        if item_kind == TOK_RECURSIVE() {
+            let agent_result = parse_agent_def(state);
+            let agent = get_at(agent_result, 0);
+            state = int_to_ptr(get_at(agent_result, 1));
+            agents = push(agents, agent);
+        }
+        // Scale cluster at top level
+        else if item_kind == TOK_SCALE() {
+            let cluster_result = parse_cluster_def(state);
+            let cluster = get_at(cluster_result, 0);
+            state = int_to_ptr(get_at(cluster_result, 1));
+            clusters = push(clusters, cluster);
+        }
+        // Dissolvable agent at top level
+        else if item_kind == TOK_DISSOLVABLE() {
+            let dissolvable_result = parse_dissolvable_agent(state);
+            let d = get_at(dissolvable_result, 0);
+            state = int_to_ptr(get_at(dissolvable_result, 1));
+            agents = push(agents, d);
+        }
+        // Function or export
+        else if item_kind == TOK_FN() || item_kind == TOK_EXPORT() {
+            let func_result = parse_function(state);
+            let func = get_at(func_result, 0);
+            state = int_to_ptr(get_at(func_result, 1));
+            functions = push(functions, func);
+        }
+        // Import statement
+        else if item_kind == TOK_IMPORT() {
+            let stmt_result = parse_statement(state);
+            state = int_to_ptr(get_at(stmt_result, 1));
+        }
+        // Unknown - skip
+        else {
+            state = advance(state);
+        }
     }
 
     state = expect(state, TOK_RBRACE());

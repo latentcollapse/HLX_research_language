@@ -60,3 +60,7 @@ build.log
 hlx/test_cfg
 hlx/test_typed_arrays
 hlx/test_typed_simple
+
+# External repos (not submodules)
+Axiom-main/
+TinyRecursiveModels-main/

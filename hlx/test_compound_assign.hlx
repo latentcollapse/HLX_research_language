@@ -1,7 +1,0 @@
-program test {
-    fn main() -> i64 {
-        let x = 10;
-        x += 5;
-        return x;
-    }
-}

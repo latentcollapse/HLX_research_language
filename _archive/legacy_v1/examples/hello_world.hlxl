@@ -1,7 +1,0 @@
-print("Hello, HLX World!")
-
-let name = "AMD"
-print("Welcome to deterministic GPU computing, " + name + "!")
-
-let version = "1.1.0"
-print("HLX Version: " + version)

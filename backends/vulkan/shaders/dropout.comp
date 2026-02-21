@@ -1,0 +1,62 @@
+#version 450
+
+// Dropout Regularization
+// During training: Randomly sets elements to 0 with probability p, scales remaining by 1/(1-p)
+// During inference: Pass through unchanged
+//
+// Uses pseudo-random number generation based on element index and seed
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform PushConstants {
+    uint size;           // Total number of elements
+    float dropout_rate;  // Probability of dropping (0.0 to 1.0)
+    uint seed;           // Random seed
+    uint training;       // 0 = inference (no dropout), 1 = training (apply dropout)
+} params;
+
+layout(std430, binding = 0) readonly buffer InputBuffer {
+    float input_data[];
+};
+
+layout(std430, binding = 1) buffer OutputBuffer {
+    float output_data[];
+};
+
+// Simple pseudo-random number generator
+// Based on: https://www.shadertoy.com/view/4djSRW
+float hash(uint x, uint seed) {
+    x = x + seed;
+    x = ((x >> 16) ^ x) * 0x45d9f3bu;
+    x = ((x >> 16) ^ x) * 0x45d9f3bu;
+    x = (x >> 16) ^ x;
+    return float(x) / 4294967295.0;  // Normalize to [0, 1]
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+
+    if (idx >= params.size) {
+        return;
+    }
+
+    float value = input_data[idx];
+
+    // During inference, just pass through
+    if (params.training == 0) {
+        output_data[idx] = value;
+        return;
+    }
+
+    // During training, apply dropout
+    float random = hash(idx, params.seed);
+
+    if (random < params.dropout_rate) {
+        // Drop this element
+        output_data[idx] = 0.0;
+    } else {
+        // Keep this element, scaled by 1/(1-p) for expected value preservation
+        float scale = 1.0 / (1.0 - params.dropout_rate);
+        output_data[idx] = value * scale;
+    }
+}

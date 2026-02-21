@@ -1,0 +1,35 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) buffer InputImage {
+    float data[];
+} input_image;
+
+layout(set = 0, binding = 1) buffer OutputImage {
+    float data[];
+} output_image;
+
+layout(push_constant) uniform PushConstants {
+    uint width;
+    uint height;
+    uint channels;
+    float factor;
+} params;
+
+void main() {
+    uint x = gl_GlobalInvocationID.x;
+    uint y = gl_GlobalInvocationID.y;
+
+    if (x >= params.width || y >= params.height) {
+        return;
+    }
+
+    uint idx = (y * params.width + x) * params.channels;
+
+    // Adjust brightness by multiplying with factor
+    for (uint c = 0; c < params.channels; ++c) {
+        float val = input_image.data[idx + c];
+        output_image.data[idx + c] = clamp(val * params.factor, 0.0, 1.0);
+    }
+}

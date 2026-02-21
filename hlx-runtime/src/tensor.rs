@@ -1,0 +1,689 @@
+use crate::{RuntimeError, RuntimeResult, Value};
+use std::fmt;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+pub const DEFAULT_MAX_TENSOR_ELEMENTS: usize = 1_000_000_000;
+pub const DEFAULT_MAX_RANK: usize = 8;
+pub const MAX_DIMENSION: usize = 1_000_000_000;
+
+static GLOBAL_TENSOR_ALLOCATION: AtomicUsize = AtomicUsize::new(0);
+static GLOBAL_ALLOCATION_LIMIT: AtomicUsize = AtomicUsize::new(DEFAULT_MAX_TENSOR_ELEMENTS);
+
+#[derive(Debug, Clone)]
+pub struct TensorLimits {
+    pub max_elements: usize,
+    pub max_rank: usize,
+    pub max_dimension: usize,
+}
+
+impl Default for TensorLimits {
+    fn default() -> Self {
+        TensorLimits {
+            max_elements: DEFAULT_MAX_TENSOR_ELEMENTS,
+            max_rank: DEFAULT_MAX_RANK,
+            max_dimension: MAX_DIMENSION,
+        }
+    }
+}
+
+impl TensorLimits {
+    pub fn new(max_elements: usize) -> Self {
+        TensorLimits {
+            max_elements,
+            max_rank: DEFAULT_MAX_RANK,
+            max_dimension: MAX_DIMENSION,
+        }
+    }
+
+    pub fn check_shape(&self, shape: &[usize]) -> RuntimeResult<usize> {
+        if shape.len() > self.max_rank {
+            return Err(RuntimeError::new(
+                format!(
+                    "Tensor rank {} exceeds maximum {}",
+                    shape.len(),
+                    self.max_rank
+                ),
+                0,
+            ));
+        }
+
+        for (i, &dim) in shape.iter().enumerate() {
+            if dim > self.max_dimension {
+                return Err(RuntimeError::new(
+                    format!(
+                        "Dimension {} size {} exceeds maximum {}",
+                        i, dim, self.max_dimension
+                    ),
+                    0,
+                ));
+            }
+        }
+
+        let total: usize = shape.iter().product();
+        if total > self.max_elements {
+            return Err(RuntimeError::new(
+                format!(
+                    "Tensor size {} elements exceeds limit {}",
+                    total, self.max_elements
+                ),
+                0,
+            ));
+        }
+
+        Ok(total)
+    }
+}
+
+pub fn get_global_allocation() -> usize {
+    GLOBAL_TENSOR_ALLOCATION.load(Ordering::Relaxed)
+}
+
+pub fn get_global_limit() -> usize {
+    GLOBAL_ALLOCATION_LIMIT.load(Ordering::Relaxed)
+}
+
+pub fn set_global_limit(limit: usize) {
+    GLOBAL_ALLOCATION_LIMIT.store(limit, Ordering::Relaxed);
+}
+
+pub fn reset_global_allocation() {
+    GLOBAL_TENSOR_ALLOCATION.store(0, Ordering::Relaxed);
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Tensor {
+    pub data: Vec<f64>,
+    pub shape: Vec<usize>,
+}
+
+impl Tensor {
+    pub fn new(shape: Vec<usize>) -> Self {
+        let limits = TensorLimits::default();
+        Self::new_with_limits(shape, &limits).expect("Default tensor creation failed")
+    }
+
+    pub fn new_with_limits(shape: Vec<usize>, limits: &TensorLimits) -> RuntimeResult<Self> {
+        let total = limits.check_shape(&shape)?;
+
+        let current = GLOBAL_TENSOR_ALLOCATION.load(Ordering::Relaxed);
+        let global_limit = GLOBAL_ALLOCATION_LIMIT.load(Ordering::Relaxed);
+        if current + total > global_limit {
+            return Err(RuntimeError::new(
+                format!(
+                    "Global tensor allocation limit exceeded: {} + {} > {}",
+                    current, total, global_limit
+                ),
+                0,
+            ));
+        }
+
+        GLOBAL_TENSOR_ALLOCATION.fetch_add(total, Ordering::Relaxed);
+
+        Ok(Tensor {
+            data: vec![0.0; total],
+            shape,
+        })
+    }
+
+    pub fn from_data(shape: Vec<usize>, data: Vec<f64>) -> RuntimeResult<Self> {
+        let limits = TensorLimits::default();
+        Self::from_data_with_limits(shape, data, &limits)
+    }
+
+    pub fn from_data_with_limits(
+        shape: Vec<usize>,
+        data: Vec<f64>,
+        limits: &TensorLimits,
+    ) -> RuntimeResult<Self> {
+        let expected = limits.check_shape(&shape)?;
+        if data.len() != expected {
+            return Err(RuntimeError::new(
+                format!(
+                    "Tensor shape mismatch: expected {} elements, got {}",
+                    expected,
+                    data.len()
+                ),
+                0,
+            ));
+        }
+
+        let current = GLOBAL_TENSOR_ALLOCATION.load(Ordering::Relaxed);
+        let global_limit = GLOBAL_ALLOCATION_LIMIT.load(Ordering::Relaxed);
+        if current + expected > global_limit {
+            return Err(RuntimeError::new(
+                format!("Global tensor allocation limit exceeded",),
+                0,
+            ));
+        }
+
+        GLOBAL_TENSOR_ALLOCATION.fetch_add(expected, Ordering::Relaxed);
+        Ok(Tensor { data, shape })
+    }
+
+    pub fn from_flat(data: Vec<f64>) -> Self {
+        let len = data.len();
+        GLOBAL_TENSOR_ALLOCATION.fetch_add(len, Ordering::Relaxed);
+        Tensor {
+            data,
+            shape: vec![len],
+        }
+    }
+
+    pub fn zeros(shape: Vec<usize>) -> Self {
+        Self::new(shape)
+    }
+
+    pub fn zeros_with_limits(shape: Vec<usize>, limits: &TensorLimits) -> RuntimeResult<Self> {
+        Self::new_with_limits(shape, limits)
+    }
+
+    pub fn ones(shape: Vec<usize>) -> Self {
+        let total: usize = shape.iter().product();
+        GLOBAL_TENSOR_ALLOCATION.fetch_add(total, Ordering::Relaxed);
+        Tensor {
+            data: vec![1.0; total],
+            shape,
+        }
+    }
+
+    pub fn scalar(value: f64) -> Self {
+        GLOBAL_TENSOR_ALLOCATION.fetch_add(1, Ordering::Relaxed);
+        Tensor {
+            data: vec![value],
+            shape: vec![],
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    pub fn rank(&self) -> usize {
+        self.shape.len()
+    }
+
+    pub fn size(&self) -> usize {
+        self.data.iter().product::<f64>() as usize
+    }
+
+    pub fn get(&self, indices: &[usize]) -> RuntimeResult<f64> {
+        let idx = self.flatten_index(indices)?;
+        Ok(self.data[idx])
+    }
+
+    pub fn set(&mut self, indices: &[usize], value: f64) -> RuntimeResult<()> {
+        let idx = self.flatten_index(indices)?;
+        self.data[idx] = value;
+        Ok(())
+    }
+
+    fn flatten_index(&self, indices: &[usize]) -> RuntimeResult<usize> {
+        if indices.len() != self.shape.len() {
+            return Err(RuntimeError::new(
+                format!(
+                    "Index dimension mismatch: expected {} dims, got {}",
+                    self.shape.len(),
+                    indices.len()
+                ),
+                0,
+            ));
+        }
+
+        let mut idx = 0;
+        let mut stride = 1;
+        for i in (0..self.shape.len()).rev() {
+            if indices[i] >= self.shape[i] {
+                return Err(RuntimeError::new(
+                    format!("Index out of bounds: {} >= {}", indices[i], self.shape[i]),
+                    0,
+                ));
+            }
+            idx += indices[i] * stride;
+            stride *= self.shape[i];
+        }
+        Ok(idx)
+    }
+
+    pub fn reshape(&self, new_shape: Vec<usize>) -> RuntimeResult<Self> {
+        let old_total: usize = self.shape.iter().product();
+        let new_total: usize = new_shape.iter().product();
+        if old_total != new_total {
+            return Err(RuntimeError::new(
+                format!("Cannot reshape: {} elements to {}", old_total, new_total),
+                0,
+            ));
+        }
+        Ok(Tensor {
+            data: self.data.clone(),
+            shape: new_shape,
+        })
+    }
+
+    pub fn slice(&self, dim: usize, start: usize, end: usize) -> RuntimeResult<Self> {
+        if dim >= self.shape.len() {
+            return Err(RuntimeError::new(
+                format!(
+                    "Dimension {} out of bounds for rank {}",
+                    dim,
+                    self.shape.len()
+                ),
+                0,
+            ));
+        }
+        if start > end || end > self.shape[dim] {
+            return Err(RuntimeError::new(
+                format!("Invalid slice [{}, {}) for dimension {}", start, end, dim),
+                0,
+            ));
+        }
+
+        let new_dim_size = end - start;
+        let mut new_shape = self.shape.clone();
+        new_shape[dim] = new_dim_size;
+
+        let mut new_data = Vec::new();
+        let stride: usize = self.shape[dim + 1..].iter().product();
+        let block_size: usize = self.shape[dim..].iter().product();
+        let num_blocks: usize = self.shape[..dim].iter().product();
+
+        for block in 0..num_blocks {
+            let block_start = block * block_size;
+            for i in start..end {
+                let slice_start = block_start + i * stride;
+                new_data.extend_from_slice(&self.data[slice_start..slice_start + stride]);
+            }
+        }
+
+        Ok(Tensor {
+            data: new_data,
+            shape: new_shape,
+        })
+    }
+
+    pub fn concat(&self, other: &Tensor, dim: usize) -> RuntimeResult<Self> {
+        if self.shape.len() != other.shape.len() {
+            return Err(RuntimeError::new(
+                "Cannot concat tensors of different ranks",
+                0,
+            ));
+        }
+        for i in 0..self.shape.len() {
+            if i != dim && self.shape[i] != other.shape[i] {
+                return Err(RuntimeError::new(
+                    "Cannot concat tensors with incompatible shapes",
+                    0,
+                ));
+            }
+        }
+
+        let mut new_shape = self.shape.clone();
+        new_shape[dim] = self.shape[dim] + other.shape[dim];
+
+        let mut new_data = Vec::with_capacity(self.data.len() + other.data.len());
+
+        let stride: usize = self.shape[dim + 1..].iter().product();
+        let block_size: usize = self.shape[dim..].iter().product();
+        let num_blocks: usize = self.shape[..dim].iter().product();
+
+        for block in 0..num_blocks {
+            let block_start = block * block_size;
+            new_data
+                .extend_from_slice(&self.data[block_start..block_start + self.shape[dim] * stride]);
+            let other_block_start = block * other.shape[dim..].iter().product::<usize>();
+            new_data.extend_from_slice(
+                &other.data[other_block_start..other_block_start + other.shape[dim] * stride],
+            );
+        }
+
+        Ok(Tensor {
+            data: new_data,
+            shape: new_shape,
+        })
+    }
+
+    pub fn add(&self, other: &Tensor) -> RuntimeResult<Self> {
+        self.binary_op(other, |a, b| a + b)
+    }
+
+    pub fn sub(&self, other: &Tensor) -> RuntimeResult<Self> {
+        self.binary_op(other, |a, b| a - b)
+    }
+
+    pub fn mul(&self, other: &Tensor) -> RuntimeResult<Self> {
+        self.binary_op(other, |a, b| a * b)
+    }
+
+    pub fn div(&self, other: &Tensor) -> RuntimeResult<Self> {
+        self.binary_op(other, |a, b| a / b)
+    }
+
+    fn binary_op<F>(&self, other: &Tensor, op: F) -> RuntimeResult<Self>
+    where
+        F: Fn(f64, f64) -> f64,
+    {
+        if self.shape == other.shape {
+            let data: Vec<f64> = self
+                .data
+                .iter()
+                .zip(other.data.iter())
+                .map(|(a, b)| op(*a, *b))
+                .collect();
+            Ok(Tensor {
+                data,
+                shape: self.shape.clone(),
+            })
+        } else if other.shape.is_empty() {
+            let scalar = other.data[0];
+            let data: Vec<f64> = self.data.iter().map(|a| op(*a, scalar)).collect();
+            Ok(Tensor {
+                data,
+                shape: self.shape.clone(),
+            })
+        } else if self.shape.is_empty() {
+            let scalar = self.data[0];
+            let data: Vec<f64> = other.data.iter().map(|b| op(scalar, *b)).collect();
+            Ok(Tensor {
+                data,
+                shape: other.shape.clone(),
+            })
+        } else {
+            Err(RuntimeError::new(
+                format!(
+                    "Cannot broadcast shapes {:?} and {:?}",
+                    self.shape, other.shape
+                ),
+                0,
+            ))
+        }
+    }
+
+    pub fn matmul(&self, other: &Tensor) -> RuntimeResult<Self> {
+        if self.shape.len() != 2 || other.shape.len() != 2 {
+            return Err(RuntimeError::new("Matmul requires 2D tensors", 0));
+        }
+        let (m, k1) = (self.shape[0], self.shape[1]);
+        let (k2, n) = (other.shape[0], other.shape[1]);
+        if k1 != k2 {
+            return Err(RuntimeError::new(
+                format!("Matmul shape mismatch: ({}, {}) x ({}, {})", m, k1, k2, n),
+                0,
+            ));
+        }
+
+        let k = k1;
+        let mut result = Tensor::zeros(vec![m, n]);
+
+        for i in 0..m {
+            for j in 0..n {
+                let mut sum = 0.0;
+                for p in 0..k {
+                    sum += self.data[i * k + p] * other.data[p * n + j];
+                }
+                result.data[i * n + j] = sum;
+            }
+        }
+
+        Ok(result)
+    }
+
+    pub fn transpose(&self) -> RuntimeResult<Self> {
+        match self.shape.len() {
+            1 => Ok(self.clone()),
+            2 => {
+                let (m, n) = (self.shape[0], self.shape[1]);
+                let mut result = Tensor::zeros(vec![n, m]);
+                for i in 0..m {
+                    for j in 0..n {
+                        result.data[j * m + i] = self.data[i * n + j];
+                    }
+                }
+                Ok(result)
+            }
+            _ => Err(RuntimeError::new(
+                "Transpose only supports 1D and 2D tensors",
+                0,
+            )),
+        }
+    }
+
+    pub fn sum(&self) -> f64 {
+        self.data.iter().sum()
+    }
+
+    pub fn mean(&self) -> f64 {
+        if self.data.is_empty() {
+            return 0.0;
+        }
+        self.sum() / self.data.len() as f64
+    }
+
+    pub fn max(&self) -> Option<f64> {
+        self.data
+            .iter()
+            .copied()
+            .fold(None, |acc, x| Some(acc.map_or(x, |m: f64| m.max(x))))
+    }
+
+    pub fn min(&self) -> Option<f64> {
+        self.data
+            .iter()
+            .copied()
+            .fold(None, |acc, x| Some(acc.map_or(x, |m: f64| m.min(x))))
+    }
+
+    pub fn softmax(&self) -> RuntimeResult<Self> {
+        let max_val = self.max().unwrap_or(0.0);
+        let exp_vals: Vec<f64> = self.data.iter().map(|x| (x - max_val).exp()).collect();
+        let sum: f64 = exp_vals.iter().sum();
+        if sum == 0.0 {
+            return Err(RuntimeError::new("Softmax sum is zero", 0));
+        }
+        Ok(Tensor {
+            data: exp_vals.iter().map(|x| x / sum).collect(),
+            shape: self.shape.clone(),
+        })
+    }
+
+    pub fn relu(&self) -> Self {
+        Tensor {
+            data: self.data.iter().map(|x| x.max(0.0)).collect(),
+            shape: self.shape.clone(),
+        }
+    }
+
+    pub fn gelu(&self) -> Self {
+        Tensor {
+            data: self
+                .data
+                .iter()
+                .map(|x| x * 0.5 * (1.0 + (x / 2.0f64.sqrt()).tanh()))
+                .collect(),
+            shape: self.shape.clone(),
+        }
+    }
+
+    pub fn to_value(&self) -> Value {
+        Value::Tensor(self.clone())
+    }
+
+    pub fn from_value(value: &Value) -> Option<&Self> {
+        match value {
+            Value::Tensor(t) => Some(t),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for Tensor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.shape.is_empty() {
+            return write!(f, "{}", self.data[0]);
+        }
+        write!(f, "Tensor{:?}", self.shape)?;
+        if self.data.len() <= 10 {
+            write!(f, "[")?;
+            for (i, v) in self.data.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{:.4}", v)?;
+            }
+            write!(f, "]")
+        } else {
+            write!(
+                f,
+                "[{:.4}, {:.4}, ..., {:.4}]",
+                self.data[0],
+                self.data[1],
+                self.data[self.data.len() - 1]
+            )
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup() {
+        reset_global_allocation();
+        set_global_limit(DEFAULT_MAX_TENSOR_ELEMENTS);
+    }
+
+    #[test]
+    fn test_tensor_create() {
+        setup();
+        let t = Tensor::zeros(vec![3, 4]);
+        assert_eq!(t.shape, vec![3, 4]);
+        assert_eq!(t.data.len(), 12);
+    }
+
+    #[test]
+    fn test_tensor_get_set() {
+        setup();
+        let mut t = Tensor::zeros(vec![2, 3]);
+        t.set(&[1, 2], 42.0).unwrap();
+        assert_eq!(t.get(&[1, 2]).unwrap(), 42.0);
+    }
+
+    #[test]
+    fn test_tensor_reshape() {
+        setup();
+        let t = Tensor::from_flat(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        let reshaped = t.reshape(vec![2, 3]).unwrap();
+        assert_eq!(reshaped.shape, vec![2, 3]);
+    }
+
+    #[test]
+    fn test_tensor_add() {
+        setup();
+        let a = Tensor::from_flat(vec![1.0, 2.0, 3.0]);
+        let b = Tensor::from_flat(vec![4.0, 5.0, 6.0]);
+        let c = a.add(&b).unwrap();
+        assert_eq!(c.data, vec![5.0, 7.0, 9.0]);
+    }
+
+    #[test]
+    fn test_tensor_matmul() {
+        setup();
+        let a = Tensor::from_data(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        let b = Tensor::from_data(vec![3, 2], vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0]).unwrap();
+        let c = a.matmul(&b).unwrap();
+        assert_eq!(c.shape, vec![2, 2]);
+        assert_eq!(c.data[0], 58.0);
+        assert_eq!(c.data[1], 64.0);
+    }
+
+    #[test]
+    fn test_tensor_softmax() {
+        setup();
+        let t = Tensor::from_flat(vec![1.0, 2.0, 3.0]);
+        let s = t.softmax().unwrap();
+        let sum: f64 = s.data.iter().sum();
+        assert!((sum - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_tensor_size_limit_rejected() {
+        setup();
+        let limits = TensorLimits::new(100);
+
+        let result = Tensor::new_with_limits(vec![10, 10], &limits);
+        assert!(result.is_ok());
+
+        let result = Tensor::new_with_limits(vec![10, 11], &limits);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tensor_rank_limit_rejected() {
+        setup();
+        let limits = TensorLimits {
+            max_elements: 1000,
+            max_rank: 3,
+            max_dimension: 100,
+        };
+
+        let result = Tensor::new_with_limits(vec![2, 2, 2], &limits);
+        assert!(result.is_ok());
+
+        let result = Tensor::new_with_limits(vec![2, 2, 2, 2, 2], &limits);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tensor_dimension_limit_rejected() {
+        setup();
+        let limits = TensorLimits {
+            max_elements: 1_000_000,
+            max_rank: 4,
+            max_dimension: 100,
+        };
+
+        let result = Tensor::new_with_limits(vec![100, 100], &limits);
+        assert!(result.is_ok());
+
+        let result = Tensor::new_with_limits(vec![101, 10], &limits);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_global_allocation_limit() {
+        setup();
+        set_global_limit(100);
+
+        let t1 = Tensor::zeros_with_limits(vec![10], &TensorLimits::default());
+        assert!(t1.is_ok());
+        assert_eq!(get_global_allocation(), 10);
+
+        let t2 = Tensor::zeros_with_limits(vec![20], &TensorLimits::default());
+        assert!(t2.is_ok());
+        assert_eq!(get_global_allocation(), 30);
+
+        let t3 = Tensor::zeros_with_limits(vec![30], &TensorLimits::default());
+        assert!(t3.is_ok());
+        assert_eq!(get_global_allocation(), 60);
+
+        let t4 = Tensor::zeros_with_limits(vec![50], &TensorLimits::default());
+        assert!(t4.is_err());
+    }
+
+    #[test]
+    fn test_allocation_tracking() {
+        setup();
+        assert_eq!(get_global_allocation(), 0);
+
+        let _t = Tensor::zeros(vec![5, 5]);
+        assert_eq!(get_global_allocation(), 25);
+
+        let _t2 = Tensor::from_flat(vec![1.0, 2.0, 3.0]);
+        assert_eq!(get_global_allocation(), 28);
+
+        let _t3 = Tensor::scalar(42.0);
+        assert_eq!(get_global_allocation(), 29);
+    }
+}

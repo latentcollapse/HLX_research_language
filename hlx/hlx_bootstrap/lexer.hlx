@@ -14,9 +14,23 @@ module hlx_lexer {
     // 10=let, 11=fn, 12=return, 13=if, 14=else, 15=loop, 16=break, 17=continue, 18=program
     // 20=(, 21=), 22={, 23=}, 24=[, 25=], 26=;, 27=,, 28=:, 60=@
     // 30=+, 31=-, 32=*, 33=/, 34=%, 35==, 36===, 37=!=, 38=<, 39=<=, 40=>, 41=>=
-    // 42=&&, 43=||, 44=!, 45=#, 46=.
+    // 42=&&, 43=||, 44=!, 45=&, 46=|, 47=^
     // 49=<<, 50=>>, 51=+=, 52=-=, 53=*=, 54=/=, 55=%=, 56=!
-    // 57=module, 58=import, 59=export, 61=collapse, 62=resolve
+    // 57=module, 58=import, 59=export, 61=collapse, 62=resolve, 63=const, 64=mut
+    // ============================================================================
+    // PHASE 1: RECURSIVE INTELLIGENCE TOKENS (70-89)
+    // ============================================================================
+    // 70=recursive, 71=agent, 72=latent, 73=cycle, 74=halt, 75=dissolvable
+    // 76=inherit, 77=on_dissolve, 78=lifetime, 79=generation
+    // 80=scale, 81=cluster, 82=sync, 83=barrier, 84=consensus, 85=epoch
+    // 86=agents, 87=aggregate, 88=channel, 89=broadcast
+    // ============================================================================
+    // PHASE 1: GOVERNANCE TOKENS (90-109)
+    // ============================================================================
+    // 90=govern, 91=conscience, 92=effect, 93=trust, 94=modify, 95=gate
+    // 96=proof, 97=budget, 98=cooldown, 99=approve
+    // 100=path_safety, 101=no_exfiltrate, 102=no_harm, 103=no_bypass, 104=rate_limit
+    // 105=takes, 106=gives, 107=action, 108=when, 109=or
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CHARACTER CLASSIFICATION
@@ -76,6 +90,55 @@ module hlx_lexer {
         if word == "export" { return 59; }
         if word == "collapse" { return 61; }
         if word == "resolve" { return 62; }
+        if word == "const" { return 63; }
+        if word == "mut" { return 64; }
+        // ============================================================================
+        // PHASE 1: RECURSIVE INTELLIGENCE KEYWORDS
+        // ============================================================================
+        if word == "recursive" { return 70; }
+        if word == "agent" { return 71; }
+        if word == "latent" { return 72; }
+        if word == "cycle" { return 73; }
+        if word == "halt" { return 74; }
+        if word == "dissolvable" { return 75; }
+        if word == "inherit" { return 76; }
+        if word == "on_dissolve" { return 77; }
+        if word == "lifetime" { return 78; }
+        if word == "generation" { return 79; }
+        // SCALE keywords
+        if word == "scale" { return 80; }
+        if word == "cluster" { return 81; }
+        if word == "sync" { return 82; }
+        if word == "barrier" { return 83; }
+        if word == "consensus" { return 84; }
+        if word == "epoch" { return 85; }
+        if word == "agents" { return 86; }
+        if word == "aggregate" { return 87; }
+        if word == "channel" { return 88; }
+        if word == "broadcast" { return 89; }
+        // Governance keywords
+        if word == "govern" { return 90; }
+        if word == "conscience" { return 91; }
+        if word == "effect" { return 92; }
+        if word == "trust" { return 93; }
+        if word == "modify" { return 94; }
+        if word == "gate" { return 95; }
+        if word == "proof" { return 96; }
+        if word == "budget" { return 97; }
+        if word == "cooldown" { return 98; }
+        if word == "approve" { return 99; }
+        // Built-in predicates
+        if word == "path_safety" { return 100; }
+        if word == "no_exfiltrate" { return 101; }
+        if word == "no_harm" { return 102; }
+        if word == "no_bypass" { return 103; }
+        if word == "rate_limit" { return 104; }
+        // Intent keywords
+        if word == "takes" { return 105; }
+        if word == "gives" { return 106; }
+        if word == "action" { return 107; }
+        if word == "when" { return 108; }
+        if word == "or" { return 109; }
         return 1;  // TOK_IDENT
     }
 
