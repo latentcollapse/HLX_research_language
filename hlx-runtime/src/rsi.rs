@@ -214,7 +214,7 @@ impl AgentMemory {
         &mut self,
         modification: &ModificationType,
     ) -> RuntimeResult<Vec<u8>> {
-        let rollback = self.serialize_snapshot();
+        let rollback = self.serialize_snapshot()?;
 
         match modification {
             ModificationType::ParameterUpdate {
@@ -253,7 +253,7 @@ impl AgentMemory {
         Ok(rollback)
     }
 
-    fn serialize_snapshot(&self) -> Vec<u8> {
+    fn serialize_snapshot(&self) -> RuntimeResult<Vec<u8>> {
         let snapshot = AgentMemorySnapshot {
             behaviors: self.behaviors.clone(),
             parameters: self.parameters.clone(),
@@ -265,7 +265,8 @@ impl AgentMemory {
             cycle_config: self.cycle_config,
             hash: self.compute_hash(),
         };
-        bincode::serialize(&snapshot).expect("Serialization failed")
+        bincode::serialize(&snapshot)
+            .map_err(|e| RuntimeError::new(format!("RSI serialization failed: {}", e), 0))
     }
 
     pub fn rollback(&mut self, data: &[u8]) -> Result<(), String> {
@@ -676,7 +677,7 @@ mod tests {
         memory.behaviors.push((vec![1.0, 2.0], vec![3.0]));
         memory.cycle_config = (2, 4);
 
-        let snapshot = memory.serialize_snapshot();
+        let snapshot = memory.serialize_snapshot().unwrap();
 
         memory.parameters.insert("test_param".to_string(), 99.0);
         memory.behaviors.push((vec![5.0, 6.0], vec![7.0]));
@@ -748,7 +749,7 @@ mod tests {
         memory.behaviors.push((vec![1.0, 2.0, 3.0], vec![4.0]));
         memory.cycle_config = (7, 14);
 
-        let serialized = memory.serialize_snapshot();
+        let serialized = memory.serialize_snapshot().unwrap();
         let mut restored = AgentMemory::new();
         restored.rollback(&serialized).unwrap();
 

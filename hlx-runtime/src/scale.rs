@@ -1,5 +1,5 @@
 use crate::{RuntimeError, RuntimeResult, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,7 +15,7 @@ pub enum BarrierState {
 pub struct Barrier {
     pub id: u64,
     pub expected: usize,
-    pub arrived: Vec<u64>,
+    pub arrived: HashSet<u64>,
     pub state: BarrierState,
     pub created_at: Option<Instant>,
     pub timeout: Option<Duration>,
@@ -75,7 +75,7 @@ impl Barrier {
         Barrier {
             id,
             expected,
-            arrived: Vec::new(),
+            arrived: HashSet::new(),
             state: BarrierState::Open,
             created_at: None,
             timeout: None,
@@ -86,7 +86,7 @@ impl Barrier {
         Barrier {
             id,
             expected,
-            arrived: Vec::new(),
+            arrived: HashSet::new(),
             state: BarrierState::Open,
             created_at: Some(Instant::now()),
             timeout: Some(timeout),
@@ -120,10 +120,13 @@ impl Barrier {
         }
 
         if self.arrived.contains(&agent_id) {
-            return Ok(self.state == BarrierState::Released);
+            return Err(BarrierError::AlreadyArrived {
+                agent_id,
+                barrier_id: self.id,
+            });
         }
 
-        self.arrived.push(agent_id);
+        self.arrived.insert(agent_id);
         if self.arrived.len() >= self.expected {
             self.state = BarrierState::Released;
             Ok(true)
@@ -202,6 +205,16 @@ impl Consensus {
             return Err(RuntimeError::new("Consensus not complete", 0));
         }
 
+        let total = self.votes.len();
+        if total == 0 {
+            return Ok(ConsensusResult {
+                winning_value: "abstain".to_string(),
+                agreement: 0.0,
+                agreed: false,
+                total_votes: 0,
+            });
+        }
+
         let vote_counts: HashMap<String, usize> = self
             .votes
             .values()
@@ -216,7 +229,6 @@ impl Consensus {
                 acc
             });
 
-        let total = self.votes.len();
         let (winning_value, winning_count) = vote_counts
             .iter()
             .max_by_key(|(_, &count)| count)

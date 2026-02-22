@@ -18,15 +18,22 @@ pub fn builtin_substring(args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("substring requires String", 0))?;
-    let start = args[1]
+    let start_i = args[1]
         .as_i64()
-        .ok_or_else(|| RuntimeError::new("substring start must be i64", 0))?
-        as usize;
-    let len = args[2]
+        .ok_or_else(|| RuntimeError::new("substring start must be i64", 0))?;
+    let len_i = args[2]
         .as_i64()
-        .ok_or_else(|| RuntimeError::new("substring len must be i64", 0))? as usize;
+        .ok_or_else(|| RuntimeError::new("substring len must be i64", 0))?;
 
-    let end = (start + len).min(s.len());
+    if start_i < 0 || len_i < 0 {
+        return Err(RuntimeError::new(
+            "substring: negative index not allowed",
+            0,
+        ));
+    }
+
+    let start = (start_i as usize).min(s.len());
+    let end = (start + len_i as usize).min(s.len());
     Ok(Value::String(s[start..end].to_string()))
 }
 
@@ -47,7 +54,11 @@ pub fn builtin_strcmp(args: &[Value]) -> RuntimeResult<Value> {
     let b = args[1]
         .as_string()
         .ok_or_else(|| RuntimeError::new("strcmp requires String", 0))?;
-    Ok(Value::I64(a.cmp(b) as i64 - 1))
+    Ok(Value::I64(match a.cmp(b) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
+    }))
 }
 
 pub fn builtin_ord(args: &[Value]) -> RuntimeResult<Value> {
@@ -61,10 +72,16 @@ pub fn builtin_ord(args: &[Value]) -> RuntimeResult<Value> {
 }
 
 pub fn builtin_char(args: &[Value]) -> RuntimeResult<Value> {
-    let code = args[0]
+    let code_i = args[0]
         .as_i64()
-        .ok_or_else(|| RuntimeError::new("char requires i64", 0))? as u8;
-    Ok(Value::String((code as char).to_string()))
+        .ok_or_else(|| RuntimeError::new("char requires i64", 0))?;
+    if code_i < 0 || code_i > 127 {
+        return Err(RuntimeError::new(
+            format!("char: code {} out of ASCII range (0-127)", code_i),
+            0,
+        ));
+    }
+    Ok(Value::String((code_i as u8 as char).to_string()))
 }
 
 pub fn builtin_push(args: &[Value]) -> RuntimeResult<Value> {

@@ -13,6 +13,25 @@ const DEFAULT_SPAWN_WINDOW_SECS: u64 = 60;
 const DEFAULT_MAX_TOTAL_AGENTS: usize = 1000;
 
 #[derive(Debug, Clone)]
+pub struct RuntimeConfig {
+    pub spawn_rate_limit: usize,
+    pub spawn_window_secs: u64,
+    pub max_total_agents: usize,
+    pub max_steps: usize,
+}
+
+impl Default for RuntimeConfig {
+    fn default() -> Self {
+        RuntimeConfig {
+            spawn_rate_limit: DEFAULT_SPAWN_RATE_LIMIT,
+            spawn_window_secs: DEFAULT_SPAWN_WINDOW_SECS,
+            max_total_agents: DEFAULT_MAX_TOTAL_AGENTS,
+            max_steps: 1_000_000,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 struct SpawnRateLimit {
     max_spawns: usize,
     window: Duration,
@@ -100,6 +119,10 @@ pub struct Vm {
 
 impl Vm {
     pub fn new() -> Self {
+        Self::with_config(RuntimeConfig::default())
+    }
+
+    pub fn with_config(config: RuntimeConfig) -> Self {
         Vm {
             registers: vec![Value::Nil; 256],
             call_stack: Vec::new(),
@@ -116,13 +139,13 @@ impl Vm {
             globals: HashMap::new(),
             latent_states: HashMap::new(),
             halted: false,
-            max_steps: 1_000_000,
+            max_steps: config.max_steps,
             steps: 0,
             spawn_rate_limit: SpawnRateLimit::new(
-                DEFAULT_SPAWN_RATE_LIMIT,
-                DEFAULT_SPAWN_WINDOW_SECS,
+                config.spawn_rate_limit,
+                config.spawn_window_secs,
             ),
-            max_total_agents: DEFAULT_MAX_TOTAL_AGENTS,
+            max_total_agents: config.max_total_agents,
         }
     }
 
@@ -555,31 +578,39 @@ impl Vm {
                 Opcode::LatentGet => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let name_idx = bytecode.read_u32(&mut pc)? as usize;
-                    if let Some(name) = bytecode.strings.get(name_idx) {
-                        let val = if let Some(agent_id) = self.current_agent {
-                            self.agent_pool
-                                .get(agent_id)
-                                .and_then(|a| a.get_latent(name).cloned())
-                                .unwrap_or(Value::Nil)
-                        } else {
-                            self.latent_states.get(name).cloned().unwrap_or(Value::Nil)
-                        };
-                        self.set_register(dst, val);
-                    }
+                    let name = bytecode.strings.get(name_idx).ok_or_else(|| {
+                        RuntimeError::new(
+                            format!("LatentGet: invalid string index {}", name_idx),
+                            pc,
+                        )
+                    })?;
+                    let val = if let Some(agent_id) = self.current_agent {
+                        self.agent_pool
+                            .get(agent_id)
+                            .and_then(|a| a.get_latent(name).cloned())
+                            .unwrap_or(Value::Nil)
+                    } else {
+                        self.latent_states.get(name).cloned().unwrap_or(Value::Nil)
+                    };
+                    self.set_register(dst, val);
                 }
 
                 Opcode::LatentSet => {
                     let name_idx = bytecode.read_u32(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    if let Some(name) = bytecode.strings.get(name_idx) {
-                        let val = self.get_register_cloned(src);
-                        if let Some(agent_id) = self.current_agent {
-                            if let Some(agent) = self.agent_pool.get_mut(agent_id) {
-                                agent.set_latent(name, val);
-                            }
-                        } else {
-                            self.latent_states.insert(name.clone(), val);
+                    let name = bytecode.strings.get(name_idx).ok_or_else(|| {
+                        RuntimeError::new(
+                            format!("LatentSet: invalid string index {}", name_idx),
+                            pc,
+                        )
+                    })?;
+                    let val = self.get_register_cloned(src);
+                    if let Some(agent_id) = self.current_agent {
+                        if let Some(agent) = self.agent_pool.get_mut(agent_id) {
+                            agent.set_latent(name, val);
                         }
+                    } else {
+                        self.latent_states.insert(name.clone(), val);
                     }
                 }
 
@@ -618,6 +649,9 @@ impl Vm {
                 }
 
                 Opcode::AgentDissolve => {
+                    if let Some(agent_id) = self.current_agent {
+                        self.agent_memories.remove(&agent_id);
+                    }
                     self.halted = true;
                     return Ok(self.get_register_cloned(0));
                 }
@@ -1197,8 +1231,17 @@ impl Vm {
                         if let Some(&(start_pc, param_count)) = self.functions.get(func_name) {
                             let saved_regs: Vec<Value> = self.registers[..20].to_vec();
 
-                            let arg_base = 150;
-                            for i in 0..arg_count.min(param_count) {
+                            let arg_base = 150usize;
+                            let max_args = arg_count.min(param_count);
+                            if arg_base + max_args > self.registers.len() {
+                                return Err(RuntimeError::new(
+                                    format!(
+                                        "Function call arg_base + arg_count exceeds register limit"
+                                    ),
+                                    pc,
+                                ));
+                            }
+                            for i in 0..max_args {
                                 self.registers[i + 1] = self.registers[arg_base + i].clone();
                             }
 
@@ -1210,7 +1253,15 @@ impl Vm {
                             });
                             pc = start_pc;
                         } else {
-                            let arg_base = 150;
+                            let arg_base = 150usize;
+                            if arg_base + arg_count > self.registers.len() {
+                                return Err(RuntimeError::new(
+                                    format!(
+                                        "Builtin call arg_base + arg_count exceeds register limit"
+                                    ),
+                                    pc,
+                                ));
+                            }
                             let args: Vec<Value> = (0..arg_count)
                                 .map(|i| self.registers[arg_base + i].clone())
                                 .collect();

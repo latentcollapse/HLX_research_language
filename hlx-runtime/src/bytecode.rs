@@ -259,7 +259,9 @@ impl Bytecode {
         if *pc + 2 > self.code.len() {
             return Err(crate::RuntimeError::new("Unexpected end of bytecode", *pc));
         }
-        let bytes: [u8; 2] = self.code[*pc..*pc + 2].try_into().unwrap();
+        let bytes: [u8; 2] = self.code[*pc..*pc + 2]
+            .try_into()
+            .map_err(|_| crate::RuntimeError::new("Bytecode read: invalid u16 byte slice", *pc))?;
         *pc += 2;
         Ok(u16::from_le_bytes(bytes))
     }
@@ -268,7 +270,9 @@ impl Bytecode {
         if *pc + 4 > self.code.len() {
             return Err(crate::RuntimeError::new("Unexpected end of bytecode", *pc));
         }
-        let bytes: [u8; 4] = self.code[*pc..*pc + 4].try_into().unwrap();
+        let bytes: [u8; 4] = self.code[*pc..*pc + 4]
+            .try_into()
+            .map_err(|_| crate::RuntimeError::new("Bytecode read: invalid u32 byte slice", *pc))?;
         *pc += 4;
         Ok(u32::from_le_bytes(bytes))
     }
@@ -277,7 +281,9 @@ impl Bytecode {
         if *pc + 8 > self.code.len() {
             return Err(crate::RuntimeError::new("Unexpected end of bytecode", *pc));
         }
-        let bytes: [u8; 8] = self.code[*pc..*pc + 8].try_into().unwrap();
+        let bytes: [u8; 8] = self.code[*pc..*pc + 8]
+            .try_into()
+            .map_err(|_| crate::RuntimeError::new("Bytecode read: invalid i64 byte slice", *pc))?;
         *pc += 8;
         Ok(i64::from_le_bytes(bytes))
     }
@@ -473,6 +479,72 @@ impl Bytecode {
         data
     }
 
+    fn deserialize_single_value(data: &[u8]) -> Result<(crate::Value, usize), BytecodeError> {
+        if data.is_empty() {
+            return Err(BytecodeError::TruncatedData);
+        }
+        let type_tag = data[0];
+        let mut offset = 1;
+
+        let val = match type_tag {
+            0 => {
+                if offset + 8 > data.len() {
+                    return Err(BytecodeError::TruncatedData);
+                }
+                let bytes: [u8; 8] = data[offset..offset + 8].try_into().map_err(|_| {
+                    BytecodeError::DeserializationFailed("Invalid i64 bytes".into())
+                })?;
+                offset += 8;
+                crate::Value::I64(i64::from_le_bytes(bytes))
+            }
+            1 => {
+                if offset + 8 > data.len() {
+                    return Err(BytecodeError::TruncatedData);
+                }
+                let bytes: [u8; 8] = data[offset..offset + 8].try_into().map_err(|_| {
+                    BytecodeError::DeserializationFailed("Invalid f64 bytes".into())
+                })?;
+                offset += 8;
+                crate::Value::F64(f64::from_le_bytes(bytes))
+            }
+            2 => {
+                if offset >= data.len() {
+                    return Err(BytecodeError::TruncatedData);
+                }
+                let b = data[offset] != 0;
+                offset += 1;
+                crate::Value::Bool(b)
+            }
+            3 => {
+                if offset + 4 > data.len() {
+                    return Err(BytecodeError::TruncatedData);
+                }
+                let len_bytes: [u8; 4] = data[offset..offset + 4].try_into().map_err(|_| {
+                    BytecodeError::DeserializationFailed("Invalid string length".into())
+                })?;
+                let len = u32::from_le_bytes(len_bytes) as usize;
+                offset += 4;
+                if offset + len > data.len() {
+                    return Err(BytecodeError::TruncatedData);
+                }
+                let s = String::from_utf8(data[offset..offset + len].to_vec())
+                    .map_err(|e| BytecodeError::DeserializationFailed(e.to_string()))?;
+                offset += len;
+                crate::Value::String(s)
+            }
+            4 => crate::Value::Nil,
+            5 => crate::Value::Void,
+            _ => {
+                return Err(BytecodeError::DeserializationFailed(format!(
+                    "Unknown value type tag: {}",
+                    type_tag
+                )))
+            }
+        };
+
+        Ok((val, offset))
+    }
+
     fn deserialize_constants(
         data: &[u8],
         count: usize,
@@ -492,7 +564,10 @@ impl Bytecode {
                     if offset + 8 > data.len() {
                         return Err(BytecodeError::TruncatedData);
                     }
-                    let n = i64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
+                    let bytes: [u8; 8] = data[offset..offset + 8].try_into().map_err(|_| {
+                        BytecodeError::DeserializationFailed("Invalid i64 bytes".into())
+                    })?;
+                    let n = i64::from_le_bytes(bytes);
                     constants.push(crate::Value::I64(n));
                     offset += 8;
                 }
@@ -500,7 +575,10 @@ impl Bytecode {
                     if offset + 8 > data.len() {
                         return Err(BytecodeError::TruncatedData);
                     }
-                    let n = f64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
+                    let bytes: [u8; 8] = data[offset..offset + 8].try_into().map_err(|_| {
+                        BytecodeError::DeserializationFailed("Invalid f64 bytes".into())
+                    })?;
+                    let n = f64::from_le_bytes(bytes);
                     constants.push(crate::Value::F64(n));
                     offset += 8;
                 }
@@ -515,8 +593,10 @@ impl Bytecode {
                     if offset + 4 > data.len() {
                         return Err(BytecodeError::TruncatedData);
                     }
-                    let len =
-                        u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap()) as usize;
+                    let bytes: [u8; 4] = data[offset..offset + 4].try_into().map_err(|_| {
+                        BytecodeError::DeserializationFailed("Invalid string length bytes".into())
+                    })?;
+                    let len = u32::from_le_bytes(bytes) as usize;
                     offset += 4;
                     if offset + len > data.len() {
                         return Err(BytecodeError::TruncatedData);
@@ -528,10 +608,127 @@ impl Bytecode {
                 }
                 4 => constants.push(crate::Value::Nil),
                 5 => constants.push(crate::Value::Void),
-                6 | 7 | 8 | 9 => {
-                    return Err(BytecodeError::DeserializationFailed(
-                        "Complex constants not yet supported in deserialize".to_string(),
-                    ));
+                6 => {
+                    if offset + 4 > data.len() {
+                        return Err(BytecodeError::TruncatedData);
+                    }
+                    let arr_bytes: [u8; 4] = data[offset..offset + 4].try_into().map_err(|_| {
+                        BytecodeError::DeserializationFailed("Invalid array length bytes".into())
+                    })?;
+                    let arr_len = u32::from_le_bytes(arr_bytes) as usize;
+                    offset += 4;
+                    let mut arr = Vec::with_capacity(arr_len);
+                    for _ in 0..arr_len {
+                        let (val, consumed) = Self::deserialize_single_value(&data[offset..])?;
+                        arr.push(val);
+                        offset += consumed;
+                    }
+                    constants.push(crate::Value::Array(arr));
+                }
+                7 => {
+                    if offset + 4 > data.len() {
+                        return Err(BytecodeError::TruncatedData);
+                    }
+                    let map_bytes: [u8; 4] = data[offset..offset + 4].try_into().map_err(|_| {
+                        BytecodeError::DeserializationFailed("Invalid map length bytes".into())
+                    })?;
+                    let map_len = u32::from_le_bytes(map_bytes) as usize;
+                    offset += 4;
+                    let mut map = std::collections::BTreeMap::new();
+                    for _ in 0..map_len {
+                        if offset + 4 > data.len() {
+                            return Err(BytecodeError::TruncatedData);
+                        }
+                        let klen_bytes: [u8; 4] =
+                            data[offset..offset + 4].try_into().map_err(|_| {
+                                BytecodeError::DeserializationFailed(
+                                    "Invalid key length bytes".into(),
+                                )
+                            })?;
+                        let klen = u32::from_le_bytes(klen_bytes) as usize;
+                        offset += 4;
+                        if offset + klen > data.len() {
+                            return Err(BytecodeError::TruncatedData);
+                        }
+                        let key = String::from_utf8(data[offset..offset + klen].to_vec())
+                            .map_err(|e| BytecodeError::DeserializationFailed(e.to_string()))?;
+                        offset += klen;
+                        let (val, consumed) = Self::deserialize_single_value(&data[offset..])?;
+                        map.insert(key, val);
+                        offset += consumed;
+                    }
+                    constants.push(crate::Value::Map(map));
+                }
+                8 => {
+                    if offset + 4 > data.len() {
+                        return Err(BytecodeError::TruncatedData);
+                    }
+                    let blen_bytes: [u8; 4] =
+                        data[offset..offset + 4].try_into().map_err(|_| {
+                            BytecodeError::DeserializationFailed("Invalid bytes length".into())
+                        })?;
+                    let blen = u32::from_le_bytes(blen_bytes) as usize;
+                    offset += 4;
+                    if offset + blen > data.len() {
+                        return Err(BytecodeError::TruncatedData);
+                    }
+                    constants.push(crate::Value::Bytes(data[offset..offset + blen].to_vec()));
+                    offset += blen;
+                }
+                9 => {
+                    if offset + 4 > data.len() {
+                        return Err(BytecodeError::TruncatedData);
+                    }
+                    let shape_len_bytes: [u8; 4] =
+                        data[offset..offset + 4].try_into().map_err(|_| {
+                            BytecodeError::DeserializationFailed(
+                                "Invalid tensor shape length".into(),
+                            )
+                        })?;
+                    let shape_len = u32::from_le_bytes(shape_len_bytes) as usize;
+                    offset += 4;
+                    let mut shape = Vec::with_capacity(shape_len);
+                    for _ in 0..shape_len {
+                        if offset + 8 > data.len() {
+                            return Err(BytecodeError::TruncatedData);
+                        }
+                        let dim_bytes: [u8; 8] =
+                            data[offset..offset + 8].try_into().map_err(|_| {
+                                BytecodeError::DeserializationFailed(
+                                    "Invalid tensor dimension".into(),
+                                )
+                            })?;
+                        shape.push(u64::from_le_bytes(dim_bytes) as usize);
+                        offset += 8;
+                    }
+                    if offset + 4 > data.len() {
+                        return Err(BytecodeError::TruncatedData);
+                    }
+                    let data_len_bytes: [u8; 4] =
+                        data[offset..offset + 4].try_into().map_err(|_| {
+                            BytecodeError::DeserializationFailed(
+                                "Invalid tensor data length".into(),
+                            )
+                        })?;
+                    let data_len = u32::from_le_bytes(data_len_bytes) as usize;
+                    offset += 4;
+                    let mut tensor_data = Vec::with_capacity(data_len);
+                    for _ in 0..data_len {
+                        if offset + 8 > data.len() {
+                            return Err(BytecodeError::TruncatedData);
+                        }
+                        let f_bytes: [u8; 8] =
+                            data[offset..offset + 8].try_into().map_err(|_| {
+                                BytecodeError::DeserializationFailed(
+                                    "Invalid tensor element".into(),
+                                )
+                            })?;
+                        tensor_data.push(f64::from_le_bytes(f_bytes));
+                        offset += 8;
+                    }
+                    let tensor = crate::Tensor::from_data(shape, tensor_data)
+                        .map_err(|e| BytecodeError::DeserializationFailed(e.message))?;
+                    constants.push(crate::Value::Tensor(tensor));
                 }
                 _ => {
                     return Err(BytecodeError::DeserializationFailed(format!(
@@ -566,7 +763,10 @@ impl Bytecode {
             if offset + 4 > data.len() {
                 return Err(BytecodeError::TruncatedData);
             }
-            let len = u32::from_le_bytes(data[offset..offset + 4].try_into().unwrap()) as usize;
+            let bytes: [u8; 4] = data[offset..offset + 4].try_into().map_err(|_| {
+                BytecodeError::DeserializationFailed("Invalid string length bytes".into())
+            })?;
+            let len = u32::from_le_bytes(bytes) as usize;
             offset += 4;
             if offset + len > data.len() {
                 return Err(BytecodeError::TruncatedData);

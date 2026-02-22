@@ -71,6 +71,23 @@ impl Compiler {
         self.bytecode.code.len()
     }
 
+    fn patch_jump(&mut self, jump_pos: usize, target_pc: usize) -> Result<(), CompileError> {
+        if jump_pos + 4 > self.bytecode.code.len() {
+            return Err(CompileError {
+                message: format!(
+                    "Jump patch position {} out of bounds (code length {})",
+                    jump_pos,
+                    self.bytecode.code.len()
+                ),
+                line: 0,
+            });
+        }
+        let mut code = self.bytecode.code.clone();
+        code[jump_pos..jump_pos + 4].copy_from_slice(&(target_pc as u32).to_le_bytes());
+        self.bytecode.code = code;
+        Ok(())
+    }
+
     fn tokenize(&self, source: &str) -> Vec<Token> {
         let mut tokens = Vec::new();
         let mut pos = 0;
@@ -324,9 +341,7 @@ impl Compiler {
                     self.variables = old_vars;
 
                     let end_pc = self.current_pc();
-                    let mut code = self.bytecode.code.clone();
-                    code[skip_jump..skip_jump + 4].copy_from_slice(&(end_pc as u32).to_le_bytes());
-                    self.bytecode.code = code;
+                    self.patch_jump(skip_jump, end_pc)?;
                 } else {
                     start_pc = self.current_pc() as u32;
                     self.functions.insert(name.clone(), (start_pc, params));
@@ -480,29 +495,63 @@ impl Compiler {
         Ok(pos)
     }
 
+    fn op_precedence(op: &Token) -> u8 {
+        match op {
+            Token::Or => 1,
+            Token::And => 2,
+            Token::EqEq | Token::Ne => 3,
+            Token::Lt | Token::Le | Token::Gt | Token::Ge => 4,
+            Token::Plus | Token::Minus => 5,
+            Token::Star | Token::Slash | Token::Percent => 6,
+            _ => 0,
+        }
+    }
+
+    fn is_binary_op(token: &Token) -> bool {
+        matches!(
+            token,
+            Token::Plus
+                | Token::Minus
+                | Token::Star
+                | Token::Slash
+                | Token::Percent
+                | Token::EqEq
+                | Token::Ne
+                | Token::Lt
+                | Token::Le
+                | Token::Gt
+                | Token::Ge
+                | Token::And
+                | Token::Or
+        )
+    }
+
     fn compile_expr(
         &mut self,
         tokens: &[Token],
         mut pos: usize,
         dst: u8,
     ) -> Result<usize, CompileError> {
+        self.compile_expr_with_precedence(tokens, pos, dst, 0)
+    }
+
+    fn compile_expr_with_precedence(
+        &mut self,
+        tokens: &[Token],
+        mut pos: usize,
+        dst: u8,
+        min_prec: u8,
+    ) -> Result<usize, CompileError> {
         pos = self.compile_expr_primary(tokens, pos, dst)?;
 
-        while let Token::Plus
-        | Token::Minus
-        | Token::Star
-        | Token::Slash
-        | Token::Percent
-        | Token::EqEq
-        | Token::Ne
-        | Token::Lt
-        | Token::Le
-        | Token::Gt
-        | Token::Ge
-        | Token::And
-        | Token::Or = &tokens[pos]
-        {
+        while pos < tokens.len() && Self::is_binary_op(&tokens[pos]) {
             let op = tokens[pos].clone();
+            let prec = Self::op_precedence(&op);
+
+            if prec < min_prec {
+                break;
+            }
+
             pos += 1;
 
             let left_reg = dst;
@@ -516,7 +565,8 @@ impl Compiler {
                 });
             }
             self.next_tmp_reg += 1;
-            pos = self.compile_expr_primary(tokens, pos, right_reg)?;
+
+            pos = self.compile_expr_with_precedence(tokens, pos, right_reg, prec + 1)?;
 
             match op {
                 Token::Plus => {
@@ -656,18 +706,15 @@ impl Compiler {
                     }
                     pos += 1;
 
-                    if let Some(&(_start, _params)) = self.functions.get(&func_name) {
-                        self.emit(Opcode::Call);
-                        let name_idx = self.get_or_add_string(&func_name);
-                        self.emit_u32(name_idx);
-                        self.emit_u8(arg_count);
-                        self.emit_u8(dst);
-                    } else {
-                        self.emit(Opcode::Call);
-                        let name_idx = self.get_or_add_string(&func_name);
-                        self.emit_u32(name_idx);
-                        self.emit_u8(arg_count);
-                        self.emit_u8(dst);
+                    self.emit(Opcode::Call);
+                    let name_idx = self.get_or_add_string(&func_name);
+                    self.emit_u32(name_idx);
+                    self.emit_u8(arg_count);
+                    self.emit_u8(dst);
+
+                    if !self.functions.contains_key(&func_name) {
+                        let call_site = self.current_pc() - 7;
+                        self.patch_points.push((call_site, func_name));
                     }
                 } else {
                     if let Some(&src_reg) = self.variables.get(name) {
@@ -719,9 +766,7 @@ impl Compiler {
         self.emit_u32(0);
 
         let else_start = self.current_pc();
-        let mut code = self.bytecode.code.clone();
-        code[else_jump..else_jump + 4].copy_from_slice(&(else_start as u32).to_le_bytes());
-        self.bytecode.code = code;
+        self.patch_jump(else_jump, else_start)?;
 
         if matches!(tokens[pos], Token::Else) {
             pos += 1;
@@ -729,9 +774,7 @@ impl Compiler {
         }
 
         let end_pc = self.current_pc();
-        let mut code = self.bytecode.code.clone();
-        code[end_jump..end_jump + 4].copy_from_slice(&(end_pc as u32).to_le_bytes());
-        self.bytecode.code = code;
+        self.patch_jump(end_jump, end_pc)?;
 
         Ok(pos)
     }
@@ -752,9 +795,7 @@ impl Compiler {
         self.emit_u32(loop_start as u32);
 
         let exit_pc = self.current_pc();
-        let mut code = self.bytecode.code.clone();
-        code[exit_jump..exit_jump + 4].copy_from_slice(&(exit_pc as u32).to_le_bytes());
-        self.bytecode.code = code;
+        self.patch_jump(exit_jump, exit_pc)?;
 
         Ok(pos)
     }
@@ -864,6 +905,19 @@ impl Compiler {
     }
 
     fn patch_function_calls(&mut self) -> Result<(), CompileError> {
+        let patches = std::mem::take(&mut self.patch_points);
+
+        for (call_site, func_name) in patches {
+            if let Some(&(start_pc, _params)) = self.functions.get(&func_name) {
+                self.patch_jump(call_site, start_pc as usize)?;
+            } else {
+                return Err(CompileError {
+                    message: format!("Undefined function: {}", func_name),
+                    line: 0,
+                });
+            }
+        }
+
         Ok(())
     }
 }

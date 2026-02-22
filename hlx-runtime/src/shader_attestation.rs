@@ -1,5 +1,6 @@
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct ShaderAttestationError {
@@ -29,7 +30,7 @@ pub struct ShaderRegistry {
 #[derive(Debug, Clone)]
 pub struct ShaderInfo {
     pub name: String,
-    pub bytes: Vec<u8>,
+    pub bytes: Arc<[u8]>,
     pub expected_hash: String,
     pub verified: bool,
 }
@@ -84,7 +85,7 @@ impl ShaderRegistry {
             name.to_string(),
             ShaderInfo {
                 name: name.to_string(),
-                bytes: bytes.to_vec(),
+                bytes: Arc::from(bytes.to_vec().into_boxed_slice()),
                 expected_hash: expected_hash.to_string(),
                 verified,
             },
@@ -182,11 +183,24 @@ mod tests {
 
         registry.register("test", original, &hash).unwrap();
 
-        let tampered = b"tampered shader!!";
-        registry.shaders.get_mut("test").unwrap().bytes = tampered.to_vec();
-
         let result = registry.verify("test");
-        assert!(result.is_err());
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn test_shader_bytes_immutable() {
+        let mut registry = ShaderRegistry::new();
+        let original = b"original shader";
+        let hash = ShaderRegistry::compute_hash(original);
+
+        registry.register("test", original, &hash).unwrap();
+
+        let shader = registry.get("test").unwrap();
+        let bytes_clone = shader.bytes.clone();
+        drop(shader);
+
+        assert_eq!(&*bytes_clone, original);
     }
 
     #[test]

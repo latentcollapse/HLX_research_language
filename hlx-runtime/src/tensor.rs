@@ -101,6 +101,13 @@ pub struct Tensor {
     pub shape: Vec<usize>,
 }
 
+impl Drop for Tensor {
+    fn drop(&mut self) {
+        let size = self.data.len();
+        GLOBAL_TENSOR_ALLOCATION.fetch_sub(size, Ordering::Relaxed);
+    }
+}
+
 impl Tensor {
     pub fn new(shape: Vec<usize>) -> Self {
         let limits = TensorLimits::default();
@@ -112,7 +119,10 @@ impl Tensor {
 
         let current = GLOBAL_TENSOR_ALLOCATION.load(Ordering::Relaxed);
         let global_limit = GLOBAL_ALLOCATION_LIMIT.load(Ordering::Relaxed);
-        if current + total > global_limit {
+        let new_total = current
+            .checked_add(total)
+            .ok_or_else(|| RuntimeError::new("Global tensor allocation overflow", 0))?;
+        if new_total > global_limit {
             return Err(RuntimeError::new(
                 format!(
                     "Global tensor allocation limit exceeded: {} + {} > {}",
@@ -553,6 +563,7 @@ impl fmt::Display for Tensor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     fn setup() {
         reset_global_allocation();
@@ -560,6 +571,8 @@ mod tests {
     }
 
     #[test]
+    #[serial]
+    #[serial]
     fn test_tensor_create() {
         setup();
         let t = Tensor::zeros(vec![3, 4]);
@@ -568,6 +581,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_tensor_get_set() {
         setup();
         let mut t = Tensor::zeros(vec![2, 3]);
@@ -576,6 +590,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_tensor_reshape() {
         setup();
         let t = Tensor::from_flat(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
@@ -584,6 +599,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_tensor_add() {
         setup();
         let a = Tensor::from_flat(vec![1.0, 2.0, 3.0]);
@@ -593,6 +609,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_tensor_matmul() {
         setup();
         let a = Tensor::from_data(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
@@ -604,6 +621,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_tensor_softmax() {
         setup();
         let t = Tensor::from_flat(vec![1.0, 2.0, 3.0]);
@@ -613,6 +631,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_tensor_size_limit_rejected() {
         setup();
         let limits = TensorLimits::new(100);
@@ -625,6 +644,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_tensor_rank_limit_rejected() {
         setup();
         let limits = TensorLimits {
@@ -641,6 +661,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_tensor_dimension_limit_rejected() {
         setup();
         let limits = TensorLimits {
@@ -657,27 +678,30 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_global_allocation_limit() {
         setup();
         set_global_limit(100);
 
-        let t1 = Tensor::zeros_with_limits(vec![10], &TensorLimits::default());
-        assert!(t1.is_ok());
-        assert_eq!(get_global_allocation(), 10);
+        {
+            let _t1 = Tensor::zeros_with_limits(vec![10], &TensorLimits::default());
+            assert_eq!(get_global_allocation(), 10);
 
-        let t2 = Tensor::zeros_with_limits(vec![20], &TensorLimits::default());
-        assert!(t2.is_ok());
-        assert_eq!(get_global_allocation(), 30);
+            let _t2 = Tensor::zeros_with_limits(vec![20], &TensorLimits::default());
+            assert_eq!(get_global_allocation(), 30);
 
-        let t3 = Tensor::zeros_with_limits(vec![30], &TensorLimits::default());
-        assert!(t3.is_ok());
-        assert_eq!(get_global_allocation(), 60);
+            let _t3 = Tensor::zeros_with_limits(vec![30], &TensorLimits::default());
+            assert_eq!(get_global_allocation(), 60);
+        }
+
+        assert_eq!(get_global_allocation(), 0);
 
         let t4 = Tensor::zeros_with_limits(vec![50], &TensorLimits::default());
-        assert!(t4.is_err());
+        assert!(t4.is_ok());
     }
 
     #[test]
+    #[serial]
     fn test_allocation_tracking() {
         setup();
         assert_eq!(get_global_allocation(), 0);
@@ -687,14 +711,17 @@ mod tests {
             assert_eq!(get_global_allocation(), 25);
         }
 
+        assert_eq!(get_global_allocation(), 0);
+
         let _t2 = Tensor::from_flat(vec![1.0, 2.0, 3.0]);
-        assert_eq!(get_global_allocation(), 28);
+        assert_eq!(get_global_allocation(), 3);
 
         let _t3 = Tensor::scalar(42.0);
-        assert_eq!(get_global_allocation(), 29);
+        assert_eq!(get_global_allocation(), 4);
     }
 
     #[test]
+    #[serial]
     fn test_tensor_shape_overflow() {
         setup();
         let limits = TensorLimits {

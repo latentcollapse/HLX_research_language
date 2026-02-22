@@ -119,8 +119,10 @@ impl AgentPool {
 
     pub fn spawn(&mut self, name: &str) -> u64 {
         let id = self.next_id;
-        self.next_id += 1;
-
+        self.next_id = self
+            .next_id
+            .checked_add(1)
+            .expect("Agent ID overflow: cannot spawn more than 2^64 agents");
         let mut agent = Agent::new(id, name.to_string());
         agent.spawn();
 
