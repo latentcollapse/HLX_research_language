@@ -315,6 +315,87 @@ impl AgentMemory {
 
         *hasher.finalize().as_bytes()
     }
+
+    pub fn to_context(&self) -> String {
+        let mut ctx = String::new();
+        ctx.push_str("# Agent Memory State\n\n");
+
+        ctx.push_str("## Parameters\n");
+        for (key, value) in &self.parameters {
+            ctx.push_str(&format!("- {}: {:.6}\n", key, value));
+        }
+
+        ctx.push_str("\n## Cycle Configuration\n");
+        ctx.push_str(&format!("- H_cycles: {}\n", self.cycle_config.0));
+        ctx.push_str(&format!("- L_cycles: {}\n", self.cycle_config.1));
+
+        if !self.behaviors.is_empty() {
+            ctx.push_str("\n## Behaviors\n");
+            for (i, (pattern, response)) in self.behaviors.iter().enumerate() {
+                ctx.push_str(&format!(
+                    "- Behavior {}: pattern=[{} values], response=[{} values]\n",
+                    i,
+                    pattern.len(),
+                    response.len()
+                ));
+            }
+        }
+
+        if !self.weight_matrices.is_empty() {
+            ctx.push_str("\n## Weight Matrices\n");
+            for (i, tensor) in self.weight_matrices.iter().enumerate() {
+                ctx.push_str(&format!(
+                    "- Layer {}: shape={:?}, sum={:.4}\n",
+                    i,
+                    tensor.shape,
+                    tensor.sum()
+                ));
+            }
+        }
+
+        ctx
+    }
+
+    pub fn from_llm_output(output: &str) -> RuntimeResult<Self> {
+        let mut memory = AgentMemory::new();
+
+        for line in output.lines() {
+            let line = line.trim();
+
+            if line.starts_with("- ") && line.contains(":") {
+                let parts: Vec<&str> = line[2..].splitn(2, ':').collect();
+                if parts.len() == 2 {
+                    let key = parts[0].trim();
+                    let value_str = parts[1].trim();
+
+                    if let Ok(value) = value_str.parse::<f64>() {
+                        match key {
+                            "learning_rate" => {
+                                memory.parameters.insert("learning_rate".to_string(), value);
+                            }
+                            "exploration" => {
+                                memory.parameters.insert("exploration".to_string(), value);
+                            }
+                            "confidence_threshold" => {
+                                memory
+                                    .parameters
+                                    .insert("confidence_threshold".to_string(), value);
+                            }
+                            "H_cycles" => {
+                                memory.cycle_config.0 = value as u32;
+                            }
+                            "L_cycles" => {
+                                memory.cycle_config.1 = value as u32;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(memory)
+    }
 }
 
 impl Default for AgentMemory {
@@ -826,5 +907,60 @@ mod tests {
         proposal.vote(25, false).unwrap();
 
         assert!(proposal.is_approved(0.66, 100));
+    }
+
+    #[test]
+    fn test_memory_to_context() {
+        let memory = AgentMemory::new();
+        let ctx = memory.to_context();
+
+        assert!(ctx.contains("# Agent Memory State"));
+        assert!(ctx.contains("## Parameters"));
+        assert!(ctx.contains("learning_rate"));
+        assert!(ctx.contains("## Cycle Configuration"));
+        assert!(ctx.contains("H_cycles: 3"));
+        assert!(ctx.contains("L_cycles: 6"));
+    }
+
+    #[test]
+    fn test_memory_from_llm_output() {
+        let llm_output = r#"
+# Agent Memory State
+
+## Parameters
+- learning_rate: 0.05
+- exploration: 0.2
+- confidence_threshold: 0.99
+
+## Cycle Configuration
+- H_cycles: 5
+- L_cycles: 10
+"#;
+
+        let memory = AgentMemory::from_llm_output(llm_output).unwrap();
+
+        assert_eq!(*memory.parameters.get("learning_rate").unwrap(), 0.05);
+        assert_eq!(*memory.parameters.get("exploration").unwrap(), 0.2);
+        assert_eq!(
+            *memory.parameters.get("confidence_threshold").unwrap(),
+            0.99
+        );
+        assert_eq!(memory.cycle_config, (5, 10));
+    }
+
+    #[test]
+    fn test_memory_context_roundtrip() {
+        let mut memory = AgentMemory::new();
+        memory.parameters.insert("learning_rate".to_string(), 0.05);
+        memory.cycle_config = (5, 10);
+
+        let ctx = memory.to_context();
+        let restored = AgentMemory::from_llm_output(&ctx).unwrap();
+
+        assert_eq!(
+            restored.parameters.get("learning_rate"),
+            memory.parameters.get("learning_rate")
+        );
+        assert_eq!(restored.cycle_config, memory.cycle_config);
     }
 }

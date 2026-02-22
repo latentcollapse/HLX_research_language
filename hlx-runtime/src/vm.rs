@@ -1409,6 +1409,13 @@ impl Vm {
             "println" => builtins::builtin_println(args),
             "image_load" => builtins::builtin_image_load(args),
             "image_save" => builtins::builtin_image_save(args),
+            "image_process" => builtins::builtin_image_process(args),
+            "image_info" => builtins::builtin_image_info(args),
+            "audio_load" => builtins::builtin_audio_load(args),
+            "audio_save" => builtins::builtin_audio_save(args),
+            "audio_info" => builtins::builtin_audio_info(args),
+            "audio_resample" => builtins::builtin_audio_resample(args),
+            "audio_normalize" => builtins::builtin_audio_normalize(args),
             _ => Err(RuntimeError::new(format!("Unknown function: {}", name), 0)),
         }
     }

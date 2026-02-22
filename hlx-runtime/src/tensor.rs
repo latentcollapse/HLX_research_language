@@ -1,6 +1,7 @@
 use crate::{RuntimeError, RuntimeResult, Value};
 use image::ImageFormat;
 use serde::{Deserialize, Serialize};
+use shellexpand;
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -304,6 +305,122 @@ impl Tensor {
             ));
         }
         Ok((self.shape[1], self.shape[2], self.shape[0]))
+    }
+
+    pub fn from_audio_bytes(bytes: &[u8]) -> RuntimeResult<Self> {
+        let cursor = std::io::Cursor::new(bytes);
+        let reader = hound::WavReader::new(cursor)
+            .map_err(|e| RuntimeError::new(format!("Audio decode failed: {}", e), 0))?;
+
+        let spec = reader.spec();
+        let channels = spec.channels as usize;
+        let sample_rate = spec.sample_rate;
+
+        let samples: Vec<f64> = match spec.sample_format {
+            hound::SampleFormat::Float => reader
+                .into_samples::<f32>()
+                .map(|s| s.unwrap_or(0.0) as f64)
+                .collect(),
+            hound::SampleFormat::Int => {
+                let max_val = (1 << (spec.bits_per_sample - 1)) as f64;
+                reader
+                    .into_samples::<i32>()
+                    .map(|s| s.unwrap_or(0) as f64 / max_val)
+                    .collect()
+            }
+        };
+
+        let num_samples = samples.len() / channels;
+        let mut data = vec![0.0f64; samples.len()];
+
+        for (i, sample) in samples.iter().enumerate() {
+            let frame = i / channels;
+            let channel = i % channels;
+            data[channel * num_samples + frame] = *sample;
+        }
+
+        let total = data.len();
+        GLOBAL_TENSOR_ALLOCATION.fetch_add(total, Ordering::Relaxed);
+
+        Ok(Tensor {
+            data,
+            shape: vec![channels, num_samples],
+        })
+    }
+
+    pub fn from_audio_file(path: &str) -> RuntimeResult<Self> {
+        let expanded = shellexpand::full(path)
+            .map_err(|e| RuntimeError::new(format!("Path expansion failed: {}", e), 0))?;
+        let bytes = std::fs::read(expanded.as_ref())
+            .map_err(|e| RuntimeError::new(format!("Failed to read audio: {}", e), 0))?;
+        Self::from_audio_bytes(&bytes)
+    }
+
+    pub fn to_audio_bytes(&self, sample_rate: u32) -> RuntimeResult<Vec<u8>> {
+        if self.shape.len() != 2 {
+            return Err(RuntimeError::new(
+                format!(
+                    "Audio tensor must be CN (2 dims), got {} dims",
+                    self.shape.len()
+                ),
+                0,
+            ));
+        }
+
+        let channels = self.shape[0] as u16;
+        let num_samples = self.shape[1];
+
+        let spec = hound::WavSpec {
+            channels,
+            sample_rate,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        {
+            let mut writer = hound::WavWriter::new(&mut cursor, spec)
+                .map_err(|e| RuntimeError::new(format!("Audio encode failed: {}", e), 0))?;
+
+            let max_val = i16::MAX as f64;
+            for frame in 0..num_samples {
+                for ch in 0..channels as usize {
+                    let sample = self.data[ch * num_samples + frame];
+                    let sample_i16 = (sample * max_val).clamp(-max_val, max_val) as i16;
+                    writer
+                        .write_sample(sample_i16)
+                        .map_err(|e| RuntimeError::new(format!("Audio write failed: {}", e), 0))?;
+                }
+            }
+
+            writer
+                .finalize()
+                .map_err(|e| RuntimeError::new(format!("Audio finalize failed: {}", e), 0))?;
+        }
+
+        Ok(cursor.into_inner())
+    }
+
+    pub fn to_audio_file(&self, path: &str, sample_rate: u32) -> RuntimeResult<()> {
+        let bytes = self.to_audio_bytes(sample_rate)?;
+        let expanded = shellexpand::full(path)
+            .map_err(|e| RuntimeError::new(format!("Path expansion failed: {}", e), 0))?;
+        std::fs::write(expanded.as_ref(), &bytes)
+            .map_err(|e| RuntimeError::new(format!("Failed to write audio: {}", e), 0))?;
+        Ok(())
+    }
+
+    pub fn audio_info(&self) -> RuntimeResult<(usize, usize)> {
+        if self.shape.len() != 2 {
+            return Err(RuntimeError::new(
+                format!(
+                    "Audio tensor must be CN (2 dims), got {} dims",
+                    self.shape.len()
+                ),
+                0,
+            ));
+        }
+        Ok((self.shape[0], self.shape[1]))
     }
 
     pub fn len(&self) -> usize {
@@ -828,6 +945,172 @@ mod tests {
         };
 
         let result = Tensor::new_with_limits(vec![1_000_000, 1_000_000], &limits);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[serial]
+    fn test_image_from_bytes_png() {
+        setup();
+        let mut tensor = Tensor::zeros(vec![3, 2, 2]);
+        tensor.data[0] = 1.0;
+        tensor.data[1] = 0.5;
+        tensor.data[2] = 0.0;
+        tensor.data[3] = 0.25;
+        tensor.data[4] = 0.75;
+        tensor.data[5] = 0.5;
+        tensor.data[6] = 0.0;
+        tensor.data[7] = 0.125;
+        tensor.data[8] = 0.875;
+        tensor.data[9] = 0.625;
+        tensor.data[10] = 0.375;
+        tensor.data[11] = 0.0;
+
+        let png_bytes = tensor.to_image_bytes(ImageFormat::Png).unwrap();
+        assert!(!png_bytes.is_empty());
+        assert!(png_bytes[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+
+        let recovered = Tensor::from_image_bytes(&png_bytes).unwrap();
+        assert_eq!(recovered.shape.len(), 3);
+        assert_eq!(recovered.shape[0], 3);
+        assert_eq!(recovered.shape[1], 2);
+        assert_eq!(recovered.shape[2], 2);
+    }
+
+    #[test]
+    #[serial]
+    fn test_image_roundtrip_rgb() {
+        setup();
+        let mut tensor = Tensor::zeros(vec![3, 4, 4]);
+        for i in 0..48 {
+            tensor.data[i] = (i as f64) / 48.0;
+        }
+
+        let png_bytes = tensor.to_image_bytes(ImageFormat::Png).unwrap();
+        assert!(!png_bytes.is_empty());
+        assert!(png_bytes[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+
+        let recovered = Tensor::from_image_bytes(&png_bytes).unwrap();
+        assert_eq!(recovered.shape, tensor.shape);
+
+        for i in 0..tensor.data.len() {
+            let diff = (tensor.data[i] - recovered.data[i]).abs();
+            assert!(diff < 0.02, "Pixel {} differs by {}", i, diff);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_image_roundtrip_grayscale() {
+        setup();
+        let mut tensor = Tensor::zeros(vec![1, 8, 8]);
+        for i in 0..64 {
+            tensor.data[i] = (i as f64) / 64.0;
+        }
+
+        let png_bytes = tensor.to_image_bytes(ImageFormat::Png).unwrap();
+        let recovered = Tensor::from_image_bytes(&png_bytes).unwrap();
+
+        assert_eq!(recovered.shape[0], 3);
+        let (h, w, _c) = recovered.image_dimensions().unwrap();
+        assert_eq!(h, 8);
+        assert_eq!(w, 8);
+    }
+
+    #[test]
+    #[serial]
+    fn test_image_dimensions() {
+        setup();
+        let tensor = Tensor::zeros(vec![3, 100, 200]);
+        let (h, w, c) = tensor.image_dimensions().unwrap();
+        assert_eq!(h, 100);
+        assert_eq!(w, 200);
+        assert_eq!(c, 3);
+    }
+
+    #[test]
+    #[serial]
+    fn test_image_invalid_shape() {
+        setup();
+        let tensor = Tensor::zeros(vec![4, 5, 5]);
+        let result = tensor.to_image_bytes(ImageFormat::Png);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[serial]
+    fn test_image_invalid_rank() {
+        setup();
+        let tensor = Tensor::zeros(vec![10, 10]);
+        let result = tensor.to_image_bytes(ImageFormat::Png);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[serial]
+    fn test_audio_roundtrip_mono() {
+        setup();
+        let mut tensor = Tensor::zeros(vec![1, 100]);
+        for i in 0..100 {
+            tensor.data[i] = (i as f64 / 100.0 * 2.0 - 1.0).sin();
+        }
+
+        let wav_bytes = tensor.to_audio_bytes(44100).unwrap();
+        assert!(!wav_bytes.is_empty());
+        assert!(wav_bytes[0..4] == [b'R', b'I', b'F', b'F']);
+        assert!(wav_bytes[8..12] == [b'W', b'A', b'V', b'E']);
+
+        let recovered = Tensor::from_audio_bytes(&wav_bytes).unwrap();
+        assert_eq!(recovered.shape.len(), 2);
+        assert_eq!(recovered.shape[0], 1);
+
+        for i in 0..tensor.data.len() {
+            let diff = (tensor.data[i] - recovered.data[i]).abs();
+            assert!(diff < 0.001, "Sample {} differs by {}", i, diff);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_audio_roundtrip_stereo() {
+        setup();
+        let mut tensor = Tensor::zeros(vec![2, 50]);
+        for i in 0..50 {
+            tensor.data[i] = (i as f64 / 50.0);
+            tensor.data[50 + i] = 1.0 - (i as f64 / 50.0);
+        }
+
+        let wav_bytes = tensor.to_audio_bytes(44100).unwrap();
+        let recovered = Tensor::from_audio_bytes(&wav_bytes).unwrap();
+
+        assert_eq!(recovered.shape, tensor.shape);
+    }
+
+    #[test]
+    #[serial]
+    fn test_audio_info() {
+        setup();
+        let tensor = Tensor::zeros(vec![2, 1000]);
+        let (channels, num_samples) = tensor.audio_info().unwrap();
+        assert_eq!(channels, 2);
+        assert_eq!(num_samples, 1000);
+    }
+
+    #[test]
+    #[serial]
+    fn test_audio_invalid_rank() {
+        setup();
+        let tensor = Tensor::zeros(vec![10, 10, 10]);
+        let result = tensor.to_audio_bytes(44100);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[serial]
+    fn test_audio_invalid_shape_1d() {
+        setup();
+        let tensor = Tensor::zeros(vec![100]);
+        let result = tensor.to_audio_bytes(44100);
         assert!(result.is_err());
     }
 }
