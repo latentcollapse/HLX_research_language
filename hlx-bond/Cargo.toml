@@ -1,0 +1,23 @@
+[package]
+name = "hlx-bond"
+version = "0.1.0"
+edition = "2021"
+description = "HLX bond CLI — native GGUF inference with Klyntar corpus bonding"
+
+[[bin]]
+name = "hlx-bond"
+path = "src/main.rs"
+
+[dependencies]
+hlx-runtime = { path = "../hlx-runtime" }
+
+# Native GGUF inference (pure Rust, no Python, no external services)
+candle-core = "0.9"
+candle-transformers = "0.9"
+
+# Klyntar corpus SQLite
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
