@@ -1,5 +1,6 @@
 use crate::{RuntimeError, RuntimeResult, Value};
 use image::ImageFormat;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -96,7 +97,7 @@ pub fn reset_global_allocation() {
     GLOBAL_TENSOR_ALLOCATION.store(0, Ordering::Relaxed);
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Tensor {
     pub data: Vec<f64>,
     pub shape: Vec<usize>,

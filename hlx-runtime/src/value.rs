@@ -1,8 +1,10 @@
 use crate::tensor::Tensor;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value")]
 pub enum Value {
     I64(i64),
     F64(f64),

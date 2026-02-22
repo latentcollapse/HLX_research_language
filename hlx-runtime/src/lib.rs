@@ -1,4 +1,5 @@
 mod agent;
+mod bond;
 mod builtins;
 mod bytecode;
 mod compiler;
@@ -11,6 +12,10 @@ mod value;
 mod vm;
 
 pub use agent::{Agent, AgentPool, AgentState};
+pub use bond::{
+    deserialize_response, deserialize_response_json, serialize_request, serialize_request_json,
+    BondPhase, BondRequest, BondResponse, Capability, SymbioteState,
+};
 pub use bytecode::{Bytecode, Opcode};
 pub use compiler::Compiler;
 pub use governance::{
