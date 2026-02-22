@@ -1,196 +1,221 @@
-# HLX — A Language for Recursive Intelligence
+# HLX — Governed Inference Runtime for Local AI
 
-> "Physics gives us freedom through constraints. AI should have a similarly bound world."
+> *"You're not building a fast inference engine — llama.cpp already exists.
+> You're building a governed inference engine."*
 
-## What Is HLX?
+HLX is a runtime that bonds a **symbolic AI** (Klyntar corpus) to a local **GGUF language model**, creating a unified neurosymbolic system governed by conscience predicates, recursive reasoning cycles, and safe self-modification.
 
-HLX is a self-hosting programming language designed around a single insight: **recursive intelligence can be a syntactic primitive**.
+---
 
-Instead of building AI agents and bolting on safety afterward, HLX makes **conscience, coordination, and self-modification** first-class language constructs. The syntax reads like its own documentation—designed for both human readability and dense training signal for AI models.
+## What This Actually Is
 
-## Why HLX?
+Most local AI setups: `model + system prompt`. That's it.
 
-### The Python Insight
+HLX introduces a **symbiote** — a persistent symbolic layer that attaches to model weights via a formal bond protocol, injects structured knowledge and governing rules into every inference, and persists state across conversations and model swaps.
 
-Python dominates ML not just because of its ecosystem, but because its English-like syntax creates a tight alignment between code and natural language. This produces denser training signal for AI models—code and explanations share vocabulary.
+```
+Without HLX:   GGUF model → responds
 
-HLX applies this principle to **safety and recursive intelligence**. When conscience predicates are first-class syntax, any model trained on HLX code absorbs "conscience" as a fundamental primitive, like it absorbs "if" or "for".
-
-### The Axiom Connection
-
-HLX is designed to integrate with [Axiom](../Axiom-main), a verification-first policy engine for AI agents. Through FFI, HLX agents can have their conscience predicates enforced by Axiom at runtime:
-
-```hlx
-recursive agent Thinker {
-    govern {
-        effect: WRITE
-        conscience: [path_safety, no_exfiltrate]
-    }
-}
+With HLX:      Klyntar corpus (rules, memory, conscience)
+                      ↓  bond protocol
+               GGUF model → governed, persistent, recursive
 ```
 
-The boundary between "building the agent" and "securing the agent" dissolves. One cognitive frame.
+The model doesn't change. The weights don't change. But what it is — does.
 
-## Core Concepts
+---
 
-### Recursive Agents
+## Quick Start
 
-Agents that refine their own state through cycles (inspired by TRM):
+```bash
+# Clone HLX
+git clone https://github.com/latentcollapse/hlx-compiler
+cd hlx-compiler
+
+# Build the bond CLI
+cd hlx-bond && cargo build --release
+
+# Bond a local GGUF to a Klyntar corpus
+./target/release/hlx-bond ~/models/Qwen3-0.6B.gguf \
+    --corpus ~/klyntar/corpus.db
+```
+
+```
+╔══════════════════════════════════════════════════╗
+║  HLX Bond Protocol v0.1 — Native GGUF + Klyntar  ║
+╚══════════════════════════════════════════════════╝
+
+[HELLO] Initiating bond with model: Qwen3-0.6B
+[HELLO] Capabilities offered: tensor_ops, image_io, governance, rsi, scale
+[SYNC]  Bond accepted — synchronising state...
+[BOND]  Corpus context injected — neurosymbolic link forming...
+[READY] Bond complete. Symbiote is active.
+
+you> Hello. What are you?
+hlx> Hello! I'm a language model designed to help you with questions
+     and tasks. How can I assist you today?
+```
+
+**No Python. No llama.cpp. No ollama. No running daemons.** One binary, one GGUF, one corpus.
+
+---
+
+## The Bond Protocol
+
+The handshake between Klyntar (symbolic) and the GGUF model (neural):
+
+```
+HELLO  →  Symbiote presents capabilities to the model
+SYNC   →  Model responds: accepted, context window, vocab size
+BOND   →  Corpus rules + memory injected as governing context
+READY  →  Unified NS-AI enters conversation loop
+```
+
+The bond is **persistent** — responses are stored back into the corpus memory, so the symbiote grows with every conversation. Swap the underlying model; the symbiote survives intact.
+
+---
+
+## Klyntar — The Symbiote
+
+[Klyntar](https://github.com/latentcollapse/klyntar) is the symbolic half of the system. Think of it as a `.gguf` file for neurosymbolic AI — a pre-seeded package of:
+
+- **Rules** — governing constraints with confidence scores
+- **Memory** — persistent conversation history
+- **Documents** — ingested knowledge base
+- **Conscience predicates** — alignment primitives that govern what the system will and won't do
+
+`pip install klyntar` gives you an inert SAI.
+`pip install klyntar` + `hlx-bond` gives you a thinking, governed system.
+
+---
+
+## TRM Recursive Reasoning
+
+Inspired by [Token Recursive Machines](https://github.com/latentcollapse/HLX/tree/main/TinyRecursiveModels-main), HLX implements H-cycles — recursive reasoning passes where each cycle feeds its output back as input context for the next:
+
+```bash
+# 3 recursive reasoning passes per message
+hlx-bond model.gguf --corpus corpus.db --h-cycles 3
+```
+
+The TRM paper showed 7M parameter models with recursive cycles outperforming larger flat models. HLX applies this at the system level, not the weight level — the recursion is in the bond, not the architecture.
+
+---
+
+## HLX as a Language
+
+Beyond the bond CLI, HLX is a self-hosting programming language where **conscience, coordination, and self-modification are syntactic primitives**:
 
 ```hlx
 recursive agent Thinker {
     latent hypothesis: Tensor[512]
-    latent details: Tensor[512]
-    
+
     cycle outer(H: 3) {
         cycle inner(L: 6) {
             details = refine(details, hypothesis + input)
         }
         hypothesis = consolidate(hypothesis, details)
     }
-    
+
+    govern {
+        effect: READ | WRITE
+        conscience: [path_safety, no_exfiltrate]
+    }
+
     halt when confidence > 0.95 or steps >= 16
 }
 ```
 
-### SCALE — Coordination
+When conscience predicates are first-class syntax, any model trained on HLX code absorbs "conscience" as a fundamental concept — alignment by osmosis, not by RLHF.
 
-Multiple agents synchronizing at barriers:
-
-```hlx
-scale cluster Swarm {
-    agents: [Thinker; 5]
-    
-    sync at barrier consensus {
-        consensus: cross_model_family
-        aggregate hypothesis: weighted_mean(by: confidence)
-    }
-}
-```
-
-### Governance — Conscience as Syntax
-
-Safety baked into the agent's nature:
-
-```hlx
-govern {
-    effect: READ | WRITE | NETWORK
-    conscience: [path_safety, no_exfiltrate, rate_limit]
-    trust: TRUSTED_INTERNAL
-}
-```
-
-### Self-Modification — Safe Evolution
-
-Agents that can propose and apply changes through three gates:
-
-```hlx
-modify self {
-    gate proof { verify: no_infinite_loops }
-    gate consensus { quorum: Swarm.agents; threshold: 2/3 }
-    gate human { trigger: complexity_delta > 100 }
-    budget { complexity: 1000; backoff: exponential }
-}
-```
-
-### Dissolvable Agents
-
-Intelligence that forms, executes, and dissolves:
-
-```hlx
-dissolvable agent Analyzer {
-    lifetime: task_completion
-    inherit: parent.hypothesis
-    
-    action analyze(data: Dataset) -> Report { ... }
-    
-    on_dissolve {
-        archive: report -> parent.memory
-    }
-}
-```
+---
 
 ## Architecture
 
 ```
-HLX Source (.hlx)
-      ↓
-┌─────────────────────────────────────────┐
-│ Self-Hosting Compiler (written in HLX)  │
-│  - lexer.hlx                            │
-│  - parser.hlx                           │
-│  - lower.hlx                            │
-│  - emit.hlx                             │
-└─────────────────────────────────────────┘
-      ↓
-LC-B Bytecode (deterministic, BLAKE3-addressed)
-      ↓
-┌─────────────────────────────────────────┐
-│ Backends                                │
-│  - LLVM (native code)                   │
-│  - Vulkan (GPU compute)                 │
-│  - Interpreter (bootstrap)              │
-└─────────────────────────────────────────┘
-```
+hlx-bond (Rust binary)
+├── candle 0.9 — pure Rust GGUF inference (quantized_qwen3)
+├── hlx-runtime — bond protocol, governance, RSI, SCALE, tensor ops
+└── Klyntar corpus.db (SQLite) — rules, memory, documents
 
-## Determinism by Default
-
-HLX is built on four axioms (ported from RustD):
-
-1. **Determinism**: Same input → same output, always
-2. **Reversibility**: Can always decompile compiled code
-3. **Injectivity**: Different source → different bytecode
-4. **Serialization**: All values serializable
-
-This enables reproducible reasoning traces and auditability.
-
-## The Virtuous Alignment Cycle
-
-1. Syntax embeds conscience as first-class
-2. Inference propagates conscience through expressions
-3. Models trained on HLX absorb conscience as fundamental
-4. Alignment becomes syntactic, not post-hoc
-
-## Project Status
-
-- **Lexer**: 757 lines, 40+ recursive intelligence tokens
-- **Parser**: 2500+ lines, AST for agents/cycles/barriers
-- **Lowerer**: 1300+ lines, bytecode for recursive execution
-- **Backends**: LLVM and Vulkan backends ported and adapted
-- **Self-hosting**: In progress
-
-## Repository Structure
-
-```
-hlx-compiler/
-├── hlx/
-│   └── hlx_bootstrap/      # Self-hosting compiler
-│       ├── lexer.hlx
-│       ├── parser.hlx
-│       ├── lower.hlx
-│       ├── emit.hlx
-│       └── ...
+HLX Language Runtime
+├── hlx-runtime/src/
+│   ├── vm.rs          — bytecode VM
+│   ├── bond.rs        — HELLO→SYNC→BOND→READY protocol
+│   ├── governance.rs  — conscience predicate engine
+│   ├── rsi.rs         — recursive self-improvement pipeline (3-gate)
+│   ├── scale.rs       — multi-agent coordination (barriers, consensus)
+│   ├── tensor.rs      — tensor primitives + image/audio I/O
+│   └── agent.rs       — agent lifecycle (spawn/halt/dissolve)
 ├── backends/
-│   ├── llvm/               # Native code generation
-│   └── vulkan/             # GPU compute shaders
-├── experimental/
-│   ├── axiom_demo.hlx      # Full syntax demo
-│   ├── test_all_phases.hlx # Test suite
-│   └── recursive_seed.hlx  # Minimal agent example
-└── HLX_ARCHITECTURE_PLAN.md
+│   ├── llvm/          — native code generation via LLVM
+│   └── vulkan/        — GPU compute via Vulkan
+└── Axiom-main/        — policy verification engine (FFI target)
 ```
+
+---
+
+## What's Working
+
+| Component | Status |
+|-----------|--------|
+| Native GGUF inference (candle, pure Rust) | ✅ |
+| Bond protocol (HELLO→SYNC→BOND→READY) | ✅ |
+| Klyntar corpus injection (rules + memory) | ✅ |
+| BPE tokenizer extracted from GGUF metadata | ✅ |
+| TRM H-cycles (recursive reasoning) | ✅ |
+| Governance engine (conscience predicates) | ✅ |
+| RSI pipeline (3-gate self-modification) | ✅ |
+| SCALE coordination (barriers, consensus) | ✅ |
+| Agent lifecycle (spawn/halt/dissolve) | ✅ |
+| Tensor ops + image/audio I/O | ✅ |
+| LLVM JIT backend | ✅ |
+| Vulkan GPU backend | ✅ |
+| HLX self-hosting compiler | 🔄 In progress |
+| LoRA weight-level RSI (Phase 2 bond) | 🔮 Future |
+
+---
+
+## Supported Models
+
+Any Qwen3 GGUF works. Tested:
+
+| Model | Size | Notes |
+|-------|------|-------|
+| Qwen3-0.6B Q8_K_XL | 844MB | Confirmed working |
+| Qwen3-1.7B Q8_0 | 1.8GB | |
+| Qwen3-4B Q4_K_M | 2.4GB | |
+
+Other GGUF architectures (LLaMA, Mistral, etc.) require a corresponding `quantized_*` module — contributions welcome.
+
+---
 
 ## Design Philosophy
 
-- **Structure beats scale**: TRM proved 7M params with recursive cycles beats massive models
-- **Readability = training signal**: Code that reads like English teaches models better
-- **Safety as syntax**: Conscience predicates aren't comments—they're grammar
-- **Determinism enables scale**: Reproducible execution enables multi-agent coordination
+- **Governed, not fast** — llama.cpp handles throughput. HLX handles what the system is *allowed to think*.
+- **Conscience as syntax** — predicates aren't comments or system prompts. They're grammar.
+- **Structure beats scale** — recursive cycles on small models beat flat inference on large ones.
+- **The symbiote survives** — swap the model, keep the corpus. Identity lives in the symbolic layer.
 
-## Related Projects
+---
 
-- **[Axiom](../Axiom-main)**: Policy engine for AI agents (FFI integration target)
-- **[RustD](../rustd)**: Original LLVM/Vulkan backends (ported to HLX)
+## Roadmap
+
+**Now (v0.1.3):** Phase 1 bond working. Symbolic corpus governs inference via context injection.
+
+**Near term:** Corpus seeding experiments. Measure whether symbolic rules provably change model behavior. Multi-model swarm tests.
+
+**Later:** Phase 2 bond — LoRA fine-tuning driven by RSI pipeline. The symbiote stops governing the weights and starts reshaping them. That's the paper.
+
+---
+
+## Related
+
+- **[Klyntar](https://github.com/latentcollapse/klyntar)** — the symbolic AI package (`pip install klyntar`)
+- **[Axiom](./Axiom-main)** — policy verification engine (FFI integration)
+- **[TinyRecursiveModels](./TinyRecursiveModels-main)** — the TRM paper (theoretical foundation)
+
+---
 
 ## License
 
@@ -198,4 +223,4 @@ Apache-2.0
 
 ---
 
-*"Less is more" — but only when structure is encoded in the language itself.*
+*HLX is pre-research software. The bond works. The experiments are starting.*
