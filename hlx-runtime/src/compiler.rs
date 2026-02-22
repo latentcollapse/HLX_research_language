@@ -414,6 +414,14 @@ impl Compiler {
                             pos = self.compile_expr(tokens, pos, reg)?;
                         } else {
                             let reg = self.next_var_reg;
+                            if self.next_var_reg >= 254 {
+                                return Err(CompileError {
+                                    message:
+                                        "Register limit exceeded: too many variables (max 254)"
+                                            .to_string(),
+                                    line: 0,
+                                });
+                            }
                             self.next_var_reg += 1;
                             self.variables.insert(name.clone(), reg);
                             pos = self.compile_expr(tokens, pos, reg)?;
@@ -454,6 +462,12 @@ impl Compiler {
         if matches!(tokens[pos], Token::Eq) {
             pos += 1;
             let reg = self.next_var_reg;
+            if self.next_var_reg >= 254 {
+                return Err(CompileError {
+                    message: "Register limit exceeded: too many variables (max 254)".to_string(),
+                    line: 0,
+                });
+            }
             self.next_var_reg += 1;
             self.variables.insert(name, reg);
             pos = self.compile_expr(tokens, pos, reg)?;
@@ -493,6 +507,14 @@ impl Compiler {
 
             let left_reg = dst;
             let right_reg = self.next_tmp_reg;
+            if self.next_tmp_reg >= 254 {
+                return Err(CompileError {
+                    message:
+                        "Register limit exceeded: expression too complex (max 254 temp registers)"
+                            .to_string(),
+                    line: 0,
+                });
+            }
             self.next_tmp_reg += 1;
             pos = self.compile_expr_primary(tokens, pos, right_reg)?;
 

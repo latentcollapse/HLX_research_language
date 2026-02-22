@@ -59,7 +59,12 @@ impl TensorLimits {
             }
         }
 
-        let total: usize = shape.iter().product();
+        let total = shape.iter().try_fold(1usize, |acc, dim| {
+            acc.checked_mul(*dim).ok_or(RuntimeError::new(
+                format!("Tensor shape overflow at dimension {}", dim),
+                0,
+            ))
+        })?;
         if total > self.max_elements {
             return Err(RuntimeError::new(
                 format!(
@@ -207,7 +212,7 @@ impl Tensor {
     }
 
     pub fn size(&self) -> usize {
-        self.data.iter().product::<f64>() as usize
+        self.data.len()
     }
 
     pub fn get(&self, indices: &[usize]) -> RuntimeResult<f64> {
@@ -677,13 +682,28 @@ mod tests {
         setup();
         assert_eq!(get_global_allocation(), 0);
 
-        let _t = Tensor::zeros(vec![5, 5]);
-        assert_eq!(get_global_allocation(), 25);
+        {
+            let _t = Tensor::zeros(vec![5, 5]);
+            assert_eq!(get_global_allocation(), 25);
+        }
 
         let _t2 = Tensor::from_flat(vec![1.0, 2.0, 3.0]);
         assert_eq!(get_global_allocation(), 28);
 
         let _t3 = Tensor::scalar(42.0);
         assert_eq!(get_global_allocation(), 29);
+    }
+
+    #[test]
+    fn test_tensor_shape_overflow() {
+        setup();
+        let limits = TensorLimits {
+            max_elements: 1_000_000_000,
+            max_rank: 8,
+            max_dimension: 1_000_000_000,
+        };
+
+        let result = Tensor::new_with_limits(vec![1_000_000, 1_000_000], &limits);
+        assert!(result.is_err());
     }
 }

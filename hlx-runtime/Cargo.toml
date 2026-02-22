@@ -1,6 +1,6 @@
 [package]
 name = "hlx-runtime"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "HLX bytecode interpreter - runs LC-B bytecode"
 
@@ -11,3 +11,4 @@ bincode = "1.3"
 sha2 = "0.10"
 
 [dev-dependencies]
+serial_test = "3.0"

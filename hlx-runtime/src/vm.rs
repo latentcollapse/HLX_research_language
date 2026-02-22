@@ -152,6 +152,10 @@ impl Vm {
         self.registers.get(idx).unwrap_or(&Value::Nil)
     }
 
+    pub fn get_register_cloned(&self, idx: usize) -> Value {
+        self.registers.get(idx).cloned().unwrap_or(Value::Nil)
+    }
+
     pub fn set_register(&mut self, idx: usize, val: Value) {
         if idx < self.registers.len() {
             self.registers[idx] = val;
@@ -176,7 +180,7 @@ impl Vm {
 
                 Opcode::Halt => {
                     self.halted = true;
-                    return Ok(self.registers[0].clone());
+                    return Ok(self.get_register_cloned(0));
                 }
 
                 Opcode::Const => {
@@ -197,7 +201,7 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result = self.binary_add(&self.registers[a], &self.registers[b])?;
+                    let result = self.binary_add(self.get_register(a), self.get_register(b))?;
                     self.set_register(dst, result);
                 }
 
@@ -205,7 +209,7 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result = self.binary_sub(&self.registers[a], &self.registers[b])?;
+                    let result = self.binary_sub(self.get_register(a), self.get_register(b))?;
                     self.set_register(dst, result);
                 }
 
@@ -213,7 +217,7 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result = self.binary_mul(&self.registers[a], &self.registers[b])?;
+                    let result = self.binary_mul(self.get_register(a), self.get_register(b))?;
                     self.set_register(dst, result);
                 }
 
@@ -221,7 +225,7 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result = self.binary_div(&self.registers[a], &self.registers[b])?;
+                    let result = self.binary_div(self.get_register(a), self.get_register(b))?;
                     self.set_register(dst, result);
                 }
 
@@ -229,14 +233,14 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result = self.binary_mod(&self.registers[a], &self.registers[b])?;
+                    let result = self.binary_mod(self.get_register(a), self.get_register(b))?;
                     self.set_register(dst, result);
                 }
 
                 Opcode::Neg => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    let result = match &self.registers[src] {
+                    let result = match self.get_register(src) {
                         Value::I64(n) => Value::I64(-n),
                         Value::F64(n) => Value::F64(-n),
                         _ => return Err(RuntimeError::new("Cannot negate non-numeric", pc)),
@@ -248,7 +252,7 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result = Value::Bool(self.registers[a] == self.registers[b]);
+                    let result = Value::Bool(self.get_register(a) == self.get_register(b));
                     self.set_register(dst, result);
                 }
 
@@ -256,7 +260,7 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result = Value::Bool(self.registers[a] != self.registers[b]);
+                    let result = Value::Bool(self.get_register(a) != self.get_register(b));
                     self.set_register(dst, result);
                 }
 
@@ -264,7 +268,7 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result = self.compare_lt(&self.registers[a], &self.registers[b])?;
+                    let result = self.compare_lt(self.get_register(a), self.get_register(b))?;
                     self.set_register(dst, result);
                 }
 
@@ -272,7 +276,7 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result = self.compare_le(&self.registers[a], &self.registers[b])?;
+                    let result = self.compare_le(self.get_register(a), self.get_register(b))?;
                     self.set_register(dst, result);
                 }
 
@@ -280,7 +284,7 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result = self.compare_gt(&self.registers[a], &self.registers[b])?;
+                    let result = self.compare_gt(self.get_register(a), self.get_register(b))?;
                     self.set_register(dst, result);
                 }
 
@@ -288,7 +292,7 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result = self.compare_ge(&self.registers[a], &self.registers[b])?;
+                    let result = self.compare_ge(self.get_register(a), self.get_register(b))?;
                     self.set_register(dst, result);
                 }
 
@@ -296,8 +300,9 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result =
-                        Value::Bool(self.registers[a].is_truthy() && self.registers[b].is_truthy());
+                    let result = Value::Bool(
+                        self.get_register(a).is_truthy() && self.get_register(b).is_truthy(),
+                    );
                     self.set_register(dst, result);
                 }
 
@@ -305,15 +310,16 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result =
-                        Value::Bool(self.registers[a].is_truthy() || self.registers[b].is_truthy());
+                    let result = Value::Bool(
+                        self.get_register(a).is_truthy() || self.get_register(b).is_truthy(),
+                    );
                     self.set_register(dst, result);
                 }
 
                 Opcode::Not => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    let result = Value::Bool(!self.registers[src].is_truthy());
+                    let result = Value::Bool(!self.get_register(src).is_truthy());
                     self.set_register(dst, result);
                 }
 
@@ -325,7 +331,7 @@ impl Vm {
                 Opcode::JumpIf => {
                     let cond = bytecode.read_u8(&mut pc)? as usize;
                     let target = bytecode.read_u32(&mut pc)? as usize;
-                    if self.registers[cond].is_truthy() {
+                    if self.get_register(cond).is_truthy() {
                         pc = target;
                     }
                 }
@@ -333,7 +339,7 @@ impl Vm {
                 Opcode::JumpIfNot => {
                     let cond = bytecode.read_u8(&mut pc)? as usize;
                     let target = bytecode.read_u32(&mut pc)? as usize;
-                    if !self.registers[cond].is_truthy() {
+                    if !self.get_register(cond).is_truthy() {
                         pc = target;
                     }
                 }
@@ -355,8 +361,8 @@ impl Vm {
                 Opcode::Push => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let val = bytecode.read_u8(&mut pc)? as usize;
-                    let arr = self.registers[dst].clone();
-                    let new_arr = builtins::builtin_push(&[arr, self.registers[val].clone()])?;
+                    let arr = self.get_register_cloned(dst);
+                    let new_arr = builtins::builtin_push(&[arr, self.get_register_cloned(val)])?;
                     self.set_register(dst, new_arr);
                 }
 
@@ -365,8 +371,8 @@ impl Vm {
                     let arr = bytecode.read_u8(&mut pc)? as usize;
                     let idx = bytecode.read_u8(&mut pc)? as usize;
                     let val = builtins::builtin_get_at(&[
-                        self.registers[arr].clone(),
-                        self.registers[idx].clone(),
+                        self.get_register_cloned(arr),
+                        self.get_register_cloned(idx),
                     ])?;
                     self.set_register(dst, val);
                 }
@@ -375,11 +381,11 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let idx = bytecode.read_u8(&mut pc)? as usize;
                     let val = bytecode.read_u8(&mut pc)? as usize;
-                    let arr = self.registers[dst].clone();
+                    let arr = self.get_register_cloned(dst);
                     let new_arr = builtins::builtin_set_at(&[
                         arr,
-                        self.registers[idx].clone(),
-                        self.registers[val].clone(),
+                        self.get_register_cloned(idx),
+                        self.get_register_cloned(val),
                     ])?;
                     self.set_register(dst, new_arr);
                 }
@@ -387,20 +393,20 @@ impl Vm {
                 Opcode::Len => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    let len = builtins::builtin_array_len(&[self.registers[src].clone()])?;
+                    let len = builtins::builtin_array_len(&[self.get_register_cloned(src)])?;
                     self.set_register(dst, len);
                 }
 
                 Opcode::Print => {
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    print!("{}", self.registers[src]);
+                    print!("{}", self.get_register(src));
                 }
 
                 Opcode::PrintInt => {
                     let src = bytecode.read_u8(&mut pc)? as usize;
                     match &self.registers[src] {
                         Value::I64(n) => print!("{}", n),
-                        _ => print!("{}", self.registers[src]),
+                        _ => print!("{}", self.get_register(src)),
                     }
                 }
 
@@ -416,7 +422,7 @@ impl Vm {
                 Opcode::StrLen => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    let len = builtins::builtin_strlen(&[self.registers[src].clone()])?;
+                    let len = builtins::builtin_strlen(&[self.get_register_cloned(src)])?;
                     self.set_register(dst, len);
                 }
 
@@ -426,9 +432,9 @@ impl Vm {
                     let start = bytecode.read_u8(&mut pc)? as usize;
                     let len = bytecode.read_u8(&mut pc)? as usize;
                     let result = builtins::builtin_substring(&[
-                        self.registers[s].clone(),
-                        self.registers[start].clone(),
-                        self.registers[len].clone(),
+                        self.get_register_cloned(s),
+                        self.get_register_cloned(start),
+                        self.get_register_cloned(len),
                     ])?;
                     self.set_register(dst, result);
                 }
@@ -438,8 +444,8 @@ impl Vm {
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
                     let result = builtins::builtin_concat(&[
-                        self.registers[a].clone(),
-                        self.registers[b].clone(),
+                        self.get_register_cloned(a),
+                        self.get_register_cloned(b),
                     ])?;
                     self.set_register(dst, result);
                 }
@@ -449,8 +455,8 @@ impl Vm {
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
                     let result = builtins::builtin_strcmp(&[
-                        self.registers[a].clone(),
-                        self.registers[b].clone(),
+                        self.get_register_cloned(a),
+                        self.get_register_cloned(b),
                     ])?;
                     self.set_register(dst, result);
                 }
@@ -458,14 +464,14 @@ impl Vm {
                 Opcode::Ord => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    let result = builtins::builtin_ord(&[self.registers[src].clone()])?;
+                    let result = builtins::builtin_ord(&[self.get_register_cloned(src)])?;
                     self.set_register(dst, result);
                 }
 
                 Opcode::Char => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    let result = builtins::builtin_char(&[self.registers[src].clone()])?;
+                    let result = builtins::builtin_char(&[self.get_register_cloned(src)])?;
                     self.set_register(dst, result);
                 }
 
@@ -566,7 +572,7 @@ impl Vm {
                     let name_idx = bytecode.read_u32(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
                     if let Some(name) = bytecode.strings.get(name_idx) {
-                        let val = self.registers[src].clone();
+                        let val = self.get_register_cloned(src);
                         if let Some(agent_id) = self.current_agent {
                             if let Some(agent) = self.agent_pool.get_mut(agent_id) {
                                 agent.set_latent(name, val);
@@ -600,20 +606,20 @@ impl Vm {
 
                     let id = self.agent_pool.spawn(&name);
                     self.current_agent = Some(id);
-                    self.registers[0] = Value::I64(id as i64);
+                    self.set_register(0, Value::I64(id as i64));
                 }
 
                 Opcode::AgentHalt => {
                     let condition = bytecode.read_u8(&mut pc)? as usize;
-                    if self.registers[condition].is_truthy() {
+                    if self.get_register(condition).is_truthy() {
                         self.halted = true;
-                        return Ok(self.registers[0].clone());
+                        return Ok(self.get_register_cloned(0));
                     }
                 }
 
                 Opcode::AgentDissolve => {
                     self.halted = true;
-                    return Ok(self.registers[0].clone());
+                    return Ok(self.get_register_cloned(0));
                 }
 
                 Opcode::ScaleCreate => {
@@ -621,7 +627,7 @@ impl Vm {
                     let name = bytecode.strings.get(name_idx).cloned().unwrap_or_default();
                     let id = self.scale_pool.create(&name);
                     self.current_scale = Some(id);
-                    self.registers[0] = Value::I64(id as i64);
+                    self.set_register(0, Value::I64(id as i64));
                 }
 
                 Opcode::ScaleAddAgent => {
@@ -671,7 +677,7 @@ impl Vm {
                     if let Some(scale_id) = self.current_scale {
                         if let Some(scale) = self.scale_pool.get_mut(scale_id) {
                             let released = scale.arrive_barrier(barrier_id, agent)?;
-                            self.registers[0] = Value::Bool(released);
+                            self.set_register(0, Value::Bool(released));
                         }
                     }
                 }
@@ -681,7 +687,7 @@ impl Vm {
                     if let Some(scale_id) = self.current_scale {
                         if let Some(scale) = self.scale_pool.get(scale_id) {
                             let released = scale.check_barrier(barrier_id)?;
-                            self.registers[0] = Value::Bool(released);
+                            self.set_register(0, Value::Bool(released));
                         }
                     }
                 }
