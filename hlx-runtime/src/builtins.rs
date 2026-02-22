@@ -1,4 +1,5 @@
-use crate::{RuntimeError, RuntimeResult, Value};
+use crate::{RuntimeError, RuntimeResult, Tensor, Value};
+use image::ImageFormat;
 
 pub fn builtin_strlen(args: &[Value]) -> RuntimeResult<Value> {
     match &args[0] {
@@ -141,5 +142,47 @@ pub fn builtin_print(args: &[Value]) -> RuntimeResult<Value> {
 
 pub fn builtin_println(args: &[Value]) -> RuntimeResult<Value> {
     println!("{}", args[0]);
+    Ok(Value::Void)
+}
+
+pub fn builtin_image_load(args: &[Value]) -> RuntimeResult<Value> {
+    let path = args[0]
+        .as_string()
+        .ok_or_else(|| RuntimeError::new("image_load requires String path", 0))?;
+
+    let expanded = shellexpand::full(path)
+        .map_err(|e| RuntimeError::new(format!("Path expansion failed: {}", e), 0))?;
+
+    let bytes = std::fs::read(expanded.as_ref())
+        .map_err(|e| RuntimeError::new(format!("Failed to read image: {}", e), 0))?;
+
+    let tensor = Tensor::from_image_bytes(&bytes)?;
+    Ok(Value::Tensor(tensor))
+}
+
+pub fn builtin_image_save(args: &[Value]) -> RuntimeResult<Value> {
+    let tensor = match &args[0] {
+        Value::Tensor(t) => t,
+        _ => return Err(RuntimeError::new("image_save requires Tensor", 0)),
+    };
+
+    let path = args[1]
+        .as_string()
+        .ok_or_else(|| RuntimeError::new("image_save requires String path", 0))?;
+
+    let format = if path.to_lowercase().ends_with(".png") {
+        ImageFormat::Png
+    } else {
+        ImageFormat::Jpeg
+    };
+
+    let bytes = tensor.to_image_bytes(format)?;
+
+    let expanded = shellexpand::full(&path)
+        .map_err(|e| RuntimeError::new(format!("Path expansion failed: {}", e), 0))?;
+
+    std::fs::write(expanded.as_ref(), &bytes)
+        .map_err(|e| RuntimeError::new(format!("Failed to write image: {}", e), 0))?;
+
     Ok(Value::Void)
 }

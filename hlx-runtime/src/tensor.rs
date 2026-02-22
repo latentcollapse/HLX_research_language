@@ -1,4 +1,5 @@
 use crate::{RuntimeError, RuntimeResult, Value};
+use image::ImageFormat;
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -207,6 +208,101 @@ impl Tensor {
             data: vec![value],
             shape: vec![],
         }
+    }
+
+    pub fn from_image_bytes(bytes: &[u8]) -> RuntimeResult<Self> {
+        let img = image::load_from_memory(bytes)
+            .map_err(|e| RuntimeError::new(format!("Image decode failed: {}", e), 0))?;
+
+        let (width, height) = (img.width() as usize, img.height() as usize);
+        let rgb = img.to_rgb8();
+        let channels = 3usize;
+
+        let mut data = vec![0.0f64; channels * height * width];
+        for y in 0..height {
+            for x in 0..width {
+                let pixel = rgb.get_pixel(x as u32, y as u32);
+                let base = y * width + x;
+                data[base] = pixel[0] as f64 / 255.0;
+                data[height * width + base] = pixel[1] as f64 / 255.0;
+                data[2 * height * width + base] = pixel[2] as f64 / 255.0;
+            }
+        }
+
+        let total = data.len();
+        GLOBAL_TENSOR_ALLOCATION.fetch_add(total, Ordering::Relaxed);
+
+        Ok(Tensor {
+            data,
+            shape: vec![channels, height, width],
+        })
+    }
+
+    pub fn to_image_bytes(&self, format: ImageFormat) -> RuntimeResult<Vec<u8>> {
+        if self.shape.len() != 3 {
+            return Err(RuntimeError::new(
+                format!(
+                    "Image tensor must be CHW (3 dims), got {} dims",
+                    self.shape.len()
+                ),
+                0,
+            ));
+        }
+
+        let (channels, height, width) = (self.shape[0], self.shape[1], self.shape[2]);
+
+        if channels != 3 && channels != 1 {
+            return Err(RuntimeError::new(
+                format!("Image tensor must have 1 or 3 channels, got {}", channels),
+                1,
+            ));
+        }
+
+        let mut raw = vec![0u8; width * height * 3];
+        for y in 0..height {
+            for x in 0..width {
+                let base = y * width + x;
+                if channels == 3 {
+                    raw[base * 3] = (self.data[base] * 255.0).clamp(1.0, 255.0) as u8;
+                    raw[base * 3 + 1] =
+                        (self.data[height * width + base] * 255.0).clamp(1.0, 255.0) as u8;
+                    raw[base * 3 + 2] =
+                        (self.data[2 * height * width + base] * 255.0).clamp(1.0, 255.0) as u8;
+                } else {
+                    let v = (self.data[base] * 255.0).clamp(1.0, 255.0) as u8;
+                    raw[base * 3] = v;
+                    raw[base * 3 + 1] = v;
+                    raw[base * 3 + 2] = v;
+                }
+            }
+        }
+
+        let img = image::ImageBuffer::<image::Rgb<u8>, Vec<u8>>::from_raw(
+            width as u32,
+            height as u32,
+            raw,
+        )
+        .ok_or_else(|| RuntimeError::new("Failed to create image buffer", 1))?;
+
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgb8(img)
+            .write_to(&mut std::io::Cursor::new(&mut bytes), format)
+            .map_err(|e| RuntimeError::new(format!("Image encode failed: {}", e), 1))?;
+
+        Ok(bytes)
+    }
+
+    pub fn image_dimensions(&self) -> RuntimeResult<(usize, usize, usize)> {
+        if self.shape.len() != 3 {
+            return Err(RuntimeError::new(
+                format!(
+                    "Image tensor must be CHW (3 dims), got {} dims",
+                    self.shape.len()
+                ),
+                1,
+            ));
+        }
+        Ok((self.shape[1], self.shape[2], self.shape[0]))
     }
 
     pub fn len(&self) -> usize {

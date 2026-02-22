@@ -1407,6 +1407,8 @@ impl Vm {
             "array_len" | "len" => builtins::builtin_array_len(args),
             "print" => builtins::builtin_print(args),
             "println" => builtins::builtin_println(args),
+            "image_load" => builtins::builtin_image_load(args),
+            "image_save" => builtins::builtin_image_save(args),
             _ => Err(RuntimeError::new(format!("Unknown function: {}", name), 0)),
         }
     }
