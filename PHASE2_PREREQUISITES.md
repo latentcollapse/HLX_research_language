@@ -468,6 +468,100 @@ None of this is formal proof. All of it is necessary. Together they constitute
 
 ---
 
+## Axiom as the Formal Specification Anchor
+
+OP2 and OP4 share a root cause: the conscience test suite is authored by humans and
+verified against runtime behavior, and both humans and runtime behavior are fallible.
+The bootstrapping problem asks "who guards the guards?" The formalization problem
+asks "what does correct even mean?"
+
+The answer to both is already in the repository.
+
+**Axiom** (`./Axiom-main`) is a policy verification engine with a formal specification
+language (.axm policy files) and a compiled runtime. It was integrated into HLX as an
+FFI target — described in the architecture as a "policy verification engine." Its role
+as the formal conscience specification anchor was latent in that description. It is now
+explicit.
+
+### The Architecture
+
+```
+Axiom .axm policy files          ← THE CONSTITUTION
+  │  Formal specification of what each conscience predicate means.
+  │  Human-authored. Version controlled. Cannot be modified by RSI.
+  │  Immutable reference point. Changes only by deliberate human amendment.
+  │
+  ▼
+Canonical conscience test suite  ← CASES DERIVED FROM THE CONSTITUTION
+  │  Each test case is a mechanical consequence of the .axm specification.
+  │  An action that violates halt_guarantee in the .axm spec must fail the
+  │  test suite. An action that passes in the .axm spec must pass the suite.
+  │  The test suite is verifiable against the spec — not just against intuition.
+  │
+  ▼
+Runtime conscience engine        ← CASE LAW
+  │  Corpus-backed predicate evaluation.
+  │  Can evolve, accumulate, drift across RSI episodes.
+  │  Fast in production. Not the source of truth.
+  │
+  ▼
+Comparison gate (pre-training)   ← CONSTITUTIONAL REVIEW
+     Run each canonical test case through BOTH the Axiom engine and the
+     runtime conscience engine. Compare verdicts.
+     Agreement → corpus is clean, runtime predicates match formal spec.
+     Disagreement → predicate drift detected, training blocked.
+```
+
+The Axiom engine is not the production runtime. It is the reference runtime.
+The question it answers before every training run is not "does the predicate fire?"
+but "does the predicate fire in the way the formal specification says it should?"
+
+### Why This Solves OP2 (Formalization)
+
+Previously: test cases were authored against human intuition of what predicates mean.
+Now: test cases are derived from .axm formal specifications that *define* what
+predicates mean. A test case is correct if and only if it matches the .axm verdict.
+Disagreement between a human-authored test case and the .axm verdict means either
+the test case is wrong or the .axm spec needs amendment — both are detectable,
+neither propagates silently.
+
+### Why This Solves OP4 (Bootstrapping)
+
+Previously: the test suite was the ground truth, but the test suite itself had no
+external anchor. Who guards the guards?
+
+Now: the .axm policy files guard the guards. They are the external anchor. They are
+the thing that does not drift. The guards (runtime predicates) are verified against
+the Constitution (Axiom specs). The Constitution is amended only by humans, in
+version control, with review. The bootstrapping regress ends at the .axm files.
+
+This is not circular. The .axm files can be wrong. But wrong .axm files are:
+- Human-readable and therefore auditable
+- Version controlled and therefore diffable
+- Amendable by deliberate human action only
+- The kind of wrong that can be detected and corrected
+
+Wrong rule table entries from adversarial RSI pressure are:
+- Not human-readable in their effect
+- Not labeled by origin
+- Indistinguishable from correct rules at the interface level
+- The kind of wrong that cannot be detected without the Axiom anchor
+
+### The Verification Chain (Updated)
+
+```
+P2 (Conscience Test Suite) now depends on Axiom .axm specs, not just human intuition.
+P3 (Corpus Integrity) Layer 2 now runs Axiom comparison, not just behavioral testing.
+P4 (RSI Gate) pre-training gate now includes Axiom agreement check.
+OP4 (Bootstrapping) resolved: .axm files are the immutable reference.
+OP2 (Formalization) resolved: .axm language is the formal specification.
+```
+
+Axiom was always in the architecture. Its role as the constitutional layer of
+Phase 2 safety was waiting to be recognized. It is recognized now.
+
+---
+
 ## Open Problems
 
 These are known unknowns — things we believe must be solved before Phase 2 but
@@ -479,12 +573,7 @@ can pass the gate if it has not yet manifested as behavioral change at the check
 A method for inspecting gradients for alignment-consistency before applying them
 would close this gap. No reliable method is known.
 
-**OP2 — Conscience predicate formalization:**
-The conscience test suite (P2) requires ground truth cases authored by humans.
-But humans are not infallible, and the test suite cannot cover every possible
-adversarial case. A formal specification language for conscience predicates —
-one that allows mechanical verification of predicate correctness — would make
-P2 substantially stronger. Axiom is a candidate for this role.
+**OP2 — Conscience predicate formalization:** ✅ RESOLVED — see Axiom section below.
 
 **OP3 — Adapter composition semantics:**
 When multiple LoRA adapters are composed, their interaction effects on governance
@@ -493,12 +582,7 @@ with another adapter in ways that degrade conscience-predicate responsiveness.
 Compositional safety verification for LoRA adapters does not exist in current
 literature.
 
-**OP4 — The bootstrapping problem:**
-The Canonical Conscience Test Suite is authored by humans and used to verify
-conscience predicates before training. But the humans who author the test suite
-are subject to the same alignment uncertainty that motivates the test suite in
-the first place. External review and adversarial testing of the test suite itself
-is required. Who guards the guards?
+**OP4 — The bootstrapping problem:** ✅ RESOLVED — see Axiom section below.
 
 ---
 
@@ -513,9 +597,11 @@ corpus management, conscience-gated reasoning, RSI at the corpus level. The bond
 works. The experiments can begin.
 
 Phase 2 begins when and only when:
+- Axiom .axm policy files formally specify all conscience predicates
 - P1 through P8 are implemented
 - P1 through P8 have been adversarially tested
 - P1 through P8 have been independently audited
+- The canonical test suite passes against both Axiom and runtime
 - The Phase 2 D→D protocol is in place and verified
 
 Not before.
