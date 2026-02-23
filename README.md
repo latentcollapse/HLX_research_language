@@ -171,7 +171,7 @@ HLX Language Runtime
 | Tensor ops + image/audio I/O | ✅ |
 | LLVM JIT backend | ✅ |
 | Vulkan GPU backend | ✅ |
-| HLX self-hosting compiler | 🔄 In progress |
+| HLX self-hosting compiler | 🔄 Pipeline complete, bootstrap verification in progress |
 | LoRA weight-level RSI (Phase 2 bond) | 🔮 Future |
 
 ---

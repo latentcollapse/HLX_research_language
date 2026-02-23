@@ -8,122 +8,181 @@ module hlx_builtins {
 // ============================================================================
 
 // Check if string starts with prefix
-fn str_starts_with(s: String, prefix: String) -> i64 {
-    return starts_with(s, prefix);
+export fn starts_with(s: String, prefix: String) -> i64 {
+    let s_len = strlen(s);
+    let prefix_len = strlen(prefix);
+    
+    if prefix_len > s_len {
+        return 0;
+    }
+    
+    let i = 0;
+    loop(i < prefix_len, 1000) {
+        let c1 = char_at(s, i);
+        let c2 = char_at(prefix, i);
+        if strcmp(c1, c2) != 0 {
+            return 0;
+        }
+        i += 1;
+    }
+    
+    return 1;
 }
 
 // Check if string ends with suffix
-fn str_ends_with(s: String, suffix: String) -> i64 {
-    return ends_with(s, suffix);
-}
-
-// Check if string contains substring
-fn str_contains(haystack: String, needle: String) -> i64 {
-    return contains(haystack, needle);
-}
-
-// Find position of substring in string (returns -1 if not found)
-fn str_index_of(s: String, search: String) -> i64 {
-    let len = strlen(s);
-    let search_len = strlen(search);
-
-    if (search_len > len) {
-        return 0 - 1;  // Not found
+export fn ends_with(s: String, suffix: String) -> i64 {
+    let s_len = strlen(s);
+    let suffix_len = strlen(suffix);
+    
+    if suffix_len > s_len {
+        return 0;
     }
-
+    
+    let start = s_len - suffix_len;
     let i = 0;
-    loop(i <= len - search_len, 10000) {
-        let substr = substring(s, i, search_len);
-        if (strcmp(substr, search) == 0) {
+    loop(i < suffix_len, 1000) {
+        let c1 = char_at(s, start + i);
+        let c2 = char_at(suffix, i);
+        if strcmp(c1, c2) != 0 {
+            return 0;
+        }
+        i += 1;
+    }
+    
+    return 1;
+}
+
+// Find position of substring (returns -1 if not found)
+export fn index_of(s: String, search: String) -> i64 {
+    let s_len = strlen(s);
+    let search_len = strlen(search);
+    
+    if search_len > s_len {
+        return 0 - 1;  // -1
+    }
+    if search_len == 0 {
+        return 0;
+    }
+    
+    let max_start = s_len - search_len;
+    let i = 0;
+    loop(i <= max_start, 10000) {
+        let matched = 1;
+        let j = 0;
+        loop(j < search_len, 1000) {
+            let c1 = char_at(s, i + j);
+            let c2 = char_at(search, j);
+            if strcmp(c1, c2) != 0 {
+                matched = 0;
+                break;
+            }
+            j += 1;
+        }
+        if matched == 1 {
             return i;
         }
         i += 1;
     }
-
-    return 0 - 1;  // Not found
+    
+    return 0 - 1;  // -1, not found
 }
 
-// Count occurrences of character in string
-fn str_count_char(s: String, c: String) -> i64 {
+// Convert string to integer
+export fn to_int(s: String) -> i64 {
     let len = strlen(s);
-    let count = 0;
+    if len == 0 {
+        return 0;
+    }
+    
+    let result = 0;
+    let negative = 0;
     let i = 0;
-
+    
+    // Handle negative sign
+    let first = substring(s, 0, 1);
+    if strcmp(first, "-") == 0 {
+        negative = 1;
+        i = 1;
+    }
+    
     loop(i < len, 10000) {
-        let char_at_i = substring(s, i, 1);
-        if (strcmp(char_at_i, c) == 0) {
-            count += 1;
+        let c = substring(s, i, 1);
+        let digit = 0 - 1;
+        
+        if strcmp(c, "0") == 0 { digit = 0; }
+        else if strcmp(c, "1") == 0 { digit = 1; }
+        else if strcmp(c, "2") == 0 { digit = 2; }
+        else if strcmp(c, "3") == 0 { digit = 3; }
+        else if strcmp(c, "4") == 0 { digit = 4; }
+        else if strcmp(c, "5") == 0 { digit = 5; }
+        else if strcmp(c, "6") == 0 { digit = 6; }
+        else if strcmp(c, "7") == 0 { digit = 7; }
+        else if strcmp(c, "8") == 0 { digit = 8; }
+        else if strcmp(c, "9") == 0 { digit = 9; }
+        else {
+            // Non-digit character, stop parsing
+            break;
         }
+        
+        result = result * 10 + digit;
         i += 1;
     }
-
-    return count;
+    
+    if negative == 1 {
+        result = 0 - result;
+    }
+    
+    return result;
 }
 
-// Pad string on left with character to reach minimum length
-fn str_pad_left_char(s: String, width: i64, c: String) -> String {
-    let current_len = strlen(s);
-
-    if (current_len >= width) {
-        return s;
+// Extract substring from start to end (exclusive of end)
+export fn substring_range(s: String, start: i64, end: i64) -> String {
+    if start < 0 {
+        let new_start = 0;
+        return substring_range(s, new_start, end);
     }
-
-    let padding = width - current_len;
-    let padded = "";
-    let i = 0;
-
-    loop(i < padding, 10000) {
-        padded = concat(padded, c);
-        i += 1;
+    let len = strlen(s);
+    let actual_end = end;
+    if end > len {
+        actual_end = len;
     }
-
-    return concat(padded, s);
-}
-
-// Pad string on right with character to reach minimum length
-fn str_pad_right_char(s: String, width: i64, c: String) -> String {
-    let current_len = strlen(s);
-
-    if (current_len >= width) {
-        return s;
-    }
-
-    let padding = width - current_len;
-    let padded = s;
-    let i = 0;
-
-    loop(i < padding, 10000) {
-        padded = concat(padded, c);
-        i += 1;
-    }
-
-    return padded;
-}
-
-// Split string and collect into array (already builtin, but document it)
-fn str_split(s: String, delimiter: String) -> [i64] {
-    return split(s, delimiter);
-}
-
-// Join array of strings with separator
-fn str_join(parts: [i64], separator: String) -> String {
-    let len = array_len(parts);
-
-    if (len == 0) {
+    if start >= actual_end {
         return "";
     }
+    return substring(s, start, actual_end - start);
+}
 
-    let result = int_to_ptr(get_at(parts, 0));
-    let i = 1;
-
-    loop(i < len, 10000) {
-        let part = int_to_ptr(get_at(parts, i));
-        result = concat(result, separator);
-        result = concat(result, part);
-        i += 1;
+// Check if string contains substring
+export fn contains(s: String, search: String) -> i64 {
+    let idx = index_of(s, search);
+    if idx >= 0 {
+        return 1;
     }
+    return 0;
+}
 
-    return result;
+// ============================================================================
+// WRAPPER FUNCTIONS (for import compatibility)
+// ============================================================================
+
+fn str_starts_with(s: String, prefix: String) -> i64 {
+    return starts_with(s, prefix);
+}
+
+fn str_ends_with(s: String, suffix: String) -> i64 {
+    return ends_with(s, suffix);
+}
+
+fn str_index_of(s: String, search: String) -> i64 {
+    return index_of(s, search);
+}
+
+fn str_contains(s: String, search: String) -> i64 {
+    return contains(s, search);
+}
+
+fn str_to_int(s: String) -> i64 {
+    return to_int(s);
 }
 
 // ============================================================================
@@ -136,7 +195,7 @@ fn arr_index_of(arr: [i64], value: i64) -> i64 {
     let i = 0;
 
     loop(i < len, 10000) {
-        if (get_at(arr, i) == value) {
+        if get_at(arr, i) == value {
             return i;
         }
         i += 1;
@@ -145,23 +204,21 @@ fn arr_index_of(arr: [i64], value: i64) -> i64 {
     return 0 - 1;  // Not found
 }
 
-// Check if array contains value
 fn arr_contains(arr: [i64], value: i64) -> i64 {
     let idx = arr_index_of(arr, value);
-    if (idx >= 0) {
+    if idx >= 0 {
         return 1;
     }
     return 0;
 }
 
-// Count occurrences of value in array
 fn arr_count(arr: [i64], value: i64) -> i64 {
     let len = array_len(arr);
     let count = 0;
     let i = 0;
 
     loop(i < len, 10000) {
-        if (get_at(arr, i) == value) {
+        if get_at(arr, i) == value {
             count += 1;
         }
         i += 1;
@@ -180,7 +237,7 @@ fn arr_filter_gt(arr: [i64], threshold: i64) -> [i64] {
 
     loop(i < len, 10000) {
         let val = get_at(arr, i);
-        if (val > threshold) {
+        if val > threshold {
             result = push(result, val);
         }
         i += 1;
@@ -189,7 +246,6 @@ fn arr_filter_gt(arr: [i64], threshold: i64) -> [i64] {
     return result;
 }
 
-// Map array: multiply each element by factor
 fn arr_map_mul(arr: [i64], factor: i64) -> [i64] {
     let len = array_len(arr);
     let result = [];
@@ -204,18 +260,17 @@ fn arr_map_mul(arr: [i64], factor: i64) -> [i64] {
     return result;
 }
 
-// Check if two arrays are equal
 fn arr_equals(arr1: [i64], arr2: [i64]) -> i64 {
     let len1 = array_len(arr1);
     let len2 = array_len(arr2);
 
-    if (len1 != len2) {
+    if len1 != len2 {
         return 0;
     }
 
     let i = 0;
     loop(i < len1, 10000) {
-        if (get_at(arr1, i) != get_at(arr2, i)) {
+        if get_at(arr1, i) != get_at(arr2, i) {
             return 0;
         }
         i += 1;
@@ -224,11 +279,10 @@ fn arr_equals(arr1: [i64], arr2: [i64]) -> i64 {
     return 1;  // Equal
 }
 
-// Find minimum value in array
 fn arr_min(arr: [i64]) -> i64 {
     let len = array_len(arr);
 
-    if (len == 0) {
+    if len == 0 {
         return 0;
     }
 
@@ -237,7 +291,7 @@ fn arr_min(arr: [i64]) -> i64 {
 
     loop(i < len, 10000) {
         let val = get_at(arr, i);
-        if (val < min_val) {
+        if val < min_val {
             min_val = val;
         }
         i += 1;
@@ -246,11 +300,10 @@ fn arr_min(arr: [i64]) -> i64 {
     return min_val;
 }
 
-// Find maximum value in array
 fn arr_max(arr: [i64]) -> i64 {
     let len = array_len(arr);
 
-    if (len == 0) {
+    if len == 0 {
         return 0;
     }
 
@@ -259,7 +312,7 @@ fn arr_max(arr: [i64]) -> i64 {
 
     loop(i < len, 10000) {
         let val = get_at(arr, i);
-        if (val > max_val) {
+        if val > max_val {
             max_val = val;
         }
         i += 1;
@@ -268,7 +321,6 @@ fn arr_max(arr: [i64]) -> i64 {
     return max_val;
 }
 
-// Sum all elements in array
 fn arr_sum(arr: [i64]) -> i64 {
     let len = array_len(arr);
     let sum = 0;
@@ -282,15 +334,10 @@ fn arr_sum(arr: [i64]) -> i64 {
     return sum;
 }
 
-// ============================================================================
-// TYPE CHECKING UTILITIES
-// ============================================================================
-
-// Check if value looks like an integer string
 fn is_integer_string(s: String) -> i64 {
     let len = strlen(s);
 
-    if (len == 0) {
+    if len == 0 {
         return 0;
     }
 
@@ -299,16 +346,16 @@ fn is_integer_string(s: String) -> i64 {
         let c = substring(s, i, 1);
 
         // Check for digits (0-9)
-        if (strcmp(c, "0") >= 0) {
-            if (strcmp(c, "9") <= 0) {
+        if strcmp(c, "0") >= 0 {
+            if strcmp(c, "9") <= 0 {
                 i += 1;
                 continue;
             }
         }
 
         // Allow leading minus sign
-        if (i == 0) {
-            if (strcmp(c, "-") == 0) {
+        if i == 0 {
+            if strcmp(c, "-") == 0 {
                 i += 1;
                 continue;
             }
@@ -321,11 +368,6 @@ fn is_integer_string(s: String) -> i64 {
     return 1;  // Looks like integer
 }
 
-// ============================================================================
-// DEBUGGING / FORMATTING
-// ============================================================================
-
-// Print array of integers
 fn print_array(arr: [i64]) -> i64 {
     let len = array_len(arr);
 
@@ -335,7 +377,7 @@ fn print_array(arr: [i64]) -> i64 {
         let val = get_at(arr, i);
         print_int(val);
 
-        if (i < len - 1) {
+        if i < len - 1 {
             print(", ");
         }
 
@@ -346,4 +388,4 @@ fn print_array(arr: [i64]) -> i64 {
     return 0;
 }
 
-}
+} // module hlx_builtins

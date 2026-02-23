@@ -139,6 +139,11 @@ module hlx_lexer {
         if word == "action" { return 107; }
         if word == "when" { return 108; }
         if word == "or" { return 109; }
+        // Switch/match keywords
+        if word == "switch" { return 110; }
+        if word == "case" { return 111; }
+        if word == "default" { return 112; }
+        if word == "match" { return 113; }
         return 1;  // TOK_IDENT
     }
 
@@ -486,6 +491,12 @@ module hlx_lexer {
                         let next = char_at(source, pos + 1);
                         if next == "=" {
                             let token = [36, pos, 2, line, col];  // TOK_EQEQ
+                            tokens = push(tokens, token);
+                            pos = pos + 2;
+                            col = col + 2;
+                            handled = 1;
+                        } else if next == ">" {
+                            let token = [110, pos, 2, line, col];  // TOK_FAT_ARROW (=>
                             tokens = push(tokens, token);
                             pos = pos + 2;
                             col = col + 2;

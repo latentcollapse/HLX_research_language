@@ -1,9 +1,12 @@
 mod agent;
+mod ast;
+mod ast_parser;
 mod bond;
 mod builtins;
 mod bytecode;
 mod compiler;
 mod governance;
+mod lowerer;
 mod rsi;
 mod scale;
 mod shader_attestation;
@@ -12,12 +15,19 @@ mod value;
 mod vm;
 
 pub use agent::{Agent, AgentPool, AgentState};
+pub use ast::{
+    AgentDef, AstDiffBatch, ClusterDef, Function, Item, ModificationTarget, Mutation,
+    MutationBatch, NodeCounter, NodeId, Program, Render, Statement,
+    TypeAnnotation, Visitor, VisitResult, walk_program,
+};
+pub use ast_parser::{AstParser, ParseError, Token};
 pub use bond::{
     deserialize_response, deserialize_response_json, serialize_request, serialize_request_json,
     BondPhase, BondRequest, BondResponse, Capability, SymbioteState,
 };
 pub use bytecode::{Bytecode, Opcode};
 pub use compiler::Compiler;
+pub use lowerer::{LowerError, Lowerer};
 pub use governance::{
     ConfigError, Effect, EffectType, Governance, GovernanceConfig, GovernanceContext,
     GovernanceRegistry, PredicateResult,

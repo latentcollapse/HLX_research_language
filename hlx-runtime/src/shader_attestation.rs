@@ -198,7 +198,7 @@ mod tests {
 
         let shader = registry.get("test").unwrap();
         let bytes_clone = shader.bytes.clone();
-        drop(shader);
+        let _ = shader;
 
         assert_eq!(&*bytes_clone, original);
     }

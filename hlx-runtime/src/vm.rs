@@ -18,6 +18,9 @@ pub struct RuntimeConfig {
     pub spawn_window_secs: u64,
     pub max_total_agents: usize,
     pub max_steps: usize,
+    pub register_count: usize,
+    pub arg_base_register: usize,
+    pub saved_register_count: usize,
 }
 
 impl Default for RuntimeConfig {
@@ -27,6 +30,9 @@ impl Default for RuntimeConfig {
             spawn_window_secs: DEFAULT_SPAWN_WINDOW_SECS,
             max_total_agents: DEFAULT_MAX_TOTAL_AGENTS,
             max_steps: 1_000_000,
+            register_count: 256,
+            arg_base_register: 150,
+            saved_register_count: 20,
         }
     }
 }
@@ -66,6 +72,7 @@ impl SpawnRateLimit {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn reset(&mut self) {
         self.spawn_times.clear();
     }
@@ -75,6 +82,7 @@ impl SpawnRateLimit {
 struct CallFrame {
     return_pc: usize,
     base_reg: usize,
+    #[allow(dead_code)]
     arg_count: usize,
     saved_regs: Vec<Value>,
 }
@@ -89,6 +97,7 @@ struct LoopFrame {
 
 #[derive(Debug, Clone)]
 struct CycleFrame {
+    #[allow(dead_code)]
     name: String,
     max_count: u64,
     current: u64,
@@ -108,6 +117,7 @@ pub struct Vm {
     current_agent: Option<u64>,
     current_scale: Option<u64>,
     functions: HashMap<String, (usize, usize)>,
+    #[allow(dead_code)]
     globals: HashMap<String, Value>,
     latent_states: HashMap<String, Value>,
     halted: bool,
@@ -115,6 +125,7 @@ pub struct Vm {
     steps: usize,
     spawn_rate_limit: SpawnRateLimit,
     max_total_agents: usize,
+    config: RuntimeConfig,
 }
 
 impl Vm {
@@ -124,7 +135,7 @@ impl Vm {
 
     pub fn with_config(config: RuntimeConfig) -> Self {
         Vm {
-            registers: vec![Value::Nil; 256],
+            registers: vec![Value::Nil; config.register_count],
             call_stack: Vec::new(),
             loop_stack: Vec::new(),
             cycle_stack: Vec::new(),
@@ -146,6 +157,7 @@ impl Vm {
                 config.spawn_window_secs,
             ),
             max_total_agents: config.max_total_agents,
+            config,
         }
     }
 
@@ -1229,14 +1241,16 @@ impl Vm {
 
                     if let Some(func_name) = bytecode.strings.get(func_idx) {
                         if let Some(&(start_pc, param_count)) = self.functions.get(func_name) {
-                            let saved_regs: Vec<Value> = self.registers[..20].to_vec();
+                            let saved_regs: Vec<Value> =
+                                self.registers[..self.config.saved_register_count].to_vec();
 
-                            let arg_base = 150usize;
+                            let arg_base = self.config.arg_base_register;
                             let max_args = arg_count.min(param_count);
                             if arg_base + max_args > self.registers.len() {
                                 return Err(RuntimeError::new(
                                     format!(
-                                        "Function call arg_base + arg_count exceeds register limit"
+                                        "Function call arg_base ({}) + arg_count ({}) exceeds register limit ({})",
+                                        arg_base, max_args, self.registers.len()
                                     ),
                                     pc,
                                 ));
@@ -1253,11 +1267,12 @@ impl Vm {
                             });
                             pc = start_pc;
                         } else {
-                            let arg_base = 150usize;
+                            let arg_base = self.config.arg_base_register;
                             if arg_base + arg_count > self.registers.len() {
                                 return Err(RuntimeError::new(
                                     format!(
-                                        "Builtin call arg_base + arg_count exceeds register limit"
+                                        "Builtin call arg_base ({}) + arg_count ({}) exceeds register limit ({})",
+                                        arg_base, arg_count, self.registers.len()
                                     ),
                                     pc,
                                 ));

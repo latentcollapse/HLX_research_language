@@ -64,6 +64,29 @@ fn STMT_CHANNEL() -> i64 { return 38; }        // channel declaration
 fn STMT_AGGREGATE() -> i64 { return 39; }      // aggregate at barrier
 fn STMT_LATENT() -> i64 { return 40; }         // latent state declaration
 fn STMT_ACTION() -> i64 { return 41; }         // action definition
+fn STMT_SWITCH() -> i64 { return 42; }         // switch expression/statement
+fn STMT_CASE() -> i64 { return 43; }           // case clause
+
+// STMT_SWITCH: [kind(42), discriminant_expr_ptr, cases_ptr, default_body_ptr]
+// switch discriminant { case pattern => body, ... default => body }
+fn make_stmt_switch(discriminant: [i64], cases: [i64], default_body: [i64]) -> [i64] {
+    let node = [0, 0, 0, 0];
+    node = set_at(node, 0, STMT_SWITCH());
+    node = set_at(node, 1, ptr_to_int(discriminant));
+    node = set_at(node, 2, ptr_to_int(cases));
+    node = set_at(node, 3, ptr_to_int(default_body));
+    return node;
+}
+
+// STMT_CASE: [kind(43), pattern_value, body_ptr]
+// pattern_value is the integer value to match (for now, ints only)
+fn make_stmt_case(pattern: i64, body: [i64]) -> [i64] {
+    let node = [0, 0, 0];
+    node = set_at(node, 0, STMT_CASE());
+    node = set_at(node, 1, pattern);
+    node = set_at(node, 2, ptr_to_int(body));
+    return node;
+}
 
 // Block/Function types
 fn NODE_FUNCTION() -> i64 { return 60; }
@@ -735,6 +758,11 @@ fn TOK_GIVES() -> i64 { return 106; }
 fn TOK_ACTION() -> i64 { return 107; }
 fn TOK_WHEN() -> i64 { return 108; }
 fn TOK_OR_KW() -> i64 { return 109; }
+fn TOK_SWITCH() -> i64 { return 110; }
+fn TOK_CASE() -> i64 { return 111; }
+fn TOK_DEFAULT() -> i64 { return 112; }
+fn TOK_MATCH() -> i64 { return 113; }
+fn TOK_FAT_ARROW() -> i64 { return 114; }
 
 // ============================================================================
 // Type Parsing
@@ -1483,6 +1511,12 @@ fn parse_statement(state: [i64]) -> [i64] {
 
         stmt = ptr_to_int(make_stmt_if(int_to_ptr(cond), then_body, else_body));
     }
+    // switch statement (match-like pattern matching)
+    else if kind == TOK_SWITCH() || kind == TOK_MATCH() {
+        let switch_result = parse_switch_stmt(state);
+        stmt = get_at(switch_result, 0);
+        state = int_to_ptr(get_at(switch_result, 1));
+    }
     // loop statement
     else if kind == TOK_LOOP() {
         state = advance(state);
@@ -1861,6 +1895,150 @@ fn parse_govern_block(state: [i64]) -> [i64] {
     let govern = make_stmt_govern(effect, conscience, trust);
     let ret = [0, 0];
     ret = set_at(ret, 0, govern);
+    ret = set_at(ret, 1, ptr_to_int(state));
+    return ret;
+}
+
+// ============================================================================
+// SWITCH STATEMENT PARSING
+// ============================================================================
+
+// Parse switch statement: switch discriminant { case pattern => body, ... default => body }
+// Pattern can be: integer literal, or "_" for default
+fn parse_switch_stmt(state: [i64]) -> [i64] {
+    state = expect(state, TOK_SWITCH());
+    
+    // Parse discriminant expression
+    let disc_result = parse_expression(state);
+    let discriminant = get_at(disc_result, 0);
+    state = int_to_ptr(get_at(disc_result, 1));
+    
+    state = expect(state, TOK_LBRACE());
+    
+    let cases = [];
+    let default_body = [];
+    
+    // Parse cases until }
+    loop(peek_kind(state) != TOK_RBRACE(), 1000) {
+        if peek_kind(state) == TOK_RBRACE() { break; }
+        
+        let kind = peek_kind(state);
+        
+        // case pattern => body
+        if kind == TOK_CASE() {
+            state = advance(state);
+            
+            // Parse pattern (integer literal for now)
+            let pattern = 0;
+            if peek_kind(state) == TOK_INT() {
+                let tok = current_token(state);
+                pattern = get_at(tok, 1);
+                state = advance(state);
+            } else if peek_kind(state) == TOK_IDENT() {
+                // Could be underscore for wildcard, or named pattern
+                let tok = current_token(state);
+                let name_ptr = get_at(tok, 1);
+                let name = int_to_ptr(name_ptr);
+                if strcmp(name, "_") == 0 {
+                    pattern = 0 - 1;  // Wildcard marker
+                }
+                state = advance(state);
+            }
+            
+            // Expect => (fat arrow)
+            state = expect(state, TOK_FAT_ARROW());
+            
+            // Parse body (single statement or block)
+            let body = [];
+            if peek_kind(state) == TOK_LBRACE() {
+                state = advance(state);
+                loop(peek_kind(state) != TOK_RBRACE(), 1000) {
+                    if peek_kind(state) == TOK_RBRACE() { break; }
+                    let stmt_result = parse_statement(state);
+                    let s = get_at(stmt_result, 0);
+                    state = int_to_ptr(get_at(stmt_result, 1));
+                    body = push(body, s);
+                }
+                state = expect(state, TOK_RBRACE());
+            } else {
+                let stmt_result = parse_statement(state);
+                let s = get_at(stmt_result, 0);
+                state = int_to_ptr(get_at(stmt_result, 1));
+                body = push(body, s);
+            }
+            
+            let case_node = make_stmt_case(pattern, body);
+            cases = push(cases, ptr_to_int(case_node));
+        }
+        // default => body (or just "default" keyword)
+        else if kind == TOK_DEFAULT() {
+            state = advance(state);
+            state = expect(state, TOK_FAT_ARROW());
+            
+            // Parse default body
+            if peek_kind(state) == TOK_LBRACE() {
+                state = advance(state);
+                loop(peek_kind(state) != TOK_RBRACE(), 1000) {
+                    if peek_kind(state) == TOK_RBRACE() { break; }
+                    let stmt_result = parse_statement(state);
+                    let s = get_at(stmt_result, 0);
+                    state = int_to_ptr(get_at(stmt_result, 1));
+                    default_body = push(default_body, s);
+                }
+                state = expect(state, TOK_RBRACE());
+            } else {
+                let stmt_result = parse_statement(state);
+                let s = get_at(stmt_result, 0);
+                state = int_to_ptr(get_at(stmt_result, 1));
+                default_body = push(default_body, s);
+            }
+        }
+        // underscore as default (alternative syntax)
+        else if kind == TOK_IDENT() {
+            // Check if it's underscore
+            let tok = current_token(state);
+            let name_ptr = get_at(tok, 1);
+            let name = int_to_ptr(name_ptr);
+            if strcmp(name, "_") == 0 {
+                state = advance(state);
+                state = expect(state, TOK_FAT_ARROW());
+                
+                // Parse default body
+                if peek_kind(state) == TOK_LBRACE() {
+                    state = advance(state);
+                    loop(peek_kind(state) != TOK_RBRACE(), 1000) {
+                        if peek_kind(state) == TOK_RBRACE() { break; }
+                        let stmt_result = parse_statement(state);
+                        let s = get_at(stmt_result, 0);
+                        state = int_to_ptr(get_at(stmt_result, 1));
+                        default_body = push(default_body, s);
+                    }
+                    state = expect(state, TOK_RBRACE());
+                } else {
+                    let stmt_result = parse_statement(state);
+                    let s = get_at(stmt_result, 0);
+                    state = int_to_ptr(get_at(stmt_result, 1));
+                    default_body = push(default_body, s);
+                }
+            } else {
+                state = advance(state);  // Skip unknown
+            }
+        }
+        else {
+            state = advance(state);  // Skip unknown token
+        }
+        
+        // Optional comma between cases
+        if peek_kind(state) == TOK_COMMA() {
+            state = advance(state);
+        }
+    }
+    
+    state = expect(state, TOK_RBRACE());
+    
+    let switch_node = make_stmt_switch(int_to_ptr(discriminant), cases, default_body);
+    let ret = [0, 0];
+    ret = set_at(ret, 0, ptr_to_int(switch_node));
     ret = set_at(ret, 1, ptr_to_int(state));
     return ret;
 }

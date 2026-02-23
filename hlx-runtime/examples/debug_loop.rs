@@ -1,4 +1,4 @@
-use hlx_runtime::{Compiler, Value, Vm};
+use hlx_runtime::{Compiler, Vm};
 
 fn main() {
     let source = r#"

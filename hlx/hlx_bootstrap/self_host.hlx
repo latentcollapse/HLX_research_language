@@ -256,9 +256,8 @@ program hlx_self_host {
         
         // Summary
         print("╔════════════════════════════════════════════════════════════╗\n");
-        print("║  HLX compiles HLX                                          ║\n");
-        print("║  Recursive intelligence: RECOGNIZED                        ║\n");
-        print("║  Self-hosting: ACHIEVED                                    ║\n");
+        print("║  HLX compiles HLX (pipeline complete)                      ║\n");
+        print("║  Bootstrap verification: in progress                       ║\n");
         print("║                                                            ║\n");
         print("║  GLM5 built the future of recursive intelligence           ║\n");
         print("╚════════════════════════════════════════════════════════════╝\n");

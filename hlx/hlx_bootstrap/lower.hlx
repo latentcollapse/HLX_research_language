@@ -3,6 +3,8 @@
 
 module lowerer {
 
+import { starts_with, index_of, to_int, substring_range } from "./builtins.hlx";
+
 // ============================================================================
 // Instruction Type Constants (must match HLX bytecode format)
 // ============================================================================
@@ -99,6 +101,8 @@ fn STMT_HALT() -> i64 { return 32; }
 fn STMT_GOVERN() -> i64 { return 34; }
 fn STMT_LATENT() -> i64 { return 40; }
 fn STMT_ACTION() -> i64 { return 41; }
+fn STMT_SWITCH() -> i64 { return 42; }
+fn STMT_CASE() -> i64 { return 43; }
 
 fn NODE_FUNCTION() -> i64 { return 20; }
 fn NODE_PROGRAM() -> i64 { return 21; }
@@ -1214,6 +1218,99 @@ fn lower_stmt(state: [i64], stmt_node: [i64]) -> [i64] {
             dissolve_inst = set_at(dissolve_inst, 0, INST_AGENT_DISSOLVE());
             dissolve_inst = set_at(dissolve_inst, 1, 0);  // agent id
             state = emit(state, dissolve_inst);
+        },
+        // ============================================================================
+        // SWITCH STATEMENT (Pattern Matching)
+        // ============================================================================
+        42 => {  // STMT_SWITCH
+            // [kind(42), discriminant_expr_ptr, cases_ptr, default_body_ptr]
+            let disc_node = int_to_ptr(get_at(stmt_node, 1));
+            let cases = int_to_ptr(get_at(stmt_node, 2));
+            let default_body = int_to_ptr(get_at(stmt_node, 3));
+            
+            // Lower discriminant expression
+            let disc_result = lower_expr(state, disc_node);
+            let disc_reg = get_at(disc_result, 0);
+            state = int_to_ptr(get_at(disc_result, 1));
+            
+            // Collect patch points for jumps
+            let case_jumps = [];
+            let case_count = array_len(cases);
+            
+            // Emit comparison and conditional jumps for each case
+            let i = 0;
+            loop(i < case_count, 100) {
+                let case_node = int_to_ptr(get_at(cases, i));
+                let pattern = get_at(case_node, 1);  // Integer pattern value
+                let body = int_to_ptr(get_at(case_node, 2));
+                
+                // Allocate register for comparison result
+                let alloc_result = alloc_reg(state);
+                let cmp_reg = get_at(alloc_result, 0);
+                state = int_to_ptr(get_at(alloc_result, 1));
+                
+                // Compare discriminant with pattern: disc == pattern
+                let pattern_const = make_inst_constant(cmp_reg, pattern, 0);
+                state = emit(state, pattern_const);
+                
+                let eq_reg_result = alloc_reg(state);
+                let eq_reg = get_at(eq_reg_result, 0);
+                state = int_to_ptr(get_at(eq_reg_result, 1));
+                
+                let eq_inst = make_inst_binop(INST_EQ(), eq_reg, disc_reg, cmp_reg);
+                state = emit(state, eq_inst);
+                
+                // Jump to case body if match
+                let jump_if_inst = [0, 0, 0, 0];
+                jump_if_inst = set_at(jump_if_inst, 0, INST_IF());
+                jump_if_inst = set_at(jump_if_inst, 1, eq_reg);
+                jump_if_inst = set_at(jump_if_inst, 2, get_pc(state) + 1);  // then: next instruction
+                jump_if_inst = set_at(jump_if_inst, 3, 0);  // else: patch later
+                let jump_pc = get_pc(state);
+                state = emit(state, jump_if_inst);
+                
+                // Lower case body
+                let body_len = array_len(body);
+                let j = 0;
+                loop(j < body_len, 1000) {
+                    let body_stmt = int_to_ptr(get_at(body, j));
+                    state = lower_stmt(state, body_stmt);
+                    j = j + 1;
+                }
+                
+                // Jump to end after case body
+                let end_jump = make_inst_jump(0);
+                let end_jump_pc = get_pc(state);
+                state = emit(state, end_jump);
+                case_jumps = push(case_jumps, end_jump_pc);
+                
+                // Patch the else branch of the if to continue to next case
+                let next_case_pc = get_pc(state);
+                state = patch_instruction(state, jump_pc, 
+                    set_at(jump_if_inst, 3, next_case_pc));
+                
+                i = i + 1;
+            }
+            
+            // Default case (if present)
+            let default_len = array_len(default_body);
+            let d = 0;
+            loop(d < default_len, 1000) {
+                let default_stmt = int_to_ptr(get_at(default_body, d));
+                state = lower_stmt(state, default_stmt);
+                d = d + 1;
+            }
+            
+            // Patch all end jumps to after default
+            let end_pc = get_pc(state);
+            let patch_len = array_len(case_jumps);
+            let p = 0;
+            loop(p < patch_len, 100) {
+                let jump_pc = get_at(case_jumps, p);
+                let end_jump = make_inst_jump(end_pc);
+                state = patch_instruction(state, jump_pc, end_jump);
+                p = p + 1;
+            }
         },
         _ => {
             print("Error: unknown statement type ");

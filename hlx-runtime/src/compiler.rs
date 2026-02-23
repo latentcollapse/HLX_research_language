@@ -1,3 +1,20 @@
+//! Bootstrap Compiler — Direct source-to-bytecode (legacy path)
+//!
+//! This is HLX's original compilation pipeline: it tokenizes source code with
+//! its own lexer and emits bytecode directly, without producing an AST.
+//!
+//! **Canonical pipeline** (preferred): `AstParser` → `Lowerer` → Bytecode
+//!   - Produces an inspectable AST that RSI can safely modify
+//!   - Supports AST transformations, rendering, and visitor patterns
+//!   - See `ast_parser.rs` and `lowerer.rs`
+//!
+//! **This compiler** is retained for:
+//!   - Backward compatibility with existing examples (`debug_fib`, `debug_loop`, etc.)
+//!   - Reference implementation for bytecode emission patterns
+//!   - Bootstrap testing independent of the AST layer
+//!
+//! New code should use `AstParser::parse()` + `Lowerer::lower()` instead.
+
 use crate::{Bytecode, Opcode, Value};
 use std::collections::HashMap;
 
@@ -529,7 +546,7 @@ impl Compiler {
     fn compile_expr(
         &mut self,
         tokens: &[Token],
-        mut pos: usize,
+        pos: usize,
         dst: u8,
     ) -> Result<usize, CompileError> {
         self.compile_expr_with_precedence(tokens, pos, dst, 0)
@@ -818,7 +835,7 @@ impl Compiler {
             }
         }
 
-        let level_idx = self.get_or_add_string(&level);
+        let _level_idx = self.get_or_add_string(&level);
         self.emit(Opcode::CycleBegin);
         self.emit_u8(0);
         self.emit_u8(0);
@@ -972,6 +989,7 @@ enum Token {
     Or,
     Amp,
     Pipe,
+    #[allow(dead_code)]
     Arrow,
     Recursive,
     Agent,
@@ -982,7 +1000,7 @@ enum Token {
     Outer,
     Inner,
     When,
-    Unknown(char),
+    Unknown(#[allow(dead_code)] char),
 }
 
 #[cfg(test)]

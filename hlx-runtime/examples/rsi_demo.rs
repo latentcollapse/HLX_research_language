@@ -176,7 +176,7 @@ fn demo_full_rsi_cycle() {
     bc.emit_u32(0);
     bc.emit_u8(12);
 
-    let cycle_proposal = bc.add_string("cycle_config".to_string());
+    let _cycle_proposal = bc.add_string("cycle_config".to_string());
     bc.emit(Opcode::RSIPropose);
     bc.emit_u8(20);
     bc.emit_u8(1);

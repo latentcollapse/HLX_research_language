@@ -86,6 +86,7 @@ pub fn get_global_allocation() -> usize {
     GLOBAL_TENSOR_ALLOCATION.load(Ordering::Relaxed)
 }
 
+#[allow(dead_code)]
 pub fn get_global_limit() -> usize {
     GLOBAL_ALLOCATION_LIMIT.load(Ordering::Relaxed)
 }
@@ -98,10 +99,21 @@ pub fn reset_global_allocation() {
     GLOBAL_TENSOR_ALLOCATION.store(0, Ordering::Relaxed);
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Tensor {
     pub data: Vec<f64>,
     pub shape: Vec<usize>,
+}
+
+impl Clone for Tensor {
+    fn clone(&self) -> Self {
+        let size = self.data.len();
+        GLOBAL_TENSOR_ALLOCATION.fetch_add(size, Ordering::Relaxed);
+        Tensor {
+            data: self.data.clone(),
+            shape: self.shape.clone(),
+        }
+    }
 }
 
 impl Drop for Tensor {
@@ -314,7 +326,7 @@ impl Tensor {
 
         let spec = reader.spec();
         let channels = spec.channels as usize;
-        let sample_rate = spec.sample_rate;
+        let _sample_rate = spec.sample_rate;
 
         let samples: Vec<f64> = match spec.sample_format {
             hound::SampleFormat::Float => reader
@@ -1076,7 +1088,7 @@ mod tests {
         setup();
         let mut tensor = Tensor::zeros(vec![2, 50]);
         for i in 0..50 {
-            tensor.data[i] = (i as f64 / 50.0);
+            tensor.data[i] = i as f64 / 50.0;
             tensor.data[50 + i] = 1.0 - (i as f64 / 50.0);
         }
 

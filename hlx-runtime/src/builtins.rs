@@ -488,7 +488,6 @@ pub fn builtin_audio_normalize(args: &[Value]) -> RuntimeResult<Value> {
 mod tests {
     use super::*;
     use crate::tensor::Tensor;
-    use image::ImageFormat;
     use serial_test::serial;
 
     fn setup() {

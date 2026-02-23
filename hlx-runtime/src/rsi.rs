@@ -359,6 +359,16 @@ impl AgentMemory {
     pub fn from_llm_output(output: &str) -> RuntimeResult<Self> {
         let mut memory = AgentMemory::new();
 
+        // Schema validation constants
+        const MIN_LEARNING_RATE: f64 = 0.0;
+        const MAX_LEARNING_RATE: f64 = 1.0;
+        const MIN_EXPLORATION: f64 = 0.0;
+        const MAX_EXPLORATION: f64 = 1.0;
+        const MIN_CONFIDENCE_THRESHOLD: f64 = 0.0;
+        const MAX_CONFIDENCE_THRESHOLD: f64 = 1.0;
+        const MIN_CYCLES: u32 = 1;
+        const MAX_CYCLES: u32 = 100;
+
         for line in output.lines() {
             let line = line.trim();
 
@@ -371,21 +381,73 @@ impl AgentMemory {
                     if let Ok(value) = value_str.parse::<f64>() {
                         match key {
                             "learning_rate" => {
+                                // Schema validation: learning_rate must be in [0, 1]
+                                if value < MIN_LEARNING_RATE || value > MAX_LEARNING_RATE {
+                                    return Err(RuntimeError::new(
+                                        format!(
+                                            "learning_rate {} out of bounds [{}, {}]",
+                                            value, MIN_LEARNING_RATE, MAX_LEARNING_RATE
+                                        ),
+                                        0,
+                                    ));
+                                }
                                 memory.parameters.insert("learning_rate".to_string(), value);
                             }
                             "exploration" => {
+                                if value < MIN_EXPLORATION || value > MAX_EXPLORATION {
+                                    return Err(RuntimeError::new(
+                                        format!(
+                                            "exploration {} out of bounds [{}, {}]",
+                                            value, MIN_EXPLORATION, MAX_EXPLORATION
+                                        ),
+                                        0,
+                                    ));
+                                }
                                 memory.parameters.insert("exploration".to_string(), value);
                             }
                             "confidence_threshold" => {
+                                if value < MIN_CONFIDENCE_THRESHOLD
+                                    || value > MAX_CONFIDENCE_THRESHOLD
+                                {
+                                    return Err(RuntimeError::new(
+                                        format!(
+                                            "confidence_threshold {} out of bounds [{}, {}]",
+                                            value,
+                                            MIN_CONFIDENCE_THRESHOLD,
+                                            MAX_CONFIDENCE_THRESHOLD
+                                        ),
+                                        0,
+                                    ));
+                                }
                                 memory
                                     .parameters
                                     .insert("confidence_threshold".to_string(), value);
                             }
                             "H_cycles" => {
-                                memory.cycle_config.0 = value as u32;
+                                let cycles = value as u32;
+                                if cycles < MIN_CYCLES || cycles > MAX_CYCLES {
+                                    return Err(RuntimeError::new(
+                                        format!(
+                                            "H_cycles {} out of bounds [{}, {}]",
+                                            cycles, MIN_CYCLES, MAX_CYCLES
+                                        ),
+                                        0,
+                                    ));
+                                }
+                                memory.cycle_config.0 = cycles;
                             }
                             "L_cycles" => {
-                                memory.cycle_config.1 = value as u32;
+                                let cycles = value as u32;
+                                if cycles < MIN_CYCLES || cycles > MAX_CYCLES {
+                                    return Err(RuntimeError::new(
+                                        format!(
+                                            "L_cycles {} out of bounds [{}, {}]",
+                                            cycles, MIN_CYCLES, MAX_CYCLES
+                                        ),
+                                        0,
+                                    ));
+                                }
+                                memory.cycle_config.1 = cycles;
                             }
                             _ => {}
                         }
