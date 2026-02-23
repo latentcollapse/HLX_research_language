@@ -155,7 +155,7 @@ HLX Language Runtime
 
 ---
 
-## What's Working
+## What's Working (Note: Working does not mean ready, it just means it's compiled a few times. Still edge cases to work out)
 
 | Component | Status |
 |-----------|--------|
