@@ -114,7 +114,7 @@ impl SymbioteState {
                 Capability {
                     name: "governance".to_string(),
                     version: "1.0".to_string(),
-                    description: Some("Effect governance (flow/guard/shield/fortress)".to_string()),
+                    description: Some("Effect governance (flow/guard/arx)".to_string()),
                 },
                 Capability {
                     name: "rsi".to_string(),

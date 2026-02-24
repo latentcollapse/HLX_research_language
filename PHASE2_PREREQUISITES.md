@@ -614,9 +614,183 @@ This document is the map of that gap.
 
 ---
 
-*Written by Claude Opus 4.6 + latentcollapse*
-*HLX Project — Phase 2 Safety Architecture*
-*2026-02-22 — Working Draft*
+---
 
-*Depends on: `on_the_necessity_of_destruction.md`*
-*Informs: Phase 2 LoRA implementation (future)*
+## Operational Prerequisites: Community & Sustainability
+
+The technical prerequisites above are load-bearing for safety. These operational prerequisites
+are load-bearing for external contribution and reproducibility. Without them, only those with
+institutional knowledge can navigate development and testing.
+
+---
+
+### OP-CI — Continuous Integration Pipeline
+
+**Requirement:**
+Automated testing on every commit. Pass/fail signal visible on GitHub. Tests run across Linux/macOS.
+
+**Why necessary:**
+Contributors cannot know whether their changes broke anything without CI. Flaky tests become
+hidden liabilities. Safety-critical code without CI feedback is code without oversight.
+
+**What "complete" means:**
+- `.github/workflows/test.yml`: Run `cargo test --all` on push/PR
+- `.github/workflows/fmt.yml`: `cargo fmt --check` and `cargo clippy`
+- `.github/workflows/build.yml`: `cargo build --release` for Linux + macOS
+- Badge in README showing test status
+- GitHub branch protection: block merge until CI passes
+- Tests complete in <5 minutes (fast feedback loop)
+
+**Current status:** Not implemented.
+
+---
+
+### OP-CONTRIB — Contributing Guide
+
+**Requirement:**
+New contributors can clone, build, run tests, and submit changes in <30 minutes without
+asking questions.
+
+**What "complete" means:**
+
+**File: `CONTRIBUTING.md`**
+```markdown
+## Getting Started
+
+### Prerequisites
+- Rust 1.70+
+- Python 3.10+
+- rocq (for formal proofs) — optional for first-time contributors
+
+### Build
+\`\`\`bash
+git clone https://github.com/latentcollapse/hlx
+cd hlx
+cargo build --release
+cargo test
+\`\`\`
+
+### Run Examples
+\`\`\`bash
+cargo run --example embed_verify  # Verify policy engine
+cargo run --example redteam_attack_suite  # Run security tests
+\`\`\`
+
+### Code Style
+- Format: \`cargo fmt\`
+- Lint: \`cargo clippy -- -D warnings\`
+- Tests: Every public API must have tests
+
+### Phase 2 Readiness Checklist
+- [ ] Understand P1-P8 prerequisites from PHASE2_PREREQUISITES.md
+- [ ] Understand the three-mode architecture (Flow/Guard/Arx)
+- [ ] Have reviewed Axiom policy file format
+- [ ] Have read SECURITY_TESTING.md (if contributing governance changes)
+
+### Questions?
+- Architecture: See README.md + HLX_RUNTIME_SPEC.md
+- Phase 2: See PHASE2_PREREQUISITES.md
+- Safety: See on_the_necessity_of_destruction.md
+```
+
+**Current status:** Does not exist.
+
+---
+
+### OP-MAKE — Developer Makefile
+
+**Requirement:**
+Common tasks have one-command shortcuts. Barriers to repeated testing are reduced.
+
+**What "complete" means:**
+
+**File: `Makefile`**
+```makefile
+.PHONY: build test fmt lint clean help
+
+build:
+	cargo build --release
+
+test:
+	cargo test --all
+
+test-fast:
+	cargo test --lib
+
+test-adversarial:
+	cargo test --test adversarial_test -- --nocapture
+
+fmt:
+	cargo fmt
+
+lint:
+	cargo clippy -- -D warnings
+
+lint-fix:
+	cargo clippy --fix --allow-dirty
+
+clean:
+	cargo clean
+
+docs:
+	cargo doc --no-deps --open
+
+help:
+	@echo "HLX development targets:"
+	@echo "  make build              Build release binary"
+	@echo "  make test               Run all tests"
+	@echo "  make test-fast          Run unit tests only (no integration)"
+	@echo "  make test-adversarial   Run red-team attack suite"
+	@echo "  make fmt                Format code"
+	@echo "  make lint               Check style and warnings"
+	@echo "  make lint-fix           Auto-fix lint warnings"
+	@echo "  make clean              Remove build artifacts"
+	@echo "  make docs               Generate and open documentation"
+```
+
+**Current status:** Does not exist.
+
+---
+
+### OP-PHASE2-ARCH — Three-Mode Consolidation (COMPLETE)
+
+**Decision:** Guard and Shield have been consolidated. The architecture is now
+**Flow → Guard → Arx** across Axiom (standalone), HLX runtime, and axiom::hlx::lib.
+
+**Rationale:** Guard and Shield differed by exactly one axis — whether trust tags
+were inferred. For a safety language whose purpose is trust enforcement, inferring
+trust was the wrong default. Old Shield's semantics (trust-explicit) became the new
+Guard. Old Guard's "show inferred" behavior became a compiler flag (`--show-inferred`),
+not a semantic mode.
+
+**What changed:**
+- `InferenceMode` enum: `{Flow, Guard, Shield, Fortress}` → `{Flow, Guard, Arx}`
+- Flow: infer everything (prototyping). Guard: trust explicit (production default).
+  Arx: everything explicit (formal verification).
+- Backward compat: `#shield` → Guard, `#fortress` → Arx (deprecated aliases)
+- Lexer tokens: `PragmaShield`/`PragmaFortress` → `PragmaArx` (shield/fortress
+  keywords map to Guard/Arx in the lexer for backward compat)
+
+**Design document:** `~/Axiom_Policy_Engine/THREE_MODE_CONSOLIDATION.md`
+
+**Current status:** ✅ Implemented in Axiom standalone and axiom-hlx-stdlib.
+Remaining: absorb `shader_attestation.rs` into Guard subsystem in hlx-runtime
+as a `GuardGate` trait impl (not blocking for Phase 2).
+
+---
+
+## Operational Implementation Order
+
+```
+Week 1 (Unblock contributors):
+  1. OP-CONTRIB — CONTRIBUTING.md (no code changes needed, just documentation)
+  2. OP-MAKE — Makefile (10 minutes, improves DX)
+
+Week 2 (Automated safety):
+  3. OP-CI — GitHub Actions workflows
+  4. OP-PHASE2-ARCH — ✅ COMPLETE (Flow → Guard → Arx)
+
+Then: Phase 2 safety prerequisites (P1-P8) can proceed with contributor support
+```
+
+---
