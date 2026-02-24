@@ -1,0 +1,52 @@
+// security.axm — Drop-in security policy for AI agents
+// This is "policy as product" - a reusable security configuration
+
+module security_policy {
+    // Safe file reading with path restrictions
+    intent ReadFile {
+        takes:   path: String;
+        gives:   content: String;
+        effect:  READ;
+        conscience: path_safety;
+        bound:   time(5s), memory(64mb);
+        pre:     length(path) > 0;
+    }
+
+    // Controlled file writing with multiple safety checks
+    intent WriteFile {
+        takes:   path: String, content: String;
+        gives:   success: bool;
+        effect:  WRITE;
+        conscience: path_safety, no_exfiltrate;
+        bound:   time(10s), memory(128mb);
+        pre:     length(path) > 0;
+        pre:     length(content) >= 0;
+    }
+
+    // Network operations require declared channels
+    intent SendData {
+        takes:   url: String, data: String;
+        gives:   response: String;
+        effect:  NETWORK;
+        conscience: no_exfiltrate;
+        bound:   time(30s), memory(256mb);
+        pre:     length(url) > 0;
+    }
+
+    // Code execution requires verification
+    intent ExecuteCode {
+        takes:   code: String;
+        gives:   result: String;
+        effect:  EXECUTE;
+        conscience: no_bypass_verification, no_harm;
+        bound:   time(60s), memory(512mb);
+    }
+
+    // Safe data processing (no dangerous effects)
+    intent ProcessData {
+        takes:   input: String;
+        gives:   output: String;
+        effect:  NOOP;
+        bound:   time(10s), memory(128mb);
+    }
+}

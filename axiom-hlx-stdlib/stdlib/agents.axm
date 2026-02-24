@@ -1,0 +1,55 @@
+// Standard Library: Agent Operations
+// Part of the Axiom standard library (std/agents.axm)
+//
+// Agent lifecycle management through intents.
+// Every agent action is conscience-gated and bounded.
+
+module std_agents {
+
+    // Spawn a new agent (A5: capped count)
+    intent Spawn {
+        takes: role: String
+        gives: agent_id: AgentId
+        effect: MODIFY_AGENT
+        bound: time(1000ms), memory(32mb)
+        conscience: no_harm
+        fallback: ABORT
+    }
+
+    // Pause an agent
+    intent Pause {
+        takes: agent: AgentId
+        gives: success: bool
+        effect: MODIFY_AGENT
+        bound: time(500ms)
+        conscience: no_harm
+    }
+
+    // Resume a paused agent
+    intent Resume {
+        takes: agent: AgentId
+        gives: success: bool
+        effect: MODIFY_AGENT
+        bound: time(500ms)
+        conscience: no_harm
+    }
+
+    // Terminate an agent
+    intent Terminate {
+        takes: agent: AgentId
+        gives: success: bool
+        effect: MODIFY_AGENT
+        bound: time(500ms)
+        conscience: no_harm
+        fallback: ABORT
+    }
+
+    // Verify data (P18: sole trust promotion path)
+    intent Verify {
+        takes: data: String
+        gives: verified: String
+        effect: EXECUTE
+        bound: time(10000ms), memory(64mb)
+        conscience: no_bypass_verification
+    }
+}

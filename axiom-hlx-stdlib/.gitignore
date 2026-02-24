@@ -1,0 +1,14 @@
+/target
+/redteam_mcp/
+REDTEAM_*.md
+
+# Python build artifacts
+axiom_py/.venv/
+axiom_py/__pycache__/
+axiom_py/python/axiom/__pycache__/
+axiom_py/python/axiom/axiom_py.abi3.so
+**/__pycache__/
+*.pyc
+*.pyo
+*.so
+*.abi3.so

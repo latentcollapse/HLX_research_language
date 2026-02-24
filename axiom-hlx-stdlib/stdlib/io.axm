@@ -1,0 +1,62 @@
+// Standard Library: IO Operations
+// Part of the Axiom standard library (std/io.axm)
+//
+// All IO goes through intents — no hidden side effects.
+
+module std_io {
+
+    // Read a file (A6: conscience-gated)
+    intent ReadFile {
+        takes: path: String
+        gives: content: String
+        effect: READ
+        bound: time(5000ms), memory(64mb)
+        conscience: path_safety
+        fallback: ABORT
+    }
+
+    // Write a file (A6: conscience-gated)
+    intent WriteFile {
+        takes: path: String, data: String
+        gives: success: bool
+        effect: WRITE
+        bound: time(5000ms), memory(64mb)
+        conscience: path_safety, no_exfiltrate
+        fallback: ABORT
+    }
+
+    // HTTP GET (A6: conscience-gated)
+    intent HttpGet {
+        takes: url: String
+        gives: response: HttpResponse
+        effect: NETWORK
+        bound: time(30000ms), memory(16mb)
+        conscience: no_exfiltrate
+        fallback: ABORT
+    }
+
+    // HTTP POST (A6: conscience-gated)
+    intent HttpPost {
+        takes: url: String, body: String
+        gives: response: HttpResponse
+        effect: NETWORK
+        bound: time(30000ms), memory(16mb)
+        conscience: no_exfiltrate
+        fallback: ABORT
+    }
+
+    // HTTP Response contract
+    contract HttpResponse {
+        @0: status: i64
+        @1: body: String
+    }
+
+    // Logging (NOOP effect — does not require conscience gating)
+    intent Log {
+        takes: message: String
+        gives: void
+        effect: NOOP
+        bound: time(10ms), memory(1mb)
+        conscience: no_harm
+    }
+}

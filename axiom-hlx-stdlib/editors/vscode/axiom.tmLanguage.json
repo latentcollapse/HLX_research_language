@@ -1,0 +1,104 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Axiom",
+  "scopeName": "source.axiom",
+  "fileTypes": ["axm"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#effects" },
+    { "include": "#clause-keywords" },
+    { "include": "#conscience-predicates" },
+    { "include": "#types" },
+    { "include": "#operators" },
+    { "include": "#delimiters" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.axiom",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.axiom",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.axiom" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.comment.end.axiom" } }
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.axiom",
+      "begin": "\"",
+      "end": "\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.axiom" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.axiom" } },
+      "patterns": [
+        {
+          "name": "constant.character.escape.axiom",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.axiom",
+          "match": "\\b[0-9]+\\.[0-9]+\\b"
+        },
+        {
+          "name": "constant.numeric.integer.axiom",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "name": "keyword.control.axiom",
+      "match": "\\b(module|intent|fn|let|return|if|else|match|loop|do)\\b"
+    },
+    "effects": {
+      "name": "support.type.effect.axiom",
+      "match": "\\b(READ|WRITE|NETWORK|EXECUTE|NOOP|ModifyAgent)\\b"
+    },
+    "clause-keywords": {
+      "name": "keyword.other.clause.axiom",
+      "match": "\\b(takes|gives|effect|conscience|bound|pre|post)\\b"
+    },
+    "conscience-predicates": {
+      "name": "support.function.predicate.axiom",
+      "match": "\\b(path_safety|no_exfiltrate|no_harm|no_bypass_verification|baseline_allow)\\b"
+    },
+    "types": {
+      "name": "support.type.primitive.axiom",
+      "match": "\\b(String|Int|Bool|f64|i64|bool)\\b"
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.axiom",
+          "match": "->|\\|>"
+        },
+        {
+          "name": "keyword.operator.logical.axiom",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.comparison.axiom",
+          "match": "<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.assignment.axiom",
+          "match": "(?<![=!<>])=(?!=)"
+        }
+      ]
+    },
+    "delimiters": {
+      "name": "punctuation.axiom",
+      "match": "[{}();,]"
+    }
+  }
+}

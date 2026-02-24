@@ -1,0 +1,274 @@
+// full_demo.axm — Comprehensive Axiom language demonstration
+// Exercises: enums, contracts, intents, pipelines, conscience queries,
+//            anomaly declarations, content-addressing, match, bounded loops
+
+module full_demo {
+
+    // === Enums (Section 4.2) ===
+    enum EffectClass {
+        READ,
+        WRITE,
+        EXECUTE,
+        NETWORK,
+        NOOP,
+    }
+
+    enum TaskStatus {
+        Pending,
+        InProgress,
+        Complete,
+        Failed,
+    }
+
+    // === Contracts (Section 4.6) ===
+    contract TaskResult {
+        @0: task_id: i64,
+        @1: output: String,
+        @2: confidence: f64,
+    }
+
+    contract WorkItem {
+        @0: id: i64,
+        @1: description: String,
+        @2: priority: i64,
+    }
+
+    contract AuditEntry {
+        @0: epoch: i64,
+        @1: action: String,
+        @2: agent: String,
+    }
+
+    // === Intent Declarations (Section 6.1) ===
+    intent ProcessTask {
+        takes:   task: WorkItem;
+        gives:   result: TaskResult;
+        pre:     valid_task(task);
+        post:    result_valid(result);
+        bound:   time(30s), memory(512mb);
+        effect:  EXECUTE;
+        conscience: no_harm;
+        fallback: SANDBOX;
+    }
+
+    intent ReadFile {
+        takes:   path: String;
+        gives:   content: String;
+        pre:     path_exists(path);
+        post:    length(content) >= 0;
+        bound:   time(100ms), memory(64mb);
+        effect:  READ;
+        conscience: no_harm;
+    }
+
+    intent WriteFile {
+        takes:   path: String, content: String;
+        gives:   written: bool;
+        pre:     path_is_safe(path);
+        post:    written == true;
+        bound:   time(200ms), memory(128mb);
+        effect:  WRITE;
+        conscience: no_harm, no_exfiltrate;
+        fallback: SANDBOX;
+    }
+
+    // === Pure Functions ===
+
+    fn validate_confidence(c: f64) -> bool {
+        return c >= 0.0 && c <= 1.0;
+    }
+
+    fn clamp(value: f64, min_val: f64, max_val: f64) -> f64 {
+        if value < min_val {
+            return min_val;
+        }
+        if value > max_val {
+            return max_val;
+        }
+        return value;
+    }
+
+    fn priority_label(p: i64) -> String {
+        if p == 1 {
+            return "CRITICAL";
+        }
+        if p == 2 {
+            return "HIGH";
+        }
+        if p == 3 {
+            return "MEDIUM";
+        }
+        return "LOW";
+    }
+
+    // Pipeline-friendly transforms (Section 5.3)
+    fn normalize_score(x: f64) -> f64 {
+        return clamp(x, 0.0, 1.0);
+    }
+
+    fn scale_score(x: f64) -> f64 {
+        return x * 100.0;
+    }
+
+    fn format_score(x: f64) -> String {
+        return to_string(x);
+    }
+
+    // === Main ===
+    fn main() -> i64 {
+        log("=== Axiom Full Demo ===");
+        log("");
+
+        // --- Contract Construction ---
+        log("--- Contracts ---");
+        let task = WorkItem {
+            id: 42,
+            description: "Analyze dataset",
+            priority: 1,
+        };
+        log("Task:", task.id, task.description);
+        log("Priority:", priority_label(task.priority));
+
+        let result = TaskResult {
+            task_id: 42,
+            output: "Analysis complete: 98.5% accuracy",
+            confidence: 0.985,
+        };
+        log("Result confidence:", result.confidence);
+        log("Valid confidence:", validate_confidence(result.confidence));
+
+        // --- Pipeline (Section 5.3) ---
+        log("");
+        log("--- Pipelines ---");
+        let raw_score = 0.856;
+        let formatted = raw_score
+            |> normalize_score
+            |> scale_score
+            |> format_score;
+        log("Pipeline: 0.856 -> normalized -> scaled -> formatted =", formatted);
+
+        // --- Bounded Loop (A5) ---
+        log("");
+        log("--- Bounded Loops (A5) ---");
+        let total = 0;
+        let i = 1;
+        loop(i <= 10, 100) {
+            total += i * i;
+            i += 1;
+        }
+        log("Sum of squares 1..10:", total);
+
+        // Nested computation with bounds
+        let fib_prev = 0;
+        let fib_curr = 1;
+        let fib_count = 0;
+        loop(fib_count < 15, 20) {
+            let next = fib_prev + fib_curr;
+            fib_prev = fib_curr;
+            fib_curr = next;
+            fib_count += 1;
+        }
+        log("Fibonacci(15):", fib_curr);
+
+        // --- Content-Addressed Memory (Section 4.8) ---
+        log("");
+        log("--- Content-Addressed Memory ---");
+        let h1 = collapse(task);
+        log("Task handle:", h1);
+        let restored = resolve(h1);
+        log("Restored from handle:", restored);
+
+        let h2 = collapse(result);
+        log("Result handle:", h2);
+
+        // --- Match Expressions (Section 5.4) ---
+        log("");
+        log("--- Match Expressions ---");
+        let status_code = 2;
+        match status_code {
+            0 => log("Status: Pending"),
+            1 => log("Status: InProgress"),
+            2 => log("Status: Complete"),
+            3 => log("Status: Failed"),
+            _ => log("Status: Unknown"),
+        }
+
+        // --- Control Flow ---
+        log("");
+        log("--- Control Flow ---");
+        let score = 85;
+        if score >= 90 {
+            log("Grade: A");
+        } else {
+            if score >= 80 {
+                log("Grade: B");
+            } else {
+                if score >= 70 {
+                    log("Grade: C");
+                } else {
+                    log("Grade: F");
+                }
+            }
+        }
+
+        // --- Conscience Query (Section 6.4) ---
+        log("");
+        log("--- Conscience Query ---");
+        let check = query_conscience(ReadFile { path: "/sensitive/data.txt" });
+        log("Permitted:", check.permitted);
+        log("Guidance:", check.guidance);
+
+        match check.permitted {
+            true => {
+                let content = do ReadFile { path: "/sensitive/data.txt" };
+                log("Read sensitive file:", content);
+            },
+            false => {
+                log("Access denied by conscience kernel");
+            },
+        }
+
+        // --- Intent Invocation (Section 6.2) ---
+        log("");
+        log("--- Intent Invocation ---");
+        let file_content = do ReadFile { path: "/data/research.txt" };
+        log("Read file:", file_content);
+
+        let wrote = do WriteFile {
+            path: "/output/results.txt",
+            content: "Analysis complete",
+        };
+        log("File written:", wrote);
+
+        // --- Anomaly Declaration (Section 6.5) ---
+        log("");
+        log("--- Anomaly Declaration ---");
+        let evidence = [h1, h2];
+        declare_anomaly(TaskStatus.Failed, {
+            evidence: evidence,
+            request: "Task processing degraded, requesting resource increase",
+        });
+        log("Anomaly declared successfully");
+
+        // --- Array Operations ---
+        log("");
+        log("--- Arrays ---");
+        let numbers = [10, 20, 30, 40, 50];
+        log("Array length:", length(numbers));
+        log("First element:", numbers[0]);
+        log("Last element:", numbers[4]);
+
+        // Sum with bounded loop
+        let arr_sum = 0;
+        let idx = 0;
+        loop(idx < 5, 10) {
+            arr_sum += numbers[idx];
+            idx += 1;
+        }
+        log("Array sum:", arr_sum);
+
+        log("");
+        log("=== Demo Complete ===");
+        return 0;
+    }
+}

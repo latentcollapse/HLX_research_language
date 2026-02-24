@@ -1,0 +1,25 @@
+{
+  "name": "axiom",
+  "displayName": "Axiom",
+  "description": "Syntax highlighting for Axiom policy files (.axm)",
+  "version": "0.1.0",
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "axiom",
+        "aliases": ["Axiom", "axm"],
+        "extensions": [".axm"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "axiom",
+        "scopeName": "source.axiom",
+        "path": "./axiom.tmLanguage.json"
+      }
+    ]
+  }
+}

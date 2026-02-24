@@ -1,0 +1,68 @@
+DIGEST a628543a4a81ea6374bd18fc52da8f47
+FAxiom.G6_Totality
+R1047:1056 Axiom.AxiomTypes <> <> lib
+R1074:1084 Axiom.AxiomVerify <> <> lib
+prf 1213:1235 <> verify_predicates_total
+R1257:1260 Corelib.Init.Datatypes <> list ind
+R1262:1270 Axiom.AxiomTypes <> Predicate ind
+binder 1249:1253 <> preds:1
+R1280:1285 Axiom.AxiomTypes <> Effect ind
+binder 1274:1276 <> eff:2
+R1298:1303 Axiom.AxiomTypes <> Fields def
+binder 1289:1294 <> fields:3
+R1309:1315 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R1327:1328 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R1320:1326 Axiom.AxiomTypes <> Verdict ind
+binder 1316:1316 <> v:4
+R1363:1365 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1329:1345 Axiom.AxiomVerify <> verify_predicates def
+R1347:1351 Axiom.G6_Totality <> preds:1 var
+R1353:1355 Axiom.G6_Totality <> eff:2 var
+R1357:1362 Axiom.G6_Totality <> fields:3 var
+R1366:1366 Axiom.G6_Totality <> v:4 var
+R1474:1480 Axiom.AxiomTypes <> Allowed constr
+R1474:1480 Axiom.AxiomTypes <> Allowed constr
+R1544:1557 Axiom.AxiomVerify <> eval_predicate defax
+R1544:1557 Axiom.AxiomVerify <> eval_predicate defax
+R1678:1683 Axiom.AxiomTypes <> Denied constr
+R1678:1683 Axiom.AxiomTypes <> Denied constr
+prf 1773:1783 <> G6_totality
+R1806:1811 Axiom.AxiomTypes <> Intent rec
+binder 1797:1802 <> intent:5
+R1824:1829 Axiom.AxiomTypes <> Fields def
+binder 1815:1820 <> fields:6
+R1835:1841 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R1853:1854 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R1846:1852 Axiom.AxiomTypes <> Verdict ind
+binder 1842:1842 <> v:7
+R1875:1877 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1855:1860 Axiom.AxiomVerify <> verify def
+R1862:1867 Axiom.G6_Totality <> intent:5 var
+R1869:1874 Axiom.G6_Totality <> fields:6 var
+R1878:1878 Axiom.G6_Totality <> v:7 var
+R1921:1926 Axiom.AxiomVerify <> verify def
+R1937:1959 Axiom.G6_Totality <> verify_predicates_total thm
+R1937:1959 Axiom.G6_Totality <> verify_predicates_total thm
+prf 2116:2136 <> G6_verdict_exhaustive
+R2159:2164 Axiom.AxiomTypes <> Intent rec
+binder 2150:2155 <> intent:8
+R2177:2182 Axiom.AxiomTypes <> Fields def
+binder 2168:2173 <> fields:9
+R2218:2223 Corelib.Init.Logic <> ::type_scope:x_'\/'_x not
+R2208:2210 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2188:2193 Axiom.AxiomVerify <> verify def
+R2195:2200 Axiom.G6_Totality <> intent:8 var
+R2202:2207 Axiom.G6_Totality <> fields:9 var
+R2211:2217 Axiom.AxiomTypes <> Allowed constr
+R2224:2230 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R2247:2248 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R2235:2246 Axiom.AxiomTypes <> DenialReason rec
+binder 2231:2231 <> r:10
+R2269:2271 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2249:2254 Axiom.AxiomVerify <> verify def
+R2256:2261 Axiom.G6_Totality <> intent:8 var
+R2263:2268 Axiom.G6_Totality <> fields:9 var
+R2272:2277 Axiom.AxiomTypes <> Denied constr
+R2279:2279 Axiom.G6_Totality <> r:10 var
+R2325:2330 Axiom.AxiomVerify <> verify def
+R2325:2330 Axiom.AxiomVerify <> verify def

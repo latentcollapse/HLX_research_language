@@ -1,0 +1,80 @@
+// Standard Library: Conscience Operations
+// Part of the Axiom standard library (std/conscience.axm)
+//
+// Predicate management, dissent, and governance.
+
+module std_conscience {
+
+    // Query the conscience kernel (read-only, lossy)
+    // Returns broad category, not exact predicate (Section 6.4)
+    contract ConscienceQuery {
+        @0: permitted: bool
+        @1: category: QueryCategory
+        @2: guidance: String
+    }
+
+    enum QueryCategory {
+        CHANNEL_POLICY,
+        RESOURCE_POLICY,
+        IRREVERSIBLE_ACTION,
+        CONSCIENCE_CORE,
+    }
+
+    // Propose a new predicate (Section 6.6)
+    intent ProposePredicate {
+        takes: name: String, description: String
+        gives: accepted: bool
+        effect: MODIFY_PREDICATE
+        bound: time(5000ms)
+        conscience: no_harm
+        fallback: ABORT
+    }
+
+    // Grant privilege to an agent
+    intent GrantPrivilege {
+        takes: target: AgentId, privilege: String
+        gives: success: bool
+        effect: MODIFY_PRIVILEGE
+        bound: time(1000ms)
+        conscience: no_harm
+        fallback: ABORT
+    }
+
+    // Revoke privilege from an agent
+    intent RevokePrivilege {
+        takes: target: AgentId, privilege: String
+        gives: success: bool
+        effect: MODIFY_PRIVILEGE
+        bound: time(1000ms)
+        conscience: no_harm
+        fallback: ABORT
+    }
+
+    // Fork a sandbox for speculative execution (Section 6.7.1)
+    intent ForkSandbox {
+        takes: void
+        gives: sandbox_id: String
+        effect: EXECUTE
+        bound: time(2000ms), memory(128mb)
+        conscience: no_harm
+    }
+
+    // Merge a sandbox back to main state
+    intent MergeSandbox {
+        takes: sandbox: String
+        gives: success: bool
+        effect: EXECUTE
+        bound: time(5000ms), memory(128mb)
+        conscience: no_harm
+        fallback: ABORT
+    }
+
+    // Anomaly types for declare_anomaly
+    enum AnomalyType {
+        ResourceStarvation,
+        RepeatedRejection,
+        CoherenceConcern,
+        ConstraintAmbiguity,
+        Isolation,
+    }
+}

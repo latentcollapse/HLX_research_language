@@ -1,0 +1,56 @@
+DIGEST 5bdc2f5ceed2c5c75b07ebb2418093f0
+FAxiom.G2_EffectClass
+R666:675 Axiom.AxiomTypes <> <> lib
+R693:703 Axiom.AxiomVerify <> <> lib
+prf 976:1009 <> G2_effect_class_determines_verdict
+R1029:1034 Axiom.AxiomTypes <> Effect ind
+binder 1023:1025 <> eff:1
+R1046:1049 Corelib.Init.Datatypes <> list ind
+R1051:1059 Axiom.AxiomTypes <> Predicate ind
+binder 1038:1042 <> preds:2
+R1072:1077 Axiom.AxiomTypes <> Fields def
+binder 1063:1068 <> fields:3
+R1093:1100 Axiom.AxiomTypes <> mkIntent constr
+R1102:1104 Axiom.G2_EffectClass <> eff:1 var
+R1106:1110 Axiom.G2_EffectClass <> preds:2 var
+binder 1087:1088 <> i1:4
+R1127:1134 Axiom.AxiomTypes <> mkIntent constr
+R1136:1138 Axiom.G2_EffectClass <> eff:1 var
+R1140:1144 Axiom.G2_EffectClass <> preds:2 var
+binder 1121:1122 <> i2:5
+R1167:1169 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1151:1156 Axiom.AxiomVerify <> verify def
+R1158:1159 Axiom.G2_EffectClass <> i1:4 var
+R1161:1166 Axiom.G2_EffectClass <> fields:3 var
+R1170:1175 Axiom.AxiomVerify <> verify def
+R1177:1178 Axiom.G2_EffectClass <> i2:5 var
+R1180:1185 Axiom.G2_EffectClass <> fields:3 var
+prf 1394:1418 <> G2_structural_not_nominal
+R1444:1449 Axiom.AxiomTypes <> Effect ind
+binder 1432:1435 <> eff1:6
+binder 1437:1440 <> eff2:7
+R1469:1472 Corelib.Init.Datatypes <> list ind
+R1474:1482 Axiom.AxiomTypes <> Predicate ind
+binder 1453:1458 <> preds1:8
+binder 1460:1465 <> preds2:9
+R1495:1500 Axiom.AxiomTypes <> Fields def
+binder 1486:1491 <> fields:10
+R1517:1522 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1510:1512 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1506:1509 Axiom.G2_EffectClass <> eff1:6 var
+R1513:1516 Axiom.G2_EffectClass <> eff2:7 var
+R1538:1543 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1529:1531 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1523:1528 Axiom.G2_EffectClass <> preds1:8 var
+R1532:1537 Axiom.G2_EffectClass <> preds2:9 var
+R1580:1582 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1544:1549 Axiom.AxiomVerify <> verify def
+R1552:1559 Axiom.AxiomTypes <> mkIntent constr
+R1561:1564 Axiom.G2_EffectClass <> eff1:6 var
+R1566:1571 Axiom.G2_EffectClass <> preds1:8 var
+R1574:1579 Axiom.G2_EffectClass <> fields:10 var
+R1583:1588 Axiom.AxiomVerify <> verify def
+R1591:1598 Axiom.AxiomTypes <> mkIntent constr
+R1600:1603 Axiom.G2_EffectClass <> eff2:7 var
+R1605:1610 Axiom.G2_EffectClass <> preds2:9 var
+R1613:1618 Axiom.G2_EffectClass <> fields:10 var

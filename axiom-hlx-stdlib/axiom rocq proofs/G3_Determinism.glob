@@ -1,0 +1,54 @@
+DIGEST 653fcb4c0bac710ddf137b3fe035f873
+FAxiom.G3_Determinism
+R730:739 Axiom.AxiomTypes <> <> lib
+R757:767 Axiom.AxiomVerify <> <> lib
+prf 840:853 <> G3_determinism
+R874:879 Axiom.AxiomTypes <> Intent rec
+binder 865:870 <> intent:1
+R892:897 Axiom.AxiomTypes <> Fields def
+binder 883:888 <> fields:2
+R923:925 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R903:908 Axiom.AxiomVerify <> verify def
+R910:915 Axiom.G3_Determinism <> intent:1 var
+R917:922 Axiom.G3_Determinism <> fields:2 var
+R926:931 Axiom.AxiomVerify <> verify def
+R933:938 Axiom.G3_Determinism <> intent:1 var
+R940:945 Axiom.G3_Determinism <> fields:2 var
+prf 1143:1169 <> G3_determinism_equal_inputs
+R1191:1196 Axiom.AxiomTypes <> Intent rec
+binder 1183:1184 <> i1:3
+binder 1186:1187 <> i2:4
+R1208:1213 Axiom.AxiomTypes <> Fields def
+binder 1200:1201 <> f1:5
+binder 1203:1204 <> f2:6
+R1226:1231 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1221:1223 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1219:1220 Axiom.G3_Determinism <> i1:3 var
+R1224:1225 Axiom.G3_Determinism <> i2:4 var
+R1239:1244 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1234:1236 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1232:1233 Axiom.G3_Determinism <> f1:5 var
+R1237:1238 Axiom.G3_Determinism <> f2:6 var
+R1257:1259 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1245:1250 Axiom.AxiomVerify <> verify def
+R1252:1253 Axiom.G3_Determinism <> i1:3 var
+R1255:1256 Axiom.G3_Determinism <> f1:5 var
+R1260:1265 Axiom.AxiomVerify <> verify def
+R1267:1268 Axiom.G3_Determinism <> i2:4 var
+R1270:1271 Axiom.G3_Determinism <> f2:6 var
+prf 1536:1551 <> G3_thread_safety
+R1574:1579 Axiom.AxiomTypes <> Intent rec
+binder 1565:1570 <> intent:7
+R1592:1597 Axiom.AxiomTypes <> Fields def
+binder 1583:1588 <> fields:8
+R1613:1618 Axiom.AxiomVerify <> verify def
+R1620:1625 Axiom.G3_Determinism <> intent:7 var
+R1627:1632 Axiom.G3_Determinism <> fields:8 var
+binder 1607:1608 <> v1:9
+R1649:1654 Axiom.AxiomVerify <> verify def
+R1656:1661 Axiom.G3_Determinism <> intent:7 var
+R1663:1668 Axiom.G3_Determinism <> fields:8 var
+binder 1643:1644 <> v2:10
+R1677:1679 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1675:1676 Axiom.G3_Determinism <> v1:9 var
+R1680:1681 Axiom.G3_Determinism <> v2:10 var

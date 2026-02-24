@@ -1,0 +1,10 @@
+-R . Axiom
+
+AxiomTypes.v
+AxiomVerify.v
+G1_Purity.v
+G2_EffectClass.v
+G3_Determinism.v
+G4_MonotonicRatchet.v
+G5_SpecificDenial.v
+G6_Totality.v

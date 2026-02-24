@@ -1,0 +1,105 @@
+DIGEST 873b4d671e93dc8d6d9702d263b82eb0
+FAxiom.G4_MonotonicRatchet
+R927:936 Axiom.AxiomTypes <> <> lib
+R954:964 Axiom.AxiomVerify <> <> lib
+prf 1120:1153 <> verify_predicates_denial_preserved
+R1181:1184 Corelib.Init.Datatypes <> list ind
+R1186:1194 Axiom.AxiomTypes <> Predicate ind
+binder 1167:1171 <> preds:1
+binder 1173:1177 <> extra:2
+R1204:1209 Axiom.AxiomTypes <> Effect ind
+binder 1198:1200 <> eff:3
+R1231:1236 Axiom.AxiomTypes <> Fields def
+binder 1222:1227 <> fields:4
+R1244:1255 Axiom.AxiomTypes <> DenialReason rec
+binder 1240:1240 <> r:5
+R1306:1311 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R1295:1297 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1261:1277 Axiom.AxiomVerify <> verify_predicates def
+R1279:1283 Axiom.G4_MonotonicRatchet <> preds:1 var
+R1285:1287 Axiom.G4_MonotonicRatchet <> eff:3 var
+R1289:1294 Axiom.G4_MonotonicRatchet <> fields:4 var
+R1298:1303 Axiom.AxiomTypes <> Denied constr
+R1305:1305 Axiom.G4_MonotonicRatchet <> r:5 var
+R1357:1359 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R1312:1328 Axiom.AxiomVerify <> verify_predicates def
+R1336:1339 Corelib.Init.Datatypes <> ::list_scope:x_'++'_x not
+R1331:1335 Axiom.G4_MonotonicRatchet <> preds:1 var
+R1340:1344 Axiom.G4_MonotonicRatchet <> extra:2 var
+R1347:1349 Axiom.G4_MonotonicRatchet <> eff:3 var
+R1351:1356 Axiom.G4_MonotonicRatchet <> fields:4 var
+R1360:1365 Axiom.AxiomTypes <> Denied constr
+R1367:1367 Axiom.G4_MonotonicRatchet <> r:5 var
+R1684:1697 Axiom.AxiomVerify <> eval_predicate defax
+R1684:1697 Axiom.AxiomVerify <> eval_predicate defax
+prf 2068:2087 <> G4_monotonic_ratchet
+R2107:2112 Axiom.AxiomTypes <> Effect ind
+binder 2101:2103 <> eff:6
+R2130:2133 Corelib.Init.Datatypes <> list ind
+R2135:2143 Axiom.AxiomTypes <> Predicate ind
+binder 2116:2120 <> preds:7
+binder 2122:2126 <> extra:8
+R2165:2170 Axiom.AxiomTypes <> Fields def
+binder 2156:2161 <> fields:9
+R2178:2189 Axiom.AxiomTypes <> DenialReason rec
+binder 2174:2174 <> r:10
+R2240:2245 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2229:2231 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2195:2200 Axiom.AxiomVerify <> verify def
+R2203:2210 Axiom.AxiomTypes <> mkIntent constr
+R2212:2214 Axiom.G4_MonotonicRatchet <> eff:6 var
+R2216:2220 Axiom.G4_MonotonicRatchet <> preds:7 var
+R2223:2228 Axiom.G4_MonotonicRatchet <> fields:9 var
+R2232:2237 Axiom.AxiomTypes <> Denied constr
+R2239:2239 Axiom.G4_MonotonicRatchet <> r:10 var
+R2291:2293 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2246:2251 Axiom.AxiomVerify <> verify def
+R2254:2261 Axiom.AxiomTypes <> mkIntent constr
+R2263:2265 Axiom.G4_MonotonicRatchet <> eff:6 var
+R2273:2276 Corelib.Init.Datatypes <> ::list_scope:x_'++'_x not
+R2268:2272 Axiom.G4_MonotonicRatchet <> preds:7 var
+R2277:2281 Axiom.G4_MonotonicRatchet <> extra:8 var
+R2285:2290 Axiom.G4_MonotonicRatchet <> fields:9 var
+R2294:2299 Axiom.AxiomTypes <> Denied constr
+R2301:2301 Axiom.G4_MonotonicRatchet <> r:10 var
+R2357:2362 Axiom.AxiomVerify <> verify def
+R2392:2425 Axiom.G4_MonotonicRatchet <> verify_predicates_denial_preserved thm
+R2392:2425 Axiom.G4_MonotonicRatchet <> verify_predicates_denial_preserved thm
+prf 2518:2529 <> G4_no_undeny
+R2549:2554 Axiom.AxiomTypes <> Effect ind
+binder 2543:2545 <> eff:11
+R2572:2575 Corelib.Init.Datatypes <> list ind
+R2577:2585 Axiom.AxiomTypes <> Predicate ind
+binder 2558:2562 <> preds:12
+binder 2564:2568 <> extra:13
+R2598:2603 Axiom.AxiomTypes <> Fields def
+binder 2589:2594 <> fields:14
+R2609:2609 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2665:2672 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2739:2739 Corelib.Init.Logic <> ::type_scope:x_'->'_x not
+R2610:2616 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R2618:2619 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+binder 2617:2617 <> r:15
+R2654:2656 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2620:2625 Axiom.AxiomVerify <> verify def
+R2628:2635 Axiom.AxiomTypes <> mkIntent constr
+R2637:2639 Axiom.G4_MonotonicRatchet <> eff:11 var
+R2641:2645 Axiom.G4_MonotonicRatchet <> preds:12 var
+R2648:2653 Axiom.G4_MonotonicRatchet <> fields:14 var
+R2657:2662 Axiom.AxiomTypes <> Denied constr
+R2664:2664 Axiom.G4_MonotonicRatchet <> r:15 var
+R2673:2679 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+R2681:2682 Corelib.Init.Logic <> ::type_scope:'exists'_x_'..'_x_','_x not
+binder 2680:2680 <> r:16
+R2728:2730 Corelib.Init.Logic <> ::type_scope:x_'='_x not
+R2683:2688 Axiom.AxiomVerify <> verify def
+R2691:2698 Axiom.AxiomTypes <> mkIntent constr
+R2700:2702 Axiom.G4_MonotonicRatchet <> eff:11 var
+R2710:2713 Corelib.Init.Datatypes <> ::list_scope:x_'++'_x not
+R2705:2709 Axiom.G4_MonotonicRatchet <> preds:12 var
+R2714:2718 Axiom.G4_MonotonicRatchet <> extra:13 var
+R2722:2727 Axiom.G4_MonotonicRatchet <> fields:14 var
+R2731:2736 Axiom.AxiomTypes <> Denied constr
+R2738:2738 Axiom.G4_MonotonicRatchet <> r:16 var
+R2809:2828 Axiom.G4_MonotonicRatchet <> G4_monotonic_ratchet thm
+R2809:2828 Axiom.G4_MonotonicRatchet <> G4_monotonic_ratchet thm
