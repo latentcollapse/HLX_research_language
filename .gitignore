@@ -64,3 +64,48 @@ hlx/test_typed_simple
 # External repos (not submodules)
 Axiom-main/
 TinyRecursiveModels-main/
+
+# ── Source Code (locked — binary-only distribution) ────────
+# Axiom engine source
+axiom-hlx-stdlib/src/
+axiom-hlx-stdlib/axiom_py/src/
+axiom-hlx-stdlib/axiom_py/python/axiom/bit.py
+axiom-hlx-stdlib/axiom_py/python/axiom/guard.py
+axiom-hlx-stdlib/axiom_py/python/axiom/builder.py
+axiom-hlx-stdlib/axiom_py/python/axiom/presets.py
+axiom-hlx-stdlib/axiom_py/python/axiom/integrations/
+axiom-hlx-stdlib/axiom_py/python/axiom/__init__.py
+axiom-hlx-stdlib/axiom_py/python/axiom/test_bit.py
+axiom-hlx-stdlib/axiom_py/test_*.py
+axiom-hlx-stdlib/tests/
+axiom-hlx-stdlib/Cargo.toml
+axiom-hlx-stdlib/Dockerfile
+axiom-hlx-stdlib/axiom.h
+
+# HLX runtime source
+hlx-runtime/src/
+hlx-runtime/examples/
+hlx-runtime/tests/
+hlx-runtime/Cargo.toml
+
+# Backends source
+backends/
+
+# Bond protocol source
+hlx-bond/src/
+
+# Bootstrap compiler (self-hosting source)
+hlx/hlx_bootstrap/
+
+# Experimental HLX programs
+experimental/
+
+# Bit — never public
+bit/
+scripts/
+
+# Training data
+training_data/
+
+# Corpus databases
+*.db
