@@ -57,8 +57,7 @@ impl Mutation {
     pub fn inverse(&self) -> Self {
         match self.clone() {
             Mutation::Insert {
-                serialized_node,
-                ..
+                serialized_node, ..
             } => {
                 Mutation::Delete {
                     node: NodeId(0), // Would need to extract from serialized_node
@@ -66,8 +65,7 @@ impl Mutation {
                 }
             }
             Mutation::Delete {
-                serialized_backup,
-                ..
+                serialized_backup, ..
             } => {
                 Mutation::Insert {
                     parent: NodeId(0), // Would need to store parent

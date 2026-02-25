@@ -338,41 +338,48 @@ fn test_ast_modification_potential() {
 
 #[test]
 fn test_pipeline_simple_return() {
-    let result = run_pipeline(r#"
+    let result = run_pipeline(
+        r#"
         fn main() -> i64 {
             return 42;
         }
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::I64(42));
 }
 
 #[test]
 fn test_pipeline_arithmetic() {
-    let result = run_pipeline(r#"
+    let result = run_pipeline(
+        r#"
         fn main() -> i64 {
             let x = 10 + 32;
             return x;
         }
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::I64(42));
 }
 
 #[test]
 fn test_pipeline_complex_arithmetic() {
-    let result = run_pipeline(r#"
+    let result = run_pipeline(
+        r#"
         fn main() -> i64 {
             let a = 2 + 3 * 4;
             let b = (2 + 3) * 4;
             return a + b;
         }
-    "#);
+    "#,
+    );
     // a = 2 + 12 = 14, b = 5 * 4 = 20, total = 34
     assert_eq!(result, Value::I64(34));
 }
 
 #[test]
 fn test_pipeline_if_true() {
-    let result = run_pipeline(r#"
+    let result = run_pipeline(
+        r#"
         fn main() -> i64 {
             let x = 10;
             if (x > 5) {
@@ -381,13 +388,15 @@ fn test_pipeline_if_true() {
                 return 0;
             }
         }
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::I64(100));
 }
 
 #[test]
 fn test_pipeline_if_false() {
-    let result = run_pipeline(r#"
+    let result = run_pipeline(
+        r#"
         fn main() -> i64 {
             let x = 3;
             if (x > 5) {
@@ -396,13 +405,15 @@ fn test_pipeline_if_false() {
                 return 0;
             }
         }
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::I64(0));
 }
 
 #[test]
 fn test_pipeline_loop_sum() {
-    let result = run_pipeline(r#"
+    let result = run_pipeline(
+        r#"
         fn main() -> i64 {
             let sum = 0;
             let i = 1;
@@ -412,27 +423,31 @@ fn test_pipeline_loop_sum() {
             }
             return sum;
         }
-    "#);
+    "#,
+    );
     // sum of 1..10 = 55
     assert_eq!(result, Value::I64(55));
 }
 
 #[test]
 fn test_pipeline_function_call() {
-    let result = run_pipeline(r#"
+    let result = run_pipeline(
+        r#"
         fn add(a: i64, b: i64) -> i64 {
             return a + b;
         }
         fn main() -> i64 {
             return add(19, 23);
         }
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::I64(42));
 }
 
 #[test]
 fn test_pipeline_nested_calls() {
-    let result = run_pipeline(r#"
+    let result = run_pipeline(
+        r#"
         fn double(x: i64) -> i64 {
             return x + x;
         }
@@ -442,13 +457,15 @@ fn test_pipeline_nested_calls() {
         fn main() -> i64 {
             return quadruple(5);
         }
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::I64(20));
 }
 
 #[test]
 fn test_pipeline_recursive_fibonacci() {
-    let result = run_pipeline(r#"
+    let result = run_pipeline(
+        r#"
         fn fib(n: i64) -> i64 {
             if (n < 2) {
                 return n;
@@ -458,13 +475,15 @@ fn test_pipeline_recursive_fibonacci() {
         fn main() -> i64 {
             return fib(10);
         }
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::I64(55));
 }
 
 #[test]
 fn test_pipeline_nested_loops() {
-    let result = run_pipeline(r#"
+    let result = run_pipeline(
+        r#"
         fn main() -> i64 {
             let total = 0;
             let i = 0;
@@ -478,13 +497,15 @@ fn test_pipeline_nested_loops() {
             }
             return total;
         }
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::I64(20));
 }
 
 #[test]
 fn test_pipeline_factorial() {
-    let result = run_pipeline(r#"
+    let result = run_pipeline(
+        r#"
         fn factorial(n: i64) -> i64 {
             if (n <= 1) {
                 return 1;
@@ -494,7 +515,8 @@ fn test_pipeline_factorial() {
         fn main() -> i64 {
             return factorial(6);
         }
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::I64(720));
 }
 

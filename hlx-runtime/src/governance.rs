@@ -57,6 +57,16 @@ impl Effect {
             checked: false,
         }
     }
+
+    pub fn new_with_severity(effect_type: EffectType, description: &str, severity: f64) -> Self {
+        Effect {
+            effect_type,
+            description: description.to_string(),
+            severity,
+            reversible: effect_type != EffectType::Dissolve,
+            checked: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -306,6 +316,10 @@ impl Governance {
 
     pub fn set_confidence(&mut self, confidence: f64) {
         self.context.confidence = confidence;
+    }
+
+    pub fn increment_step(&mut self) {
+        self.context.step_count += 1;
     }
 
     pub fn get_context(&self) -> &GovernanceContext {

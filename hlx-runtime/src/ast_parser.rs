@@ -706,7 +706,8 @@ impl AstParser {
                 Token::Ident(n) if n == "effect" => {
                     self.advance();
                     self.expect(&Token::Colon)?;
-                    let eff = self.try_consume_name()
+                    let eff = self
+                        .try_consume_name()
                         .unwrap_or_else(|| "modify".to_string());
                     effect = match eff.as_str() {
                         "modify" => EffectType::Modify,
@@ -805,7 +806,8 @@ impl AstParser {
                     self.advance();
                     // Parse gate type: proof, consensus, human, safety_check
                     // Keywords like `proof` and `consensus` are valid gate names
-                    let gate_name = self.try_consume_name()
+                    let gate_name = self
+                        .try_consume_name()
                         .unwrap_or_else(|| "default".to_string());
 
                     // Determine gate type based on name
@@ -1642,12 +1644,14 @@ mod tests {
 
     #[test]
     fn test_lex_comments_ignored() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             // This is a comment
             let x = 1;
             // Another comment
             let y = 2;
-        "#);
+        "#,
+        );
         // Should parse without errors — comments stripped
         assert!(ast.items.len() >= 2);
     }
@@ -1662,7 +1666,13 @@ mod tests {
                 // Should be Add(1, Mul(2, 3)), not Mul(Add(1, 2), 3)
                 if let ExprKind::BinaryOp { op, right, .. } = &expr.kind {
                     assert_eq!(*op, BinaryOp::Add);
-                    assert!(matches!(right.kind, ExprKind::BinaryOp { op: BinaryOp::Mul, .. }));
+                    assert!(matches!(
+                        right.kind,
+                        ExprKind::BinaryOp {
+                            op: BinaryOp::Mul,
+                            ..
+                        }
+                    ));
                 } else {
                     panic!("Expected binary op");
                 }
@@ -1678,7 +1688,13 @@ mod tests {
                 // Should be Mul(Add(1, 2), 3)
                 if let ExprKind::BinaryOp { op, left, .. } = &expr.kind {
                     assert_eq!(*op, BinaryOp::Mul);
-                    assert!(matches!(left.kind, ExprKind::BinaryOp { op: BinaryOp::Add, .. }));
+                    assert!(matches!(
+                        left.kind,
+                        ExprKind::BinaryOp {
+                            op: BinaryOp::Add,
+                            ..
+                        }
+                    ));
                 }
             }
         }
@@ -1697,7 +1713,13 @@ mod tests {
         let ast2 = parse("fn f(x: i64) -> i64 { return -x; }");
         if let Item::Function(f) = &ast2.items[0] {
             if let StmtKind::Return(Some(ref expr)) = f.body[0].kind {
-                assert!(matches!(expr.kind, ExprKind::UnaryOp { op: UnaryOp::Neg, .. }));
+                assert!(matches!(
+                    expr.kind,
+                    ExprKind::UnaryOp {
+                        op: UnaryOp::Neg,
+                        ..
+                    }
+                ));
             }
         }
     }
@@ -1707,7 +1729,13 @@ mod tests {
         let ast = parse("fn f() -> bool { return !true; }");
         if let Item::Function(f) = &ast.items[0] {
             if let StmtKind::Return(Some(ref expr)) = f.body[0].kind {
-                assert!(matches!(expr.kind, ExprKind::UnaryOp { op: UnaryOp::Not, .. }));
+                assert!(matches!(
+                    expr.kind,
+                    ExprKind::UnaryOp {
+                        op: UnaryOp::Not,
+                        ..
+                    }
+                ));
             }
         }
     }
@@ -1743,7 +1771,11 @@ mod tests {
         let ast = parse("fn f() -> i64 { return add(1, 2); }");
         if let Item::Function(f) = &ast.items[0] {
             if let StmtKind::Return(Some(ref expr)) = f.body[0].kind {
-                if let ExprKind::Call { function, arguments } = &expr.kind {
+                if let ExprKind::Call {
+                    function,
+                    arguments,
+                } = &expr.kind
+                {
                     assert_eq!(function, "add");
                     assert_eq!(arguments.len(), 2);
                 } else {
@@ -1771,7 +1803,13 @@ mod tests {
         if let Item::Function(f) = &ast.items[0] {
             if let StmtKind::Return(Some(ref expr)) = f.body[0].kind {
                 // Top level should be Or (lowest precedence)
-                assert!(matches!(expr.kind, ExprKind::BinaryOp { op: BinaryOp::Or, .. }));
+                assert!(matches!(
+                    expr.kind,
+                    ExprKind::BinaryOp {
+                        op: BinaryOp::Or,
+                        ..
+                    }
+                ));
             }
         }
     }
@@ -1806,7 +1844,8 @@ mod tests {
 
     #[test]
     fn test_if_else() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             fn f() -> i64 {
                 if (x > 0) {
                     return 1;
@@ -1814,7 +1853,8 @@ mod tests {
                     return 0;
                 }
             }
-        "#);
+        "#,
+        );
         if let Item::Function(f) = &ast.items[0] {
             if let StmtKind::If(ref if_stmt) = f.body[0].kind {
                 assert!(!if_stmt.then_body.is_empty());
@@ -1825,7 +1865,8 @@ mod tests {
 
     #[test]
     fn test_loop_with_condition() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             fn f() -> i64 {
                 let i = 0;
                 loop(i < 10) {
@@ -1833,7 +1874,8 @@ mod tests {
                 }
                 return i;
             }
-        "#);
+        "#,
+        );
         if let Item::Function(f) = &ast.items[0] {
             assert!(matches!(f.body[1].kind, StmtKind::Loop(_)));
         }
@@ -1841,14 +1883,16 @@ mod tests {
 
     #[test]
     fn test_break_continue() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             fn f() -> i64 {
                 loop(true) {
                     break;
                 }
                 return 0;
             }
-        "#);
+        "#,
+        );
         if let Item::Function(f) = &ast.items[0] {
             if let StmtKind::Loop(ref loop_stmt) = f.body[0].kind {
                 assert!(matches!(loop_stmt.body[0].kind, StmtKind::Break));
@@ -1858,7 +1902,8 @@ mod tests {
 
     #[test]
     fn test_switch_cases() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             fn f(n: i64) -> i64 {
                 switch n {
                     case 0 => { return 0; }
@@ -1866,7 +1911,8 @@ mod tests {
                     default => { return 2; }
                 }
             }
-        "#);
+        "#,
+        );
         if let Item::Function(f) = &ast.items[0] {
             if let StmtKind::Switch(ref sw) = f.body[0].kind {
                 assert_eq!(sw.cases.len(), 2);
@@ -1877,13 +1923,15 @@ mod tests {
 
     #[test]
     fn test_assignment() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             fn f() -> i64 {
                 let x = 0;
                 x = 42;
                 return x;
             }
-        "#);
+        "#,
+        );
         if let Item::Function(f) = &ast.items[0] {
             assert!(matches!(f.body[1].kind, StmtKind::Assign { .. }));
         }
@@ -1905,10 +1953,12 @@ mod tests {
 
     #[test]
     fn test_multiple_functions() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             fn foo() -> i64 { return 1; }
             fn bar() -> i64 { return 2; }
-        "#);
+        "#,
+        );
         assert_eq!(ast.items.len(), 2);
         if let Item::Function(f) = &ast.items[0] {
             assert_eq!(f.name, "foo");
@@ -1922,14 +1972,16 @@ mod tests {
 
     #[test]
     fn test_agent_basic() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             recursive agent Counter {
                 latent count: i64 = 0;
                 cycle H(10) {
                     count = count + 1;
                 }
             }
-        "#);
+        "#,
+        );
         if let Item::Agent(a) = &ast.items[0] {
             assert_eq!(a.name, "Counter");
             assert_eq!(a.latents.len(), 1);
@@ -1944,7 +1996,8 @@ mod tests {
 
     #[test]
     fn test_agent_govern() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             recursive agent Safe {
                 latent x: i64 = 0;
                 govern {
@@ -1953,7 +2006,8 @@ mod tests {
                     trust: 0.8;
                 }
             }
-        "#);
+        "#,
+        );
         if let Item::Agent(a) = &ast.items[0] {
             let g = a.govern.as_ref().expect("Expected govern block");
             assert_eq!(g.effect, EffectType::Modify);
@@ -1967,7 +2021,8 @@ mod tests {
     #[test]
     fn test_agent_modify_with_keyword_gates() {
         // This is the edge case GLM5 spiraled on
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             recursive agent RSIAgent {
                 latent v: f64 = 0.0;
                 modify self {
@@ -1977,7 +2032,8 @@ mod tests {
                     cooldown: 500;
                 }
             }
-        "#);
+        "#,
+        );
         if let Item::Agent(a) = &ast.items[0] {
             let m = a.modify.as_ref().expect("Expected modify block");
             assert_eq!(m.gates.len(), 3);
@@ -1990,7 +2046,8 @@ mod tests {
 
     #[test]
     fn test_agent_self_modify_effect() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             recursive agent A {
                 latent x: i64 = 0;
                 govern {
@@ -1999,7 +2056,8 @@ mod tests {
                     trust: 0.9;
                 }
             }
-        "#);
+        "#,
+        );
         if let Item::Agent(a) = &ast.items[0] {
             let g = a.govern.as_ref().unwrap();
             assert_eq!(g.effect, EffectType::SelfModify);
@@ -2009,7 +2067,8 @@ mod tests {
 
     #[test]
     fn test_agent_takes_gives() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             recursive agent TRM {
                 latent h: i64 = 0;
                 takes: input;
@@ -2018,7 +2077,8 @@ mod tests {
                     h = h + 1;
                 }
             }
-        "#);
+        "#,
+        );
         if let Item::Agent(a) = &ast.items[0] {
             assert_eq!(a.takes.len(), 1);
             assert_eq!(a.takes[0].name, "input");
@@ -2029,14 +2089,16 @@ mod tests {
 
     #[test]
     fn test_agent_dual_cycles() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             recursive agent DualCycle {
                 latent h: i64 = 0;
                 latent c: f64 = 0.0;
                 cycle H(10) { h = h + 1; }
                 cycle L(100) { c = c + 0.01; }
             }
-        "#);
+        "#,
+        );
         if let Item::Agent(a) = &ast.items[0] {
             assert_eq!(a.cycles.len(), 2);
             assert!(matches!(a.cycles[0].level, CycleLevel::H));
@@ -2048,12 +2110,14 @@ mod tests {
 
     #[test]
     fn test_agent_dissolvable() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             recursive agent Temp {
                 latent x: i64 = 0;
                 dissolvable
             }
-        "#);
+        "#,
+        );
         if let Item::Agent(a) = &ast.items[0] {
             assert!(a.dissolvable);
         }
@@ -2063,12 +2127,14 @@ mod tests {
 
     #[test]
     fn test_cluster() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             scale cluster Swarm {
                 agents: [Worker1, Worker2, Worker3];
                 barrier sync_point(3);
             }
-        "#);
+        "#,
+        );
         if let Item::Cluster(c) = &ast.items[0] {
             assert_eq!(c.name, "Swarm");
             assert_eq!(c.agents.len(), 3);
@@ -2082,11 +2148,13 @@ mod tests {
 
     #[test]
     fn test_module() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             module Math {
                 fn add(a: i64, b: i64) -> i64 { return a + b; }
             }
-        "#);
+        "#,
+        );
         if let Item::Module(m) = &ast.items[0] {
             assert_eq!(m.name, "Math");
             assert_eq!(m.items.len(), 1);
@@ -2129,14 +2197,16 @@ mod tests {
     #[test]
     fn test_keyword_gate_proof() {
         // The exact edge case that caused GLM5 to spiral
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             recursive agent A {
                 latent v: f64 = 0.0;
                 modify self {
                     gate proof;
                 }
             }
-        "#);
+        "#,
+        );
         if let Item::Agent(a) = &ast.items[0] {
             let m = a.modify.as_ref().unwrap();
             assert_eq!(m.gates.len(), 1);
@@ -2147,7 +2217,8 @@ mod tests {
     #[test]
     fn test_conscience_predicate_names() {
         // Conscience predicates can include names that are also keywords
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             recursive agent B {
                 latent x: i64 = 0;
                 govern {
@@ -2156,7 +2227,8 @@ mod tests {
                     trust: 0.7;
                 }
             }
-        "#);
+        "#,
+        );
         if let Item::Agent(a) = &ast.items[0] {
             let g = a.govern.as_ref().unwrap();
             assert_eq!(g.effect, EffectType::Spawn);
@@ -2170,7 +2242,8 @@ mod tests {
 
     #[test]
     fn test_full_trm_agent() {
-        let ast = parse(r#"
+        let ast = parse(
+            r#"
             recursive agent TRMAgent {
                 latent hypothesis: i64 = 0;
                 latent confidence: f64 = 0.0;
@@ -2194,7 +2267,8 @@ mod tests {
                     cooldown: 1000;
                 }
             }
-        "#);
+        "#,
+        );
         if let Item::Agent(a) = &ast.items[0] {
             assert_eq!(a.name, "TRMAgent");
             assert_eq!(a.latents.len(), 2);

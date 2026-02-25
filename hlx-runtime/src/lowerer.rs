@@ -4,8 +4,8 @@
 //! This is the bridge between the rich, introspectable AST and executable bytecode.
 
 use crate::ast::{
-    AgentDef, BinaryOp, CycleLevel, ExprKind, Expression, Function, Gate, Item, Parameter,
-    Program, Statement, StmtKind, UnaryOp,
+    AgentDef, BinaryOp, CycleLevel, ExprKind, Expression, Function, Gate, Item, Parameter, Program,
+    Statement, StmtKind, UnaryOp,
 };
 use crate::{Bytecode, Opcode, Value};
 use std::collections::HashMap;
@@ -156,9 +156,7 @@ impl Lowerer {
 
     fn lower_statement(&mut self, stmt: &Statement) -> LowerResult<()> {
         match &stmt.kind {
-            StmtKind::Let {
-                name, value, ..
-            } => {
+            StmtKind::Let { name, value, .. } => {
                 let reg = self.alloc_var(name)?;
                 self.lower_expr(value, reg)?;
             }
@@ -468,7 +466,9 @@ impl Lowerer {
                     self.emit_u8(reg);
                 }
                 // Store array length as constant
-                let len_idx = self.bytecode.add_constant(Value::I64(elements.len() as i64));
+                let len_idx = self
+                    .bytecode
+                    .add_constant(Value::I64(elements.len() as i64));
                 self.emit(Opcode::Const);
                 self.emit_u8(dst);
                 self.emit_u32(len_idx);
@@ -593,7 +593,9 @@ impl Lowerer {
             self.emit_u32(effect_idx);
 
             // Set trust threshold as confidence
-            let trust_idx = self.bytecode.add_constant(Value::F64(govern.trust_threshold));
+            let trust_idx = self
+                .bytecode
+                .add_constant(Value::F64(govern.trust_threshold));
             self.emit(Opcode::Const);
             self.emit_u8(0);
             self.emit_u32(trust_idx);
@@ -692,8 +694,7 @@ impl Lowerer {
                 self.bytecode.code.len()
             )));
         }
-        self.bytecode.code[jump_pos..jump_pos + 4]
-            .copy_from_slice(&(target as u32).to_le_bytes());
+        self.bytecode.code[jump_pos..jump_pos + 4].copy_from_slice(&(target as u32).to_le_bytes());
         Ok(())
     }
 

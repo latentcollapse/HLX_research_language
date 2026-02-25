@@ -4,21 +4,31 @@ mod ast_parser;
 mod bond;
 mod builtins;
 mod bytecode;
+mod communication;
 mod compiler;
+mod dd_protocol;
+mod forgetting_guard;
 mod governance;
+mod homeostasis;
+mod human_auth;
+mod integrity;
+mod lora_adapter;
 mod lowerer;
+mod memory_pool;
+mod promotion;
 mod rsi;
 mod scale;
 mod shader_attestation;
 mod tensor;
+mod training_gate;
 mod value;
 mod vm;
 
 pub use agent::{Agent, AgentPool, AgentState};
 pub use ast::{
-    AgentDef, AstDiffBatch, ClusterDef, Function, Item, ModificationTarget, Mutation,
-    MutationBatch, NodeCounter, NodeId, Program, Render, Statement,
-    TypeAnnotation, Visitor, VisitResult, walk_program,
+    walk_program, AgentDef, AstDiffBatch, ClusterDef, Function, Item, ModificationTarget, Mutation,
+    MutationBatch, NodeCounter, NodeId, Program, Render, Statement, TypeAnnotation, VisitResult,
+    Visitor,
 };
 pub use ast_parser::{AstParser, ParseError, Token};
 pub use bond::{
@@ -26,11 +36,41 @@ pub use bond::{
     BondPhase, BondRequest, BondResponse, Capability, SymbioteState,
 };
 pub use bytecode::{Bytecode, Opcode};
+pub use communication::{
+    ChannelStats, CommunicationChannel, CommunicationChannelConfig, Message, TimestampedMessage,
+};
 pub use compiler::Compiler;
-pub use lowerer::{LowerError, Lowerer};
+pub use dd_protocol::{
+    DdError, DdOperation, DdProtocol, DdSnapshot, DdState, DdTarget, DdTargetType,
+};
+pub use forgetting_guard::{
+    ForgettingError, ForgettingEvent, ForgettingGuard, HealthStatus, RetentionResult,
+    RetentionTest, WeightImportance,
+};
 pub use governance::{
     ConfigError, Effect, EffectType, Governance, GovernanceConfig, GovernanceContext,
     GovernanceRegistry, PredicateResult,
+};
+pub use homeostasis::{GateDecision, HomeostasisGate, HomeostasisStatus, ImprovementAxis};
+pub use human_auth::{
+    AuthAuditEntry, AuthError, AuthorizationGate, HumanAuthToken, PendingRequest,
+    ProtectedNamespace, RiskLevel,
+};
+pub use integrity::{
+    CorpusHash, IntegrityEntry, IntegrityError, IntegritySystem, ProvenanceRecord,
+    VerificationReport,
+};
+pub use lora_adapter::{
+    AdapterError, AdapterMetadata, AdapterProvenance, AdapterRegistry, AdapterState,
+    AdapterVersion, AdapterVersionHistory,
+};
+pub use lowerer::Lowerer;
+pub use memory_pool::{
+    Exchange, ExchangeRole, MemoryPool, MemoryPoolConfig, MemoryStats, Observation, Pattern,
+    Question,
+};
+pub use promotion::{
+    CriteriaProgress, ModificationTypeClass, PromotionCriteria, PromotionGate, PromotionLevel,
 };
 pub use rsi::{AgentMemory, ModificationType, ProposalStatus, RSIPipeline, RSIProposal};
 pub use scale::{Barrier, Consensus, ConsensusResult, Scale, ScalePool};
@@ -38,6 +78,9 @@ pub use shader_attestation::{ShaderAttestationError, ShaderInfo, ShaderRegistry}
 pub use tensor::{
     get_global_allocation, reset_global_allocation, set_global_limit, Tensor, TensorLimits,
     DEFAULT_MAX_TENSOR_ELEMENTS,
+};
+pub use training_gate::{
+    CheckResult, CheckpointData, GateResult, GateStage, TrainingGate, TrainingProposal,
 };
 pub use value::Value;
 pub use vm::Vm;

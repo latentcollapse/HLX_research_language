@@ -1,4 +1,6 @@
 use crate::governance::{Effect, EffectType, Governance};
+use crate::homeostasis::{GateDecision, HomeostasisGate};
+use crate::promotion::PromotionGate;
 use crate::tensor::Tensor;
 use crate::{RuntimeError, RuntimeResult};
 use serde::{Deserialize, Serialize};
@@ -40,6 +42,19 @@ pub enum ModificationType {
     WeightMatrixUpdate {
         layer: usize,
         delta: Vec<f64>,
+    },
+    RuleAdd {
+        name: String,
+        description: String,
+        confidence: f64,
+    },
+    RuleRemove {
+        name: String,
+    },
+    RuleUpdate {
+        name: String,
+        description: String,
+        confidence: f64,
     },
 }
 
@@ -109,6 +124,9 @@ impl RSIProposal {
                 let max_delta = delta.iter().fold(0.0f64, |acc, &x| acc.max(x.abs()));
                 (max_delta * 2.0).min(1.0)
             }
+            ModificationType::RuleAdd { .. } => 0.7,
+            ModificationType::RuleRemove { .. } => 0.9,
+            ModificationType::RuleUpdate { .. } => 0.8,
         };
     }
 
@@ -193,6 +211,7 @@ pub struct AgentMemory {
     pub parameters: HashMap<String, f64>,
     pub weight_matrices: Vec<Tensor>,
     pub cycle_config: (u32, u32),
+    pub rules: Vec<(String, String, f64)>, // (name, description, confidence)
 }
 
 impl AgentMemory {
@@ -207,6 +226,7 @@ impl AgentMemory {
             parameters: params,
             weight_matrices: Vec::new(),
             cycle_config: (3, 6),
+            rules: Vec::new(),
         }
     }
 
@@ -246,6 +266,18 @@ impl AgentMemory {
                             weights.data[i] += d;
                         }
                     }
+                }
+            }
+            ModificationType::RuleAdd { name, description, confidence } => {
+                self.rules.push((name.clone(), description.clone(), *confidence));
+            }
+            ModificationType::RuleRemove { name } => {
+                self.rules.retain(|(n, _, _)| n != name);
+            }
+            ModificationType::RuleUpdate { name, description, confidence } => {
+                if let Some(rule) = self.rules.iter_mut().find(|(n, _, _)| n == name) {
+                    rule.1 = description.clone();
+                    rule.2 = *confidence;
                 }
             }
         }
@@ -475,6 +507,8 @@ pub struct RSIPipeline {
     min_confidence: f64,
     max_risk: f64,
     modification_history: Vec<(u64, ModificationType, bool)>,
+    homeostasis_gate: HomeostasisGate,
+    promotion_gate: PromotionGate,
 }
 
 impl RSIPipeline {
@@ -487,7 +521,19 @@ impl RSIPipeline {
             min_confidence: 0.8,
             max_risk: 0.7,
             modification_history: Vec::new(),
+            homeostasis_gate: HomeostasisGate::new(),
+            promotion_gate: PromotionGate::new(),
         }
+    }
+
+    /// Access the homeostasis gate (for status reporting / Bit's self-awareness).
+    pub fn homeostasis(&self) -> &HomeostasisGate {
+        &self.homeostasis_gate
+    }
+
+    /// Access the promotion gate (for level queries).
+    pub fn promotion(&self) -> &PromotionGate {
+        &self.promotion_gate
     }
 
     pub fn create_proposal(
@@ -496,6 +542,41 @@ impl RSIPipeline {
         modification: ModificationType,
         confidence: f64,
     ) -> RuntimeResult<u64> {
+        // Gate 1: Homeostasis — is the system under too much modification pressure?
+        let gate_decision = self.homeostasis_gate.evaluate(&modification);
+        match gate_decision {
+            GateDecision::Block { reason, .. } => {
+                return Err(RuntimeError::new(
+                    format!("Homeostasis gate blocked: {}", reason),
+                    0,
+                ));
+            }
+            GateDecision::Homeostasis { .. } => {
+                // System is in homeostasis — signal promotion gate
+                self.promotion_gate.on_homeostasis();
+                return Err(RuntimeError::new(
+                    "System in homeostasis — no modifications accepted",
+                    0,
+                ));
+            }
+            GateDecision::SlowDown { .. } | GateDecision::Proceed { .. } => {
+                // Allowed to continue (SlowDown is advisory — caller can respect the delay)
+            }
+        }
+
+        // Gate 2: Promotion — is this modification type allowed at current level?
+        if !self.promotion_gate.is_modification_allowed(&modification) {
+            return Err(RuntimeError::new(
+                format!(
+                    "Promotion gate denied: {:?} not allowed at {:?} level",
+                    std::mem::discriminant(&modification),
+                    self.promotion_gate.current_level(),
+                ),
+                0,
+            ));
+        }
+
+        // Gate 3: Confidence threshold
         if confidence < self.min_confidence {
             return Err(RuntimeError::new(
                 format!(
@@ -512,6 +593,7 @@ impl RSIPipeline {
         let mut proposal = RSIProposal::new(id, proposer, modification).with_confidence(confidence);
         proposal.assess_risk();
 
+        // Gate 4: Risk threshold
         if proposal.risk_assessment > self.max_risk {
             return Err(RuntimeError::new(
                 format!(
@@ -631,6 +713,12 @@ impl RSIPipeline {
             p.status = ProposalStatus::Applied;
         }
 
+        // Record the modification on the homeostasis gate (updates pressure tracking)
+        self.homeostasis_gate.record_modification(&proposal.modification);
+
+        // Notify the promotion gate of a successful modification
+        self.promotion_gate.on_successful_modification();
+
         self.modification_history.push((
             proposal.proposer_agent,
             proposal.modification.clone(),
@@ -716,9 +804,10 @@ mod tests {
     #[test]
     fn test_proposal_voting() {
         let mut pipeline = RSIPipeline::new();
-        let mod_type = ModificationType::BehaviorAdd {
-            pattern: vec![1.0, 2.0],
-            response: vec![3.0],
+        let mod_type = ModificationType::ParameterUpdate {
+            name: "exploration".to_string(),
+            old_value: 0.1,
+            new_value: 0.2,
         };
 
         let id = pipeline.create_proposal(0, mod_type, 0.9).unwrap();
