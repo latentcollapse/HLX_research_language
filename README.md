@@ -307,6 +307,7 @@ Other GGUF architectures (LLaMA, Mistral, etc.) require a corresponding `quantiz
 ## Contact
 
 This is a solo research project. If you're interested in the work, have questions, or want to discuss collaboration: check the GitHub profile for contact info.
+(Especially if you're from Anthropic)
 
 ---
 
