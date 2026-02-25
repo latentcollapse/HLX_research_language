@@ -1,3 +1,8 @@
+# ⚠️ HLX: EXPERIMENTAL NEUROSYMBOLIC RESEARCH
+This is a *living* language. It is *not* production-ready.
+**Use at your own risk.**
+
+
 # HLX — Governed Inference Runtime for Local AI
 
 > *"You're not building a fast inference engine — llama.cpp already exists.
