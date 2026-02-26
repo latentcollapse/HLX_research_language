@@ -79,8 +79,9 @@ scripts/
 # Bit — symbiote core, private
 axiom-hlx-stdlib/axiom_py/python/axiom/bit.py
 axiom-hlx-stdlib/axiom_py/python/axiom/test_bit.py
+bit/
+*.db
 
 # Bitsy's Place — private
 Bitsy/
-corpus.db
 
