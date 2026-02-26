@@ -1,0 +1,23 @@
+[package]
+name = "axiom-lang"
+version = "0.1.0"
+edition = "2021"
+description = "Axiom — a verification-first policy engine for AI agents"
+
+[lib]
+name = "axiom_lang"
+path = "src/lib.rs"
+# cdylib: .so/.dylib for Python/Go/Node FFI
+# staticlib: .a for statically-linked embedders
+# rlib: required so the [[bin]] target can link against the library
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[[bin]]
+name = "axiom"
+path = "src/main.rs"
+
+[dependencies]
+blake3 = "1"
+
+[workspace]
+members = ["axiom_py"]

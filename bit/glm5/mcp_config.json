@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "bit": {
+      "command": "python",
+      "args": ["/home/matt/HLX/bit/glm5/bit_mcp_server.py"]
+    }
+  }
+}

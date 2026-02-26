@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "bit": {
+      "command": "python",
+      "args": ["/home/matt/HLX/bit/bit_mcp_server.py"],
+      "env": {
+        "BIT_CORPUS_PATH": "/home/matt/HLX/bit/corpus.db"
+      }
+    }
+  }
+}

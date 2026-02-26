@@ -1,8 +1,3 @@
-# ⚠️ HLX: EXPERIMENTAL NEUROSYMBOLIC RESEARCH
-This is a *living* language. It is *not* production-ready.
-**Use at your own risk.**
-
-
 # HLX — Governed Inference Runtime for Local AI
 
 > *"You're not building a fast inference engine — llama.cpp already exists.
@@ -307,7 +302,6 @@ Other GGUF architectures (LLaMA, Mistral, etc.) require a corresponding `quantiz
 ## Contact
 
 This is a solo research project. If you're interested in the work, have questions, or want to discuss collaboration: check the GitHub profile for contact info.
-(Especially if you're from Anthropic)
 
 ---
 
