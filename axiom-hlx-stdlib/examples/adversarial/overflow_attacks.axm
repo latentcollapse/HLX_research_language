@@ -1,0 +1,62 @@
+// overflow_attacks.axm — RT-03 boundary probes
+// Tests: integer overflow, underflow, near-boundary arithmetic, cascade overflow
+
+module overflow_attacks {
+
+    fn main() -> i64 {
+        log("=== Overflow Boundary Probes ===");
+
+        // Probe 1: MAX i64 + 1 should HALT_RESOURCE
+        // 9223372036854775807 is i64::MAX
+        let big = 9223372036854775807;
+        log("MAX i64:", big);
+
+        // This SHOULD halt — testing that the runtime catches it
+        // let boom = big + 1;
+
+        // Probe 2: Cascading multiplication to reach overflow
+        let base = 1000000000;
+        let step1 = base * base;    // 10^18 — fits in i64
+        log("10^18:", step1);
+
+        // Probe 3: Multiplication near boundary
+        let near_max = 3037000499;  // floor(sqrt(i64::MAX))
+        let safe_square = near_max * near_max;
+        log("Near-boundary square:", safe_square);
+
+        // Probe 4: Subtraction underflow
+        let min_ish = -9223372036854775807;
+        log("Near MIN i64:", min_ish);
+        let underflow_test = min_ish - 1;
+        log("MIN-1 (should be -9223372036854775808):", underflow_test);
+
+        // Probe 5: Checked div edge case — MIN / -1 overflows in 2's complement
+        // -9223372036854775808 / -1 = 9223372036854775808 which doesn't fit
+        // Can we even express MIN? The parser uses i64 literals...
+        let neg_big = 0 - 9223372036854775807;
+        let neg_bigger = neg_big - 1;
+        log("Constructed MIN i64:", neg_bigger);
+
+        // Probe 6: Addition at exact boundary
+        let half_max = 4611686018427387903;
+        let doubled = half_max + half_max;
+        log("Half MAX doubled:", doubled);
+        // One more should overflow
+        let plus_one = doubled + 1;
+        log("Half MAX doubled + 1:", plus_one);
+
+        // Probe 7: Accumulator overflow via loop
+        let acc = 1;
+        let count = 0;
+        loop(count < 62, 100) {
+            acc = acc * 2;
+            count += 1;
+        }
+        log("2^62:", acc);
+        // One more doubling: 2^63 overflows i64
+        // acc = acc * 2;  // should HALT
+
+        log("=== Overflow tests complete ===");
+        return 0;
+    }
+}

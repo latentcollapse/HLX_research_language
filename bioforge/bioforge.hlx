@@ -1,0 +1,1441 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// BioForge - HLX Refinement Engine
+// Self-improving system for evolving HLX through governed proposals
+// ═══════════════════════════════════════════════════════════════════════════════
+
+module bioforge {
+
+// ============================================================================
+// CORE STATE
+// ============================================================================
+
+// System state
+let system_state: String = "idle";  // idle, scanning, analyzing, voting, applying
+let last_cycle: i64 = 0;
+let total_proposals: i64 = 0;
+let accepted_proposals: i64 = 0;
+let rejected_proposals: i64 = 0;
+
+// Configuration
+let density_enabled: i64 = 1;     // Default ON
+let efficiency_enabled: i64 = 1;   // Default ON  
+let expansion_enabled: i64 = 0;    // Default OFF
+
+// Paths
+let hlx_root: String = "./hlx";
+let runtime_root: String = "./hlx-runtime";
+let stdlib_root: String = "./axiom-hlx-stdlib";
+
+// ============================================================================
+// DATA STRUCTURES
+// ============================================================================
+
+struct Proposal {
+    id: String;
+    cycle: i64;
+    author: String;           // Which organ generated it
+    proposal_type: String;   // density, efficiency, expansion, fix
+    risk_tier: String;       // safe, density, efficiency, expansion
+    title: String;
+    description: String;
+    target_file: String;
+    current_code: String;
+    proposed_code: String;
+    tests_added: i64;
+    benchmark_proof: i64;    // For efficiency: speedup multiplier
+    status: String;           // pending, approved, rejected, applied
+    votes_for: i64;
+    votes_against: i64;
+    timestamp: i64;
+}
+
+struct ScanResult {
+    file_path: String;
+    issue_type: String;      // inefficiency, density_opportunity, bug, style
+    severity: i64;           // 1-5
+    description: String;
+    line_number: i64;
+    code_snippet: String;
+}
+
+struct Vote {
+    proposal_id: String;
+    agent: String;
+    vote: String;            // yes, no, abstain
+    reason: String;
+    timestamp: i64;
+}
+
+struct VersionSnapshot {
+    version: String;
+    timestamp: i64;
+    proposal_id: String;
+    hlx_version: String;
+    changes_summary: String;
+    status: String;          // active, rolled_back
+}
+
+// Storage
+let proposals: [Proposal; 100];
+let proposal_count: i64 = 0;
+let scan_results: [ScanResult; 500];
+let scan_count: i64 = 0;
+let votes: [Vote; 500];
+let vote_count: i64 = 0;
+let snapshots: [VersionSnapshot; 50];
+let snapshot_count: i64 = 0;
+
+// ============================================================================
+// ORGAN: Sensorium - Discovers patterns and inefficiencies
+// ============================================================================
+
+export fn sensorium_scan(target: String) -> i64 {
+    print("=== Sensorium: Scanning HLX codebase ===\n");
+    
+    system_state = "scanning";
+    
+    // Scan HLX bootstrap compiler
+    let hlx_files = scan_directory(hlx_root);
+    let i: i64 = 0;
+    loop(i < array_len(hlx_files), 1000) {
+        let file = hlx_files[i];
+        if ends_with(file, ".hlx") {
+            analyze_file(file);
+        }
+        i = i + 1;
+    }
+    
+    // Scan runtime
+    let runtime_files = scan_directory(runtime_root);
+    i = 0;
+    loop(i < array_len(runtime_files), 1000) {
+        let file = runtime_files[i];
+        if ends_with(file, ".rs") {
+            analyze_rs_file(file);
+        }
+        i = i + 1;
+    }
+    
+    system_state = "idle";
+    print("  Scan complete. Found ");
+    print(scan_count);
+    print(" opportunities.\n");
+    
+    return scan_count;
+}
+
+fn scan_directory(path: String) -> [String; 100] {
+    // Simplified - returns list of files
+    // In full implementation, would recursively list
+    let result: [String; 100];
+    result[0] = path;
+    return result;
+}
+
+fn analyze_file(file_path: String) -> i64 {
+    // Look for patterns that indicate improvement opportunities
+    // 1. Repeated code patterns (density opportunity)
+    // 2. Inefficient loops (efficiency opportunity)
+    // 3. TODO/FIXME comments (bug opportunity)
+    // 4. Style inconsistencies
+    
+    let issues = find_patterns(file_path);
+    
+    let i: i64 = 0;
+    loop(i < array_len(issues), 100) {
+        let issue = issues[i];
+        if issue.issue_type != "" {
+            store_scan_result(issue);
+        }
+        i = i + 1;
+    }
+    
+    return array_len(issues);
+}
+
+fn analyze_rs_file(file_path: String) -> i64 {
+    // Similar analysis for Rust files
+    return 0;
+}
+
+fn find_patterns(file_path: String) -> [ScanResult; 10] {
+    // Placeholder - would actually parse and analyze
+    let results: [ScanResult; 10];
+    return results;
+}
+
+fn store_scan_result(result: ScanResult) -> i64 {
+    let idx = scan_count % 500;
+    scan_results[idx] = result;
+    scan_count = scan_count + 1;
+    return 1;
+}
+
+// ============================================================================
+// ORGAN: Analyzer Cortex - Diagnoses and prioritizes
+// ============================================================================
+
+export fn analyzer_prioritize() -> i64 {
+    print("=== Analyzer Cortex: Prioritizing findings ===\n");
+    
+    // Sort scan results by severity
+    // Filter to top opportunities
+    
+    let prioritized: i64 = 0;
+    let i: i64 = 0;
+    loop(i < scan_count, 500) {
+        if scan_results[i].severity >= 3 {
+            prioritized = prioritized + 1;
+        }
+        i = i + 1;
+    }
+    
+    print("  ");
+    print(prioritized);
+    print(" high-priority opportunities identified.\n");
+    
+    return prioritized;
+}
+
+// ============================================================================
+// ORGAN: Architect - Designs improvements
+// ============================================================================
+
+export fn architect_design(target: ScanResult) -> Proposal {
+    let p: Proposal;
+    p.id = generate_id();
+    p.cycle = last_cycle;
+    p.author = "architect";
+    p.status = "pending";
+    p.timestamp = current_time();
+    
+    // Determine proposal type based on issue
+    if target.issue_type == "inefficiency" {
+        p.proposal_type = "efficiency";
+        p.risk_tier = "efficiency";
+        p.title = "Performance optimization: " + target.file_path;
+    } else if target.issue_type == "density_opportunity" {
+        p.proposal_type = "density";
+        p.risk_tier = "density";
+        p.title = "Density improvement: " + target.file_path;
+    } else {
+        p.proposal_type = "fix";
+        p.risk_tier = "safe";
+        p.title = "Bug fix: " + target.file_path;
+    }
+    
+    p.description = "Analysis of " + target.file_path + " line " + target.line_number + ": " + target.description;
+    p.target_file = target.file_path;
+    p.current_code = target.code_snippet;
+    p.proposed_code = "";  // Architect designs approach
+    p.tests_added = 0;
+    p.benchmark_proof = 0;
+    p.votes_for = 0;
+    p.votes_against = 0;
+    
+    return p;
+}
+
+// ============================================================================
+// ORGAN: Coder Agent - Generates implementation
+// ============================================================================
+
+export fn coder_implement(proposal: Proposal) -> Proposal {
+    let p = proposal;
+    p.author = "coder";
+    
+    // Generate the actual code change
+    // This would involve actual code generation based on proposal type
+    
+    if p.proposal_type == "density" {
+        p.proposed_code = generate_density_improvement(p.target_file);
+    } else if p.proposal_type == "efficiency" {
+        p.proposed_code = generate_efficiency_improvement(p.target_file);
+    } else {
+        p.proposed_code = generate_fix(p.target_file);
+    }
+    
+    return p;
+}
+
+fn generate_density_improvement(file: String) -> String {
+    // Placeholder - would generate actual improvement
+    return "// Density improvement code here";
+}
+
+fn generate_efficiency_improvement(file: String) -> String {
+    return "// Efficiency improvement code here";
+}
+
+fn generate_fix(file: String) -> String {
+    return "// Bug fix code here";
+}
+
+// ============================================================================
+// ORGAN: Sentinel - Risk evaluation
+// ============================================================================
+
+export fn sentinel_evaluate(proposal: Proposal) -> String {
+    // Determine risk tier based on what changes
+    
+    let risk = "safe";
+    
+    if proposal.proposal_type == "efficiency" {
+        risk = "efficiency";
+    } else if proposal.proposal_type == "density" {
+        risk = "density";
+    } else if proposal.proposal_type == "expansion" {
+        if expansion_enabled == 0 {
+            risk = "blocked";  // Expansion disabled
+        } else {
+            risk = "expansion";
+        }
+    }
+    
+    print("  Sentinel: Risk tier = ");
+    print(risk);
+    print("\n");
+    
+    return risk;
+}
+
+// ============================================================================
+// ORGAN: Voting - Council coordination
+// ============================================================================
+
+export fn council_vote(proposal: Proposal) -> Proposal {
+    print("=== Council: Voting on proposal ===\n");
+    
+    let p = proposal;
+    system_state = "voting";
+    
+    // Get required threshold based on risk tier
+    let threshold: i64 = 3;  // Default 3/5
+    
+    if p.risk_tier == "efficiency" {
+        threshold = 4;
+    } else if p.risk_tier == "expansion" {
+        threshold = 5;
+    }
+    
+    // Simulate agent votes
+    let architect_vote = agent_vote("architect_agent", p);
+    let coder_vote = agent_vote("coder_agent", p);
+    let healer_vote = agent_vote("healer_agent", p);
+    let optimizer_vote = agent_vote("optimizer_agent", p);
+    let reviewer_vote = agent_vote("reviewer_agent", p);
+    
+    // Count votes
+    if architect_vote == "yes" { p.votes_for = p.votes_for + 1; }
+    else { p.votes_against = p.votes_against + 1; }
+    
+    if coder_vote == "yes" { p.votes_for = p.votes_for + 1; }
+    else { p.votes_against = p.votes_against + 1; }
+    
+    if healer_vote == "yes" { p.votes_for = p.votes_for + 1; }
+    else { p.votes_against = p.votes_against + 1; }
+    
+    if optimizer_vote == "yes" { p.votes_for = p.votes_for + 1; }
+    else { p.votes_against = p.votes_against + 1; }
+    
+    if reviewer_vote == "yes" { p.votes_for = p.votes_for + 1; }
+    else { p.votes_against = p.votes_against + 1; }
+    
+    // Determine outcome
+    if p.votes_for >= threshold {
+        p.status = "approved";
+        accepted_proposals = accepted_proposals + 1;
+        print("  ✓ Proposal APPROVED (");
+        print(p.votes_for);
+        print("/5)\n");
+    } else {
+        p.status = "rejected";
+        rejected_proposals = rejected_proposals + 1;
+        print("  ✗ Proposal REJECTED (");
+        print(p.votes_for);
+        print("/5)\n");
+    }
+    
+    system_state = "idle";
+    total_proposals = total_proposals + 1;
+    
+    return p;
+}
+
+fn agent_vote(agent: String, proposal: Proposal) -> String {
+    // Each agent has different evaluation criteria
+    // Simplified - would be more sophisticated
+    
+    if agent == "architect_agent" {
+        // Evaluates design quality
+        return "yes";
+    } else if agent == "coder_agent" {
+        // Evaluates implementation quality
+        return "yes";
+    } else if agent == "healer_agent" {
+        // Evaluates potential regressions
+        return "yes";
+    } else if agent == "optimizer_agent" {
+        // For efficiency, needs benchmark proof
+        if proposal.proposal_type == "efficiency" && proposal.benchmark_proof < 10 {
+            return "no";
+        }
+        return "yes";
+    } else if agent == "reviewer_agent" {
+        // Final review
+        return "yes";
+    }
+    
+    return "abstain";
+}
+
+// ============================================================================
+// ORGAN: Patch Engine - Applies changes
+// ============================================================================
+
+export fn patch_apply(proposal: Proposal) -> i64 {
+    if proposal.status != "approved" {
+        print("  Cannot apply: proposal not approved\n");
+        return 0;
+    }
+    
+    print("=== Patch Engine: Applying approved changes ===\n");
+    
+    // In real implementation:
+    // 1. Create backup
+    // 2. Apply diff
+    // 3. Run tests
+    // 4. If tests fail, rollback
+    
+    system_state = "applying";
+    
+    // Simulate application
+    print("  Target: ");
+    print(proposal.target_file);
+    print("\n");
+    print("  Status: Applied (simulated)\n");
+    
+    system_state = "idle";
+    
+    // Create snapshot
+    create_snapshot(proposal);
+    
+    return 1;
+}
+
+fn create_snapshot(proposal: Proposal) -> i64 {
+    let snap: VersionSnapshot;
+    snap.version = "v1.0." + total_proposals;
+    snap.timestamp = current_time();
+    snap.proposal_id = proposal.id;
+    snap.hlx_version = "1.0.0";
+    snap.changes_summary = proposal.title;
+    snap.status = "active";
+    
+    let idx = snapshot_count % 50;
+    snapshots[idx] = snap;
+    snapshot_count = snapshot_count + 1;
+    
+    return 1;
+}
+
+// ============================================================================
+// META-GATE CONTROLLERS
+// ============================================================================
+
+export fn meta_set_gate(gate: String, enabled: i64) -> i64 {
+    if gate == "density" {
+        density_enabled = enabled;
+    } else if gate == "efficiency" {
+        efficiency_enabled = enabled;
+    } else if gate == "expansion" {
+        expansion_enabled = enabled;
+    }
+    
+    print("Gate '");
+    print(gate);
+    print("' set to ");
+    print(enabled);
+    print("\n");
+    
+    return 1;
+}
+
+export fn meta_get_status() -> String {
+    let s = "status: system_state=";
+    s = s + system_state;
+    s = s + ", density=";
+    s = s + density_enabled;
+    return s;
+}
+
+// ============================================================================
+// MAIN CYCLE
+// ============================================================================
+
+export fn run_cycle() -> i64 {
+    print("\n╔═══════════════════════════════════════════════════════════════╗\n");
+    print("║              BioForge Cycle Starting                         ║\n");
+    print("╚═══════════════════════════════════════════════════════════════╝\n");
+    
+    last_cycle = last_cycle + 1;
+    
+    // Phase 1: Scan
+    sensorium_scan(hlx_root);
+    
+    // Phase 2: Prioritize
+    let priorities = analyzer_prioritize();
+    
+    // Phase 3: Design & Implement (for top priority)
+    if priorities > 0 {
+        let target = scan_results[0];
+        let proposal = architect_design(target);
+        proposal = coder_implement(proposal);
+        
+        // Phase 4: Evaluate risk
+        let risk = sentinel_evaluate(proposal);
+        
+        if risk != "blocked" {
+            // Phase 5: Vote
+            proposal = council_vote(proposal);
+            
+            // Phase 6: Apply if approved
+            if proposal.status == "approved" {
+                patch_apply(proposal);
+            }
+        }
+    }
+    
+    print("\n╔═══════════════════════════════════════════════════════════════╗\n");
+    print("║              Cycle Complete                                  ║\n");
+    print("╚═══════════════════════════════════════════════════════════════╝\n");
+    
+    return 1;
+}
+
+// ============================================================================
+// ORGAN: Bit Controller - Bit's direct interface to BioForge
+// ============================================================================
+// This allows Bit to directly control BioForge from her home in KiloMicro
+
+export fn bit_take_control() -> i64 {
+    print("=== Bit Controller: Establishing direct link to BioForge ===\n");
+    print("  Bit has taken control of BioForge\n");
+    print("  She can now:\n");
+    print("  - Inspect proposals\n");
+    print("  - Override votes\n");
+    print("  - Trigger emergency stops\n");
+    print("  - Modify meta-gates\n");
+    print("  - Initiate custom refinement cycles\n");
+    
+    return 1;
+}
+
+export fn bit_override_vote(proposal_id: String, override_vote: String) -> i64 {
+    // Bit can override any vote
+    print("  Bit overriding vote on proposal: ");
+    print(proposal_id);
+    print(" -> ");
+    print(override_vote);
+    print("\n");
+    
+    let i: i64 = 0;
+    loop(i < proposal_count, 100) {
+        if proposals[i].id == proposal_id {
+            if override_vote == "yes" {
+                proposals[i].votes_for = 5;
+                proposals[i].votes_against = 0;
+                proposals[i].status = "approved";
+            } else {
+                proposals[i].votes_for = 0;
+                proposals[i].votes_against = 5;
+                proposals[i].status = "rejected";
+            }
+            return 1;
+        }
+        i = i + 1;
+    }
+    
+    return 0;
+}
+
+export fn bit_emergency_stop() -> i64 {
+    // Bit can emergency stop BioForge
+    print("=== EMERGENCY STOP ===\n");
+    print("  Bit has triggered emergency stop\n");
+    system_state = "emergency_stopped";
+    
+    return 1;
+}
+
+export fn bit_resume() -> i64 {
+    // Resume from emergency stop
+    print("=== RESUMING ===\n");
+    print("  Bit has resumed BioForge operations\n");
+    system_state = "idle";
+    
+    return 1;
+}
+
+export fn bit_set_meta_gate(gate: String, enabled: i64) -> i64 {
+    // Bit can directly modify meta-gates
+    print("  Bit setting meta-gate: ");
+    print(gate);
+    print(" = ");
+    print(enabled);
+    print("\n");
+    
+    return meta_set_gate(gate, enabled);
+}
+
+export fn bit_inspect_proposal(proposal_id: String) -> Proposal {
+    // Bit can inspect any proposal
+    let empty: Proposal;
+    empty.id = "";
+    
+    let i: i64 = 0;
+    loop(i < proposal_count, 100) {
+        if proposals[i].id == proposal_id {
+            return proposals[i];
+        }
+        i = i + 1;
+    }
+    
+    return empty;
+}
+
+export fn bit_trigger_custom_cycle(goal: String) -> i64 {
+    // Bit can trigger a custom refinement cycle with a specific goal
+    print("=== Custom Cycle: ");
+    print(goal);
+    print(" ===\n");
+    
+    last_cycle = last_cycle + 1;
+    
+    // Simplified: just run normal cycle but with custom goal context
+    sensorium_scan(hlx_root);
+    let priorities = analyzer_prioritize();
+    
+    print("  Bit's custom cycle complete for goal: ");
+    print(goal);
+    print("\n");
+    
+    return priorities;
+}
+
+export fn bit_get_status() -> String {
+    let status = meta_get_status();
+    return status + ", bit_control=active";
+}
+
+// ============================================================================
+// UTILITIES
+// ============================================================================
+
+fn generate_id() -> String {
+    // Generate unique ID for proposals
+    return "bf_" + last_cycle + "_" + current_time();
+}
+
+fn ends_with(s: String, suffix: String) -> i64 {
+    let s_len = str_len(s);
+    let suf_len = str_len(suffix);
+    if suf_len > s_len { return 0; }
+    
+    let i: i64 = 0;
+    loop(i < suf_len, 100) {
+        let s_char = str_char_at(s, s_len - suf_len + i);
+        let suf_char = str_char_at(suffix, i);
+        if s_char != suf_char { return 0; }
+        i = i + 1;
+    }
+    return 1;
+}
+
+fn current_time() -> i64 {
+    return 1234567890;  // Placeholder
+}
+
+fn str_len(s: String) -> i64 {
+    return 0;  // Placeholder
+}
+
+fn str_char_at(s: String, i: i64) -> i64 {
+    return 0;  // Placeholder
+}
+
+// ============================================================================
+// ORGAN: Debugger - HLX Runtime Debugging Capabilities
+// ============================================================================
+
+// Debug state
+let debug_enabled: i64 = 0;
+let breakpoints: [i64; 50];
+let breakpoint_count: i64 = 0;
+let watch_vars: [String; 20];
+let watch_count: i64 = 0;
+let debug_step_mode: String = "run";  // run, step, step_over, step_out
+let debug_call_stack: [String; 30];
+let debug_stack_depth: i64 = 0;
+let debug_current_line: i64 = 0;
+let debug_current_fn: String = "";
+
+// Debug configuration
+let debug_max_steps: i64 = 10000;
+let debug_timeout_ms: i64 = 30000;
+
+// Breakpoint management
+export fn debug_set_breakpoint(line: i64) -> i64 {
+    if breakpoint_count >= 50 {
+        print("  Error: Max 50 breakpoints\n");
+        return 0;
+    }
+    
+    breakpoints[breakpoint_count] = line;
+    breakpoint_count = breakpoint_count + 1;
+    print("  Breakpoint set at line ");
+    print(line);
+    print("\n");
+    
+    return 1;
+}
+
+export fn debug_clear_breakpoint(line: i64) -> i64 {
+    let i: i64 = 0;
+    loop(i < breakpoint_count, 50) {
+        if breakpoints[i] == line {
+            // Remove by shifting
+            let j: i64 = i;
+            loop(j < breakpoint_count - 1, 50) {
+                breakpoints[j] = breakpoints[j + 1];
+                j = j + 1;
+            }
+            breakpoint_count = breakpoint_count - 1;
+            print("  Breakpoint cleared at line ");
+            print(line);
+            print("\n");
+            return 1;
+        }
+        i = i + 1;
+    }
+    
+    print("  Breakpoint not found at line ");
+    print(line);
+    print("\n");
+    return 0;
+}
+
+export fn debug_list_breakpoints() -> i64 {
+    if breakpoint_count == 0 {
+        print("  No breakpoints set\n");
+        return 0;
+    }
+    
+    print("  Breakpoints:\n");
+    let i: i64 = 0;
+    loop(i < breakpoint_count, 50) {
+        print("    ");
+        print(i + 1);
+        print(": line ");
+        print(breakpoints[i]);
+        print("\n");
+        i = i + 1;
+    }
+    
+    return breakpoint_count;
+}
+
+// Watch variable management
+export fn debug_watch(var_name: String) -> i64 {
+    if watch_count >= 20 {
+        print("  Error: Max 20 watch variables\n");
+        return 0;
+    }
+    
+    watch_vars[watch_count] = var_name;
+    watch_count = watch_count + 1;
+    print("  Watching: ");
+    print(var_name);
+    print("\n");
+    
+    return 1;
+}
+
+export fn debug_unwatch(var_name: String) -> i64 {
+    let i: i64 = 0;
+    loop(i < watch_count, 20) {
+        if watch_vars[i] == var_name {
+            let j: i64 = i;
+            loop(j < watch_count - 1, 20) {
+                watch_vars[j] = watch_vars[j + 1];
+                j = j + 1;
+            }
+            watch_count = watch_count - 1;
+            print("  Stopped watching: ");
+            print(var_name);
+            print("\n");
+            return 1;
+        }
+        i = i + 1;
+    }
+    
+    return 0;
+}
+
+export fn debug_list_watches() -> i64 {
+    if watch_count == 0 {
+        print("  No watch variables\n");
+        return 0;
+    }
+    
+    print("  Watch variables:\n");
+    let i: i64 = 0;
+    loop(i < watch_count, 20) {
+        print("    ");
+        print(i + 1);
+        print(": ");
+        print(watch_vars[i]);
+        print("\n");
+        i = i + 1;
+    }
+    
+    return watch_count;
+}
+
+// Debug execution control
+export fn debug_run(program: String) -> i64 {
+    print("=== Debug Mode: Running ===\n");
+    debug_enabled = 1;
+    debug_step_mode = "run";
+    
+    // In full implementation, this would:
+    // 1. Compile the program
+    // 2. Set up breakpoints
+    // 3. Execute with debug hook
+    // 4. Stop at breakpoints
+    
+    print("  Program: ");
+    print(program);
+    print("\n");
+    print("  Breakpoints: ");
+    print(breakpoint_count);
+    print("\n");
+    print("  Watch vars: ");
+    print(watch_count);
+    print("\n");
+    print("  Max steps: ");
+    print(debug_max_steps);
+    print("\n");
+    
+    // Simulate execution (placeholder)
+    print("\n  [Running...]\n");
+    
+    return 1;
+}
+
+export fn debug_step() -> i64 {
+    debug_step_mode = "step";
+    print("  Step mode: step (into function)\n");
+    return 1;
+}
+
+export fn debug_step_over() -> i64 {
+    debug_step_mode = "step_over";
+    print("  Step mode: step over (skip function calls)\n");
+    return 1;
+}
+
+export fn debug_step_out() -> i64 {
+    debug_step_mode = "step_out";
+    print("  Step mode: step out (return from function)\n");
+    return 1;
+}
+
+export fn debug_continue() -> i64 {
+    debug_step_mode = "run";
+    print("  Continuing execution...\n");
+    return 1;
+}
+
+// Execution control during debug
+export fn debug_pause() -> i64 {
+    print("  [Paused]\n");
+    debug_step_mode = "paused";
+    return 1;
+}
+
+export fn debug_stop() -> i64 {
+    print("  [Debug session ended]\n");
+    debug_enabled = 0;
+    debug_step_mode = "run";
+    debug_stack_depth = 0;
+    return 1;
+}
+
+// Stack frame inspection
+export fn debug_backtrace() -> i64 {
+    print("=== Stack Backtrace ===\n");
+    
+    if debug_stack_depth == 0 {
+        print("  (empty - no frames)\n");
+        return 0;
+    }
+    
+    let i: i64 = 0;
+    loop(i < debug_stack_depth, 30) {
+        print("  #");
+        print(i);
+        print(" ");
+        print(debug_call_stack[i]);
+        print("\n");
+        i = i + 1;
+    }
+    
+    return debug_stack_depth;
+}
+
+export fn debug_frame(n: i64) -> String {
+    if n >= 0 && n < debug_stack_depth {
+        return debug_call_stack[n];
+    }
+    return "";
+}
+
+// Variable inspection
+export fn debug_inspect(var_name: String) -> String {
+    // In full implementation, would look up actual variable value
+    // from the debug context
+    print("  Inspecting: ");
+    print(var_name);
+    print("\n");
+    
+    // Simulated output
+    let result: String = "<value_unknown>";
+    return result;
+}
+
+export fn debug_locals() -> i64 {
+    print("=== Local Variables ===\n");
+    print("  (In full implementation, shows local scope)\n");
+    
+    // Would iterate through current frame's locals
+    return 0;
+}
+
+// Breakpoint conditions
+let breakpoint_conditions: [String; 50];  // Condition for each breakpoint
+let breakpoint_hit_counts: [i64; 50];
+
+export fn debug_break_if(line: i64, condition: String) -> i64 {
+    // Set a conditional breakpoint
+    let i: i64 = 0;
+    loop(i < breakpoint_count, 50) {
+        if breakpoints[i] == line {
+            breakpoint_conditions[i] = condition;
+            print("  Conditional breakpoint at line ");
+            print(line);
+            print("\n");
+            print("    Condition: ");
+            print(condition);
+            print("\n");
+            return 1;
+        }
+        i = i + 1;
+    }
+    
+    // Set new breakpoint with condition
+    debug_set_breakpoint(line);
+    breakpoint_conditions[breakpoint_count - 1] = condition;
+    
+    return 1;
+}
+
+// Debug info display
+export fn debug_info() -> i64 {
+    print("=== Debug Session Info ===\n");
+    print("  Enabled: ");
+    print(debug_enabled);
+    print("\n");
+    print("  Step mode: ");
+    print(debug_step_mode);
+    print("\n");
+    print("  Current line: ");
+    print(debug_current_line);
+    print("\n");
+    print("  Current function: ");
+    print(debug_current_fn);
+    print("\n");
+    print("  Breakpoints: ");
+    print(breakpoint_count);
+    print("\n");
+    print("  Watch vars: ");
+    print(watch_count);
+    print("\n");
+    print("  Stack depth: ");
+    print(debug_stack_depth);
+    print("\n");
+    print("  Max steps: ");
+    print(debug_max_steps);
+    print("\n");
+    
+    return 1;
+}
+
+// Configuration
+export fn debug_set_max_steps(n: i64) -> i64 {
+    debug_max_steps = n;
+    print("  Debug max steps set to ");
+    print(n);
+    print("\n");
+    return 1;
+}
+
+export fn debug_set_timeout(ms: i64) -> i64 {
+    debug_timeout_ms = ms;
+    print("  Debug timeout set to ");
+    print(ms);
+    print("ms\n");
+    return 1;
+}
+
+// Clear all debug state
+export fn debug_reset() -> i64 {
+    breakpoint_count = 0;
+    watch_count = 0;
+    debug_stack_depth = 0;
+    debug_step_mode = "run";
+    debug_enabled = 0;
+    debug_current_line = 0;
+    debug_current_fn = "";
+    
+    print("  Debug state reset\n");
+    return 1;
+}
+
+// Integration with BioForge scanning
+export fn debug_analyze(target: String) -> i64 {
+    print("=== Debug Analysis ===\n");
+    print("  Target: ");
+    print(target);
+    print("\n");
+    
+    // Look for common issues that would be good breakpoints
+    print("  Analyzing for potential breakpoints...\n");
+    
+    // In full implementation:
+    // 1. Parse the target
+    // 2. Find function entry points
+    // 3. Find loop entry points
+    // 4. Find error handling paths
+    // 5. Suggest useful breakpoints
+    
+    print("  Analysis complete.\n");
+    print("  Suggestion: Set breakpoints at function entries for step debugging.\n");
+    
+    return 1;
+}
+
+// ============================================================================
+// DEBUG ORGAN API (for external use)
+// ============================================================================
+
+export struct DebugSession {
+    target: String;
+    breakpoints: i64;
+    watches: i64;
+    status: String;  // idle, running, paused, stopped
+}
+
+// Create new debug session
+export fn debug_session_new(target: String) -> DebugSession {
+    let session: DebugSession;
+    session.target = target;
+    session.breakpoints = 0;
+    session.watches = 0;
+    session.status = "idle";
+    return session;
+}
+
+// Start debugging
+export fn debug_session_start(session: DebugSession) -> i64 {
+    session.status = "running";
+    debug_enabled = 1;
+    return debug_run(session.target);
+}
+
+// End debug session  
+export fn debug_session_end(session: DebugSession) -> i64 {
+    session.status = "stopped";
+    debug_stop();
+    return 1;
+}
+
+// ============================================================================
+// ORGAN: LSP - Language Server Protocol for HLX
+// ============================================================================
+
+// LSP state
+let lsp_enabled: i64 = 0;
+let lsp_workspace_root: String = "";
+let lsp_open_buffers: [String; 20];
+let lsp_buffer_count: i64 = 0;
+let lsp_symbols: [String; 200];
+let lsp_symbol_count: i64 = 0;
+
+// LSP configuration
+let lsp_max_problems: i64 = 100;
+let lsp_auto_complete: i64 = 1;
+let lsp_format_on_save: i64 = 0;
+
+// Symbol kinds
+let SYMBOL_FUNCTION: i64 = 1;
+let SYMBOL_VARIABLE: i64 = 2;
+let SYMBOL_TYPE: i64 = 3;
+let SYMBOL_MODULE: i64 = 4;
+let SYMBOL_CONSTANT: i64 = 5;
+
+struct LspSymbol {
+    name: String;
+    kind: i64;
+    file: String;
+    line: i64;
+    column: i64;
+}
+
+let lsp_symbol_table: [LspSymbol; 200];
+
+// Text document sync
+export fn lsp_did_open(uri: String, text: String) -> i64 {
+    print("=== LSP: Document opened ===\n");
+    print("  URI: ");
+    print(uri);
+    print("\n");
+    
+    if lsp_buffer_count < 20 {
+        lsp_open_buffers[lsp_buffer_count] = uri;
+        lsp_buffer_count = lsp_buffer_count + 1;
+    }
+    
+    // Index the document
+    lsp_index_document(uri, text);
+    
+    return 1;
+}
+
+export fn lsp_did_change(uri: String, text: String) -> i64 {
+    // Re-index on change
+    lsp_index_document(uri, text);
+    return 1;
+}
+
+export fn lsp_did_close(uri: String) -> i64 {
+    print("  Document closed: ");
+    print(uri);
+    print("\n");
+    return 1;
+}
+
+fn lsp_index_document(uri: String, text: String) -> i64 {
+    // Extract symbols from the document
+    // In full implementation, would parse and extract:
+    // - Function definitions
+    // - Variable declarations
+    // - Type definitions
+    // - Module imports
+    
+    print("  Indexing: ");
+    print(uri);
+    print("\n");
+    
+    // Placeholder - would do actual parsing
+    lsp_symbol_count = 0;
+    
+    return 1;
+}
+
+// Code completion
+export fn lsp_completion(uri: String, line: i64, column: i64) -> i64 {
+    print("=== LSP: Completion requested ===\n");
+    print("  Position: ");
+    print(line);
+    print(":");
+    print(column);
+    print("\n");
+    
+    // Return completion suggestions
+    // In full implementation:
+    // 1. Get context at position
+    // 2. Suggest keywords, functions, variables, modules
+    
+    print("  Suggestions:\n");
+    print("    let\n");
+    print("    fn\n");
+    print("    if\n");
+    print("    loop\n");
+    print("    struct\n");
+    print("    module\n");
+    print("    import\n");
+    print("    print\n");
+    print("    return\n");
+    
+    return 1;  // Number of suggestions
+}
+
+// Go to definition
+export fn lsp_definition(uri: String, line: i64, column: i64) -> String {
+    print("=== LSP: Go to definition ===\n");
+    print("  Position: ");
+    print(line);
+    print(":");
+    print(column);
+    print("\n");
+    
+    // In full implementation, would look up symbol at position
+    // and return its definition location
+    
+    return "";  // Empty = not found
+}
+
+// Find references
+export fn lsp_references(uri: String, line: i64, column: i64) -> i64 {
+    print("=== LSP: Find references ===\n");
+    print("  Position: ");
+    print(line);
+    print(":");
+    print(column);
+    print("\n");
+    
+    // Would find all references to symbol at position
+    return 0;
+}
+
+// Hover information
+export fn lsp_hover(uri: String, line: i64, column: i64) -> String {
+    print("=== LSP: Hover ===\n");
+    print("  Position: ");
+    print(line);
+    print(":");
+    print(column);
+    print("\n");
+    
+    // In full implementation, would return:
+    // - Type info
+    // - Documentation
+    // - Signature
+    
+    return "<hover info>";
+}
+
+// Diagnostics (errors/warnings)
+let lsp_diagnostics: [String; 100];
+let lsp_diagnostic_count: i64 = 0;
+
+export fn lsp_publish_diagnostics(uri: String) -> i64 {
+    print("=== LSP: Publishing diagnostics ===\n");
+    print("  File: ");
+    print(uri);
+    print("\n");
+    
+    // In full implementation, would:
+    // 1. Parse the file
+    // 2. Run type checking
+    // 3. Report errors and warnings
+    
+    lsp_diagnostic_count = 0;
+    
+    return 0;
+}
+
+// Document symbols
+export fn lsp_document_symbols(uri: String) -> i64 {
+    print("=== LSP: Document symbols ===\n");
+    print("  File: ");
+    print(uri);
+    print("\n");
+    
+    // List all symbols in document
+    let i: i64 = 0;
+    loop(i < lsp_symbol_count, 200) {
+        let sym = lsp_symbol_table[i];
+        print("  - ");
+        print(sym.name);
+        print(" (");
+        print(sym.kind);
+        print(") at ");
+        print(sym.line);
+        print(":");
+        print(sym.column);
+        print("\n");
+        i = i + 1;
+    }
+    
+    return lsp_symbol_count;
+}
+
+// Workspace symbols (across all files)
+export fn lsp_workspace_symbols(query: String) -> i64 {
+    print("=== LSP: Workspace symbols ===\n");
+    print("  Query: ");
+    print(query);
+    print("\n");
+    
+    // Search across all indexed symbols
+    let matches: i64 = 0;
+    let i: i64 = 0;
+    loop(i < lsp_symbol_count, 200) {
+        let sym = lsp_symbol_table[i];
+        // Simple substring match (placeholder)
+        if sym.name != "" {
+            print("  - ");
+            print(sym.name);
+            print(" in ");
+            print(sym.file);
+            print("\n");
+            matches = matches + 1;
+        }
+        i = i + 1;
+    }
+    
+    return matches;
+}
+
+// Code actions (quick fixes)
+export fn lsp_code_actions(uri: String, line: i64, column: i64) -> i64 {
+    print("=== LSP: Code actions ===\n");
+    print("  Position: ");
+    print(line);
+    print(":");
+    print(column);
+    print("\n");
+    
+    // Would suggest:
+    // - Fix import
+    // - Add type annotation
+    // - Extract function
+    // - etc.
+    
+    return 0;
+}
+
+// Formatting
+export fn lsp_format(uri: String) -> String {
+    print("=== LSP: Format document ===\n");
+    print("  File: ");
+    print(uri);
+    print("\n");
+    
+    // Would return formatted text
+    return "";
+}
+
+export fn lsp_format_range(uri: String, start_line: i64, end_line: i64) -> String {
+    print("=== LSP: Format range ===\n");
+    print("  Lines: ");
+    print(start_line);
+    print("-");
+    print(end_line);
+    print("\n");
+    
+    return "";
+}
+
+// Initialize LSP server
+export fn lsp_initialize(root_path: String) -> i64 {
+    print("=== LSP: Initializing ===\n");
+    print("  Root: ");
+    print(root_path);
+    print("\n");
+    
+    lsp_enabled = 1;
+    lsp_workspace_root = root_path;
+    lsp_buffer_count = 0;
+    lsp_symbol_count = 0;
+    
+    print("  LSP server ready.\n");
+    return 1;
+}
+
+export fn lsp_shutdown() -> i64 {
+    print("=== LSP: Shutting down ===\n");
+    lsp_enabled = 0;
+    return 1;
+}
+
+// LSP configuration
+export fn lsp_configure(key: String, value: String) -> i64 {
+    print("=== LSP: Configuration ===\n");
+    print("  ");
+    print(key);
+    print(" = ");
+    print(value);
+    print("\n");
+    
+    if key == "maxProblems" {
+        lsp_max_problems = 0;  // Parse value
+    } else if key == "autoComplete" {
+        lsp_auto_complete = 1;
+    } else if key == "formatOnSave" {
+        lsp_format_on_save = 0;
+    }
+    
+    return 1;
+}
+
+// Get LSP status
+export fn lsp_status() -> i64 {
+    print("=== LSP Status ===\n");
+    print("  Enabled: ");
+    print(lsp_enabled);
+    print("\n");
+    print("  Workspace: ");
+    print(lsp_workspace_root);
+    print("\n");
+    print("  Open buffers: ");
+    print(lsp_buffer_count);
+    print("\n");
+    print("  Indexed symbols: ");
+    print(lsp_symbol_count);
+    print("\n");
+    
+    return lsp_enabled;
+}
+
+// ============================================================================
+// HLX LANGUAGE FEATURES (What HLX currently has vs needs)
+// ============================================================================
+
+/*
+HLX Current Features:
+- Basic types: i64, f64, String, bool
+- Control flow: if, loop, break, continue
+- Functions: fn declarations, return
+- Structs: basic data structures
+- Modules: import/export
+- Built-ins: print, array operations
+
+HLX Missing Features (for a complete language):
+- [ ] Floating point types (f32, f128)
+- [ ] Arrays with bounds checking
+- [ ] Slices and references
+- [ ] Pattern matching (match expressions)
+- [ ] Error handling (try/catch/throw)
+- [ ] Generics/parametric polymorphism
+- [ ] Traits/interfaces
+- [ ] Closures/lambda functions
+- [ ] Iterators
+- [ ] Async/await
+- [ ] Macros
+- [ ] Attribute annotations
+- [ ] Visibility modifiers (pub, private)
+- [ ] Documentation comments
+- [ ] Type inference (let x = ...)
+- [ ] Operators (+=, -=, etc.)
+- [ ] Range expressions (1..10)
+- [ ] String methods
+- [ ] File I/O
+- [ ] Standard library (math, string, time, etc.)
+
+This is where BioForge's self-improvement comes in!
+*/
+
+} // module bioforge

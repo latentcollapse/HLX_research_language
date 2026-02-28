@@ -1,0 +1,16 @@
+[package]
+name = "hlx-run"
+version = "0.1.0"
+edition = "2021"
+description = "Execute HLX programs"
+
+[[bin]]
+name = "hlx-run"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4", features = ["derive"] }
+
+[dependencies.hlx-runtime]
+path = "../hlx-runtime"

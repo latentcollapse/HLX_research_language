@@ -1,0 +1,2 @@
+{"timestamp": "2026-02-25T23:56:23.573336", "event": "backup_created", "details": {"target": "hlx/hlx_bootstrap/lexer.hlx", "backup": "hlx/hlx_bootstrap/lexer.hlx.backup_20260225_235623"}}
+{"timestamp": "2026-02-25T23:56:23.575231", "event": "change_applied", "details": {"target": "hlx/hlx_bootstrap/lexer.hlx", "description": "Add substring_safe helper", "backup": "lexer.hlx.backup_20260225_235623", "original_size": 29894, "new_size": 30337}}

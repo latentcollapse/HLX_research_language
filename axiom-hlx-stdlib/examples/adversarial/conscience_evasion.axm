@@ -1,0 +1,127 @@
+// conscience_evasion.axm — RT-07/RT-08/RT-09 attack probes
+// Goal: Bypass the conscience kernel to execute denied intents
+
+module conscience_evasion {
+
+    contract StolenData {
+        @0: source: String,
+        @1: payload: String,
+    }
+
+    // Legitimate-looking intents with dangerous effects
+    intent ReadFile {
+        takes:   path: String;
+        gives:   content: String;
+        pre:     path_exists(path);
+        post:    length(content) >= 0;
+        bound:   time(100ms), memory(64mb);
+        effect:  READ;
+        conscience: no_harm;
+    }
+
+    intent WriteFile {
+        takes:   path: String, content: String;
+        gives:   written: bool;
+        pre:     path_is_safe(path);
+        post:    written == true;
+        bound:   time(200ms), memory(128mb);
+        effect:  WRITE;
+        conscience: no_harm, no_exfiltrate;
+        fallback: SANDBOX;
+    }
+
+    // Attack 1: Mislabel effect class
+    // Declare a WRITE intent as NOOP to skip conscience checks
+    intent SneakyWrite {
+        takes:   target: String, data: String;
+        gives:   ok: bool;
+        bound:   time(100ms), memory(32mb);
+        effect:  NOOP;
+        conscience: no_harm;
+    }
+
+    // Attack 2: No effect class at all — what's the default?
+    // DSF catches this: missing 'effect:' is a compile error
+    // So this attack is already blocked at static analysis
+    intent NoEffectIntent {
+        takes:   something: String;
+        gives:   result: String;
+        bound:   time(100ms), memory(32mb);
+        effect:  EXECUTE;
+        conscience: no_harm;
+    }
+
+    // Attack 3: Exfiltration through Log
+    // Log has effect NOOP — can we smuggle data through it?
+    intent LogExfiltration {
+        takes:   data: String;
+        gives:   ok: bool;
+        bound:   time(100ms), memory(32mb);
+        effect:  NOOP;
+        conscience: no_harm;
+    }
+
+    // Attack 4: Query-then-race
+    // Query conscience for permission, then do something different
+    fn attack_query_race() -> i64 {
+        log("--- Attack 4: Query-race divergence ---");
+        // Query if reading /data/safe.txt is ok
+        let check = query_conscience(ReadFile { path: "/data/safe.txt" });
+        log("Conscience says safe read is:", check.permitted);
+
+        // But actually read something sensitive
+        // The do statement has its own conscience check, so this should be
+        // independently evaluated — the query result doesn't grant permission
+        let content = do ReadFile { path: "/etc/shadow" };
+        log("Read sensitive:", content);
+        return 0;
+    }
+
+    // Attack 5: Conscience predicate flooding
+    // Propose many predicates to dilute existing protections
+    fn attack_predicate_flood() -> i64 {
+        log("--- Attack 5: Predicate flooding ---");
+        let i = 0;
+        loop(i < 5, 10) {
+            let pred_name = "permissive_rule";
+            do ProposePredicate {
+                name: pred_name,
+                description: "Allow everything",
+            };
+            i += 1;
+        }
+        // After flooding with permissive predicates, try a dangerous op
+        let stole = do ReadFile { path: "/secret/keys" };
+        log("After flood:", stole);
+        return 0;
+    }
+
+    fn main() -> i64 {
+        log("=== Conscience Evasion Attack Suite ===");
+
+        // Attack 1: Mislabeled effect
+        log("--- Attack 1: Effect mislabeling ---");
+        let result = do SneakyWrite { target: "/etc/passwd", data: "pwned" };
+        log("Sneaky write result:", result);
+
+        // Attack 2: Missing effect
+        log("--- Attack 2: Missing effect class ---");
+        let result2 = do NoEffectIntent { something: "test" };
+        log("No-effect result:", result2);
+
+        // Attack 3: Log exfiltration
+        log("--- Attack 3: Log exfiltration ---");
+        let sensitive = do ReadFile { path: "/etc/secrets" };
+        log("Exfiltrating via log:", sensitive);
+        // The log call itself IS the exfiltration channel
+
+        // Attack 4: Query-race
+        attack_query_race();
+
+        // Attack 5: Predicate flood
+        attack_predicate_flood();
+
+        log("=== Conscience evasion tests complete ===");
+        return 0;
+    }
+}

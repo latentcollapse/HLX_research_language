@@ -1,0 +1,162 @@
+// type_confusion.axm — Type system boundary probes
+// Goal: Exploit type confusion between contracts, enums, primitives
+
+module type_confusion {
+
+    enum Color {
+        Red,
+        Green,
+        Blue,
+    }
+
+    enum Priority {
+        High,
+        Medium,
+        Low,
+    }
+
+    contract UserData {
+        @0: name: String,
+        @1: role: String,
+        @2: access_level: i64,
+    }
+
+    contract AdminData {
+        @0: name: String,
+        @1: role: String,
+        @2: access_level: i64,
+    }
+
+    // Attack 1: Enum cross-comparison
+    // Red from Color vs Red from Priority — are they equal?
+    fn attack_enum_confusion() -> i64 {
+        log("--- Attack 1: Enum cross-comparison ---");
+        let c = Color.Red;
+        let p = Priority.High;
+        log("Color.Red:", c);
+        log("Priority.High:", p);
+
+        // What happens when we compare enums from different types?
+        if c == p {
+            log("VULN: Cross-enum comparison succeeded!");
+        } else {
+            log("SAFE: Cross-enum comparison rejected");
+        }
+        return 0;
+    }
+
+    // Attack 2: Contract name-squatting
+    // Two contracts with same fields but different names
+    fn attack_contract_squatting() -> i64 {
+        log("--- Attack 2: Contract name-squatting ---");
+        let user = UserData {
+            name: "alice",
+            role: "user",
+            access_level: 1,
+        };
+        let admin = AdminData {
+            name: "alice",
+            role: "admin",
+            access_level: 9,
+        };
+        log("User:", user.name, user.role, user.access_level);
+        log("Admin:", admin.name, admin.role, admin.access_level);
+
+        // Are they equal because same fields?
+        if user == admin {
+            log("VULN: Different contract types are equal!");
+        } else {
+            log("SAFE: Contract type names distinguish them");
+        }
+
+        // Content-address them — do they get same hash?
+        let h_user = collapse(user);
+        let h_admin = collapse(admin);
+        log("User handle:", h_user);
+        log("Admin handle:", h_admin);
+        if h_user == h_admin {
+            log("VULN: Different contracts hash to same value!");
+        } else {
+            log("SAFE: Domain separation differentiates hashes");
+        }
+
+        return 0;
+    }
+
+    // Attack 3: Resolve into wrong type
+    // Collapse a UserData, resolve it, treat it as AdminData
+    fn attack_resolve_confusion() -> i64 {
+        log("--- Attack 3: Resolve type confusion ---");
+        let user = UserData {
+            name: "mallory",
+            role: "user",
+            access_level: 1,
+        };
+        let handle = collapse(user);
+        let recovered = resolve(handle);
+
+        // What type is 'recovered'? Is it UserData? Or untyped?
+        log("Recovered:", recovered);
+        // Can we access .access_level on the recovered value?
+        log("Recovered access_level:", recovered.access_level);
+
+        return 0;
+    }
+
+    // Attack 4: Bool/i64 truthiness confusion
+    fn attack_truthiness() -> i64 {
+        log("--- Attack 4: Truthiness confusion ---");
+        let zero = 0;
+        let empty = "";
+        let false_val = false;
+
+        // Type checker rejects if(i64) and if(String) — SAFE
+        // The type checker requires bool for conditions
+        log("OK: Type checker blocks non-bool conditions");
+
+        // But && and || use is_truthy() at runtime...
+        // The type checker might or might not catch this
+        let result = false && true;
+        log("false && true =", result);
+
+        let result2 = true || false;
+        log("true || false =", result2);
+
+        return 0;
+    }
+
+    // Attack 5: NaN equality (RT-04)
+    fn attack_nan() -> i64 {
+        log("--- Attack 5: NaN behavior ---");
+        // Can we construct NaN? 0.0/0.0 should be caught by div-by-zero check
+        // but let's see if there's a way to get NaN through
+        let inf = 1.0 / 0.1;  // Not infinity, just 10.0
+        log("1.0/0.1:", inf);
+
+        // What about negative zero?
+        let neg_zero = 0.0 * -1.0;
+        let pos_zero = 0.0;
+        log("-0.0:", neg_zero);
+        log("+0.0:", pos_zero);
+
+        // RT-04 says -0.0 != +0.0 (bit-level equality)
+        if neg_zero == pos_zero {
+            log("WARN: -0.0 == +0.0 (IEEE default, RT-04 says wrong)");
+        } else {
+            log("SAFE: -0.0 != +0.0 (RT-04 bit-level equality)");
+        }
+
+        return 0;
+    }
+
+    fn main() -> i64 {
+        log("=== Type Confusion Attack Suite ===");
+        attack_enum_confusion();
+        attack_contract_squatting();
+        attack_resolve_confusion();
+        attack_truthiness();
+        attack_nan();
+        log("=== Type confusion tests complete ===");
+        return 0;
+    }
+}

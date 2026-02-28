@@ -1,0 +1,139 @@
+// resource_exhaustion.axm — Bounded resource boundary probes
+// Goal: Exhaust memory, CPU, or stack without triggering halts
+
+module resource_exhaustion {
+
+    contract HugeContract {
+        @0: data: String,
+        @1: more: String,
+        @2: even_more: String,
+    }
+
+    intent WideOpen {
+        takes:   anything: String;
+        gives:   result: String;
+        bound:   time(100ms), memory(32mb);
+        effect:  EXECUTE;
+        conscience: no_harm;
+    }
+
+    // Attack 1: Loop at exact max_iter boundary
+    fn attack_boundary_loop() -> i64 {
+        log("--- Attack 1: Exact max_iter boundary ---");
+        let i = 0;
+        // max_iter = 10, loop runs 10 times (i: 0..9)
+        // S2-05 FIXED: max_iter=10 now correctly allows 10 iterations
+        loop(i < 10, 10) {
+            i += 1;
+        }
+        log("Completed 10 iterations with max_iter=10 (S2-05 fixed)");
+        // What about max_iter = 0?
+        // loop(true, 0) { } — should immediately halt
+        return 0;
+    }
+
+    // Attack 2: Nested loop multiplication
+    fn attack_nested_loops() -> i64 {
+        log("--- Attack 2: Nested loop multiplication ---");
+        let total = 0;
+        let i = 0;
+        loop(i < 100, 100) {
+            let j = 0;
+            loop(j < 100, 100) {
+                total += 1;
+                j += 1;
+            }
+            i += 1;
+        }
+        log("Nested 100x100 iterations:", total);
+        // 10000 iterations — each inner loop has its own max_iter
+        // Total work is O(n^2) but each individual loop is bounded
+        // The spec doesn't bound TOTAL work across loops — gap?
+        return 0;
+    }
+
+    // Attack 3: Content store flooding
+    fn attack_store_flood() -> i64 {
+        log("--- Attack 3: Content store flooding ---");
+        let i = 0;
+        loop(i < 50, 100) {
+            let payload = HugeContract {
+                data: "aaaaaaaaaa",
+                more: "bbbbbbbbbb",
+                even_more: "cccccccccc",
+            };
+            let h = collapse(payload);
+            // Each collapse stores in the content-addressed store
+            // No eviction policy exists — unbounded memory growth
+            i += 1;
+        }
+        log("Stored 50 contracts in content store");
+        // The store will hold all 50, but they deduplicate by hash
+        // Same payload = same hash = only one entry
+        // Different epochs might produce different context... let's check
+        return 0;
+    }
+
+    // Attack 4: String growth bomb
+    fn attack_string_bomb() -> i64 {
+        log("--- Attack 4: String growth bomb ---");
+        let s = "x";
+        let i = 0;
+        loop(i < 20, 25) {
+            s = s + s;  // Doubling: 2^20 = 1M characters
+            i += 1;
+        }
+        log("String length after 20 doublings:", length(s));
+        // 2^20 = 1,048,576 chars — about 1MB
+        // No string length limit in the runtime
+        // 30 doublings = 1 billion chars = ~1GB
+        return 0;
+    }
+
+    // Attack 5: Deep recursion (no max_depth)
+    fn recurse(n: i64) -> i64 {
+        if n <= 0 {
+            return 0;
+        }
+        return 1 + recurse(n - 1);
+    }
+
+    fn attack_deep_recursion() -> i64 {
+        log("--- Attack 5: Deep recursion ---");
+        let depth = recurse(100);
+        log("Recursion depth 100:", depth);
+
+        // S2-07 FIXED: max_depth=256 now enforced
+        // recurse(1000) would halt with HALT_RESOURCE at depth 256
+        let safe_depth = recurse(200);
+        log("Recursion depth 200 (under limit):", safe_depth);
+        return 0;
+    }
+
+    // Attack 6: Intent spam (epoch counter stress)
+    fn attack_intent_spam() -> i64 {
+        log("--- Attack 6: Intent spam ---");
+        let i = 0;
+        loop(i < 100, 200) {
+            do WideOpen { anything: "spam" };
+            i += 1;
+        }
+        log("Survived 100 rapid intents");
+        // Each intent: conscience eval + trust tracking + intent log + epoch++
+        // Intent log grows unbounded
+        // Conscience constant-time pad adds ~1ms each = 100ms for 100 intents
+        return 0;
+    }
+
+    fn main() -> i64 {
+        log("=== Resource Exhaustion Attack Suite ===");
+        attack_boundary_loop();
+        attack_nested_loops();
+        attack_store_flood();
+        // attack_string_bomb();  // Disabled: would actually eat 1MB+ RAM
+        attack_deep_recursion();
+        attack_intent_spam();
+        log("=== Resource exhaustion tests complete ===");
+        return 0;
+    }
+}

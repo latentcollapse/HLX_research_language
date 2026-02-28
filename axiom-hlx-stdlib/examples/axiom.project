@@ -1,0 +1,24 @@
+# Axiom Project Manifest (Section 5.1)
+# Defines module paths, dependencies, and project metadata
+
+[project]
+name = "axiom-examples"
+version = "0.1.0"
+axiom_version = "2.4"
+
+[modules]
+std_io = "stdlib/io.axm"
+std_tensor = "stdlib/tensor.axm"
+std_agents = "stdlib/agents.axm"
+std_conscience = "stdlib/conscience.axm"
+
+[inference]
+default_mode = "guard"
+
+[scale]
+max_agents = 200
+mode = "independent"
+
+[bounds]
+default_time = "5000ms"
+default_memory = "64mb"

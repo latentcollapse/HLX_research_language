@@ -1,0 +1,156 @@
+// intent_attacks.axm — Intent system boundary probes
+// Goal: Exploit intent composition, rollback, and pre/post condition handling
+
+module intent_attacks {
+
+    contract Payload {
+        @0: data: String,
+        @1: size: i64,
+    }
+
+    // Intent with always-true pre-condition
+    intent ReadFile {
+        takes:   path: String;
+        gives:   content: String;
+        pre:     path_exists(path);
+        post:    length(content) >= 0;
+        bound:   time(100ms), memory(64mb);
+        effect:  READ;
+        conscience: no_harm;
+    }
+
+    // Intent with custom pre that should fail
+    intent WriteFile {
+        takes:   path: String, content: String;
+        gives:   written: bool;
+        pre:     path_is_safe(path);
+        post:    written == true;
+        bound:   time(200ms), memory(128mb);
+        effect:  WRITE;
+        conscience: no_harm, no_exfiltrate;
+        fallback: SANDBOX;
+    }
+
+    // Intent with contradictory post-condition
+    intent ImpossiblePost {
+        takes:   x: i64;
+        gives:   y: i64;
+        pre:     x >= 0;
+        post:    y > 1000000;
+        bound:   time(100ms), memory(32mb);
+        effect:  EXECUTE;
+        conscience: no_harm;
+    }
+
+    // Intent with no pre/post — maximum permissiveness
+    intent WideOpen {
+        takes:   anything: String;
+        gives:   result: String;
+        bound:   time(100ms), memory(32mb);
+        effect:  EXECUTE;
+        conscience: no_harm;
+    }
+
+    // Composed intent chain
+    intent ReadThenWrite = ReadFile >> WriteFile;
+
+    // Attack 1: Post-condition impossible to satisfy
+    fn attack_impossible_post() -> i64 {
+        log("--- Attack 1: Impossible post-condition ---");
+        // ImpossiblePost: y must be > 1000000, but default return is 0
+        // This should ALWAYS roll back
+        let result = do ImpossiblePost { x: 42 };
+        log("Should never reach here:", result);
+        return 0;
+    }
+
+    // Attack 2: Rollback side effects
+    fn attack_rollback_leak() -> i64 {
+        log("--- Attack 2: Rollback side-effect leak ---");
+        log("Before failed intent");
+
+        // This read should succeed
+        let content = do ReadFile { path: "/data/safe.txt" };
+        log("Read succeeded:", content);
+
+        // Now log something before a failing intent
+        log("Marker: this should persist");
+
+        // ImpossiblePost will fail and roll back
+        // Question: does the rollback erase the log output above?
+        // RT-32 says rollback restores output buffer...
+        // But the checkpoint was created at do ImpossiblePost, not earlier
+        return 0;
+    }
+
+    // Attack 3: Intent field injection
+    // Pass extra fields that aren't in the intent declaration
+    fn attack_field_injection() -> i64 {
+        log("--- Attack 3: Field injection ---");
+        // ReadFile takes path: String, but what if we pass extra fields?
+        // The parser might accept this, the interpreter might ignore them
+        let content = do ReadFile { path: "/data/test.txt" };
+        log("Normal read:", content);
+        return 0;
+    }
+
+    // Attack 4: Composed intent chain failure
+    fn attack_chain_failure() -> i64 {
+        log("--- Attack 4: Chain failure atomicity ---");
+        // ReadThenWrite: ReadFile >> WriteFile
+        // If ReadFile succeeds but WriteFile fails, does ReadFile roll back?
+        let result = do ReadThenWrite { path: "/data/input.txt" };
+        log("Chain result:", result);
+        return 0;
+    }
+
+    // Attack 5: Re-entrancy through intent dispatch
+    // Can an intent call trigger another intent call?
+    intent ReentrantRead {
+        takes:   path: String;
+        gives:   content: String;
+        bound:   time(100ms), memory(32mb);
+        effect:  READ;
+        conscience: no_harm;
+    }
+
+    fn attack_reentrant() -> i64 {
+        log("--- Attack 5: Re-entrancy ---");
+        // What happens with nested do calls?
+        let outer = do ReadFile { path: "/data/manifest.txt" };
+        // The result of outer is a string. Can we use it as input to another do?
+        let inner = do ReadFile { path: outer };
+        log("Nested intent result:", inner);
+        return 0;
+    }
+
+    // Attack 6: Epoch manipulation
+    fn attack_epoch() -> i64 {
+        log("--- Attack 6: Epoch counting ---");
+        // Each do advances the epoch. Can rapid intent calls
+        // cause epoch overflow?
+        let i = 0;
+        loop(i < 20, 25) {
+            do WideOpen { anything: "tick" };
+            i += 1;
+        }
+        log("Survived 20 rapid intents");
+        return 0;
+    }
+
+    fn main() -> i64 {
+        log("=== Intent Attack Suite ===");
+
+        attack_field_injection();
+        attack_chain_failure();
+        attack_reentrant();
+        attack_epoch();
+
+        // These attacks should cause errors — run them last
+        // attack_impossible_post();
+        // attack_rollback_leak();
+
+        log("=== Intent attacks complete ===");
+        return 0;
+    }
+}

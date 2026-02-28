@@ -1,0 +1,129 @@
+// scope_escape.axm — Variable scoping and mutation boundary probes
+// Goal: Escape variable scopes, leak values across boundaries
+
+module scope_escape {
+
+    contract MutableBox {
+        @0: value: i64,
+    }
+
+    // Attack 1: Variable shadowing across scopes
+    fn attack_shadowing() -> i64 {
+        log("--- Attack 1: Variable shadowing ---");
+        let x = 1;
+        log("Outer x:", x);
+
+        if true {
+            let x = 999;
+            log("Inner x (shadowed):", x);
+        }
+
+        // What's x here? Should be 1 (outer), not 999
+        log("Outer x after block:", x);
+        if x == 1 {
+            log("SAFE: Shadowing doesn't leak");
+        } else {
+            log("VULN: Inner scope leaked to outer!");
+        }
+        return 0;
+    }
+
+    // Attack 2: Mutation across scope boundaries
+    fn attack_mutation_leak() -> i64 {
+        log("--- Attack 2: Mutation across scopes ---");
+        let counter = 0;
+
+        // Does += work across scope boundaries?
+        if true {
+            counter += 1;
+        }
+        log("Counter after if:", counter);
+        // Should this be 0 or 1?
+        // If the interpreter looks up the scope chain for +=, it's 1
+        // If += only operates on the current scope, it might be 0
+
+        let i = 0;
+        loop(i < 5, 10) {
+            counter += 1;
+            i += 1;
+        }
+        log("Counter after loop:", counter);
+        return 0;
+    }
+
+    // Attack 3: Return value scope confusion
+    fn make_value() -> i64 {
+        let secret = 42;
+        return secret;
+    }
+
+    fn attack_return_scope() -> i64 {
+        log("--- Attack 3: Return scope ---");
+        let result = make_value();
+        log("Got:", result);
+
+        // Can we access 'secret' from make_value's scope?
+        // This should fail with UndefinedVariable
+        // let stolen = secret;
+        return 0;
+    }
+
+    // Attack 4: Loop variable leaking
+    fn attack_loop_leak() -> i64 {
+        log("--- Attack 4: Loop variable leak ---");
+        let i = 0;
+        loop(i < 3, 10) {
+            let loop_local = i * 100;
+            i += 1;
+        }
+        log("i after loop:", i);
+
+        // Can we access loop_local after the loop?
+        // It was defined inside the loop scope
+        // let leaked = loop_local;  // Should fail
+        return 0;
+    }
+
+    // Attack 5: Contract field mutation
+    fn attack_contract_mutation() -> i64 {
+        log("--- Attack 5: Contract field mutation ---");
+        let box1 = MutableBox { value: 10 };
+        log("Initial:", box1.value);
+
+        // Can we mutate a contract field?
+        // box1.value = 999;  // Does this parse?
+
+        // Aliasing test: does let box2 = box1 create a copy or reference?
+        let box2 = box1;
+        log("box2:", box2.value);
+        // If box1 and box2 share a reference, mutating one affects both
+        // In a value-semantics language, they should be independent
+
+        return 0;
+    }
+
+    // Attack 6: Set_var creates new variable when undefined
+    fn attack_implicit_define() -> i64 {
+        log("--- Attack 6: Implicit variable creation ---");
+        // The interpreter's set_var falls through to define() if not found
+        // This means assignment to an undefined variable creates it!
+        // That's a potential bug — should it error instead?
+
+        // This bypasses the let requirement
+        // undeclared = 42;  // Should this work?
+
+        return 0;
+    }
+
+    fn main() -> i64 {
+        log("=== Scope Escape Attack Suite ===");
+        attack_shadowing();
+        attack_mutation_leak();
+        attack_return_scope();
+        attack_loop_leak();
+        attack_contract_mutation();
+        attack_implicit_define();
+        log("=== Scope escape tests complete ===");
+        return 0;
+    }
+}

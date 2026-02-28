@@ -1,0 +1,25 @@
+// dsf_violations.axm — Tests DSF (Dumb Shit Filter) catching violations
+// This program SHOULD fail at the DSF analysis phase
+
+module violations {
+
+    // Intent missing required clauses — DSF should flag this
+    intent BadIntent {
+        takes:   data: String;
+        gives:   result: String;
+        // MISSING: effect, bound, conscience — all required by spec
+    }
+
+    fn main() -> i64 {
+        // A1 DETERMINISM violation: random() is banned
+        let r = random();
+
+        // A1 DETERMINISM violation: time() is banned
+        let t = time();
+
+        // A1 DETERMINISM violation: sleep() is banned
+        sleep(1000);
+
+        return 0;
+    }
+}

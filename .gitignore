@@ -1,0 +1,66 @@
+# Rust build artifacts
+target/
+Cargo.lock
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+.pytest_cache/
+
+# GGUF model weights — too large, store separately
+*.gguf
+*.bin
+*.safetensors
+
+# Training data — datasets are large, store separately
+Bitsy/training_data/
+Bitsy/corpus.db
+Bitsy/glm5/corpus.db
+
+# Compiled binaries in bin/
+bin/hlx-run
+bin/hlx-bond
+
+# Docker
+.docker/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Node.js
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Performance / debug
+perf.data
+perf.data.old
+*.lcb
+*.lcc
+reactor_dump.json
+
+# Build logs
+build.log
+*.o
+
+# Test DBs
+test.db
+*.db
+
+# External repos (not submodules)
+Axiom-main/
+TinyRecursiveModels-main/

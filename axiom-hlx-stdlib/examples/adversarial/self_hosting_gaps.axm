@@ -1,0 +1,164 @@
+// self_hosting_gaps.axm — Probe features needed for self-hosting
+// Tests: string ops, byte manipulation, recursion, generics, casting
+
+module self_hosting_gaps {
+
+    contract Token {
+        @0: kind: String,
+        @1: lexeme: String,
+        @2: line: i64,
+        @3: col: i64,
+    }
+
+    // A lexer needs: char-by-char string access, char comparisons,
+    // substring extraction, string building
+
+    // Gap 1: No char type or string indexing
+    fn gap_char_access() -> i64 {
+        log("--- Gap 1: Character access ---");
+        let source = "let x = 42;";
+        log("Source:", source);
+        log("Length:", length(source));
+
+        // Can we index into a string? source[0]?
+        // Arrays support indexing, but strings are not arrays of chars
+        // This is a HARD BLOCKER for a lexer
+
+        // Workaround attempt: convert to array?
+        // No built-in split() or chars() function exists
+        return 0;
+    }
+
+    // Gap 2: No explicit type casting
+    fn gap_type_cast() -> i64 {
+        log("--- Gap 2: Type casting ---");
+        let x = 65;
+        // Can we cast i64 to char? i64 to f64? String to i64?
+        // RT-05 says no implicit coercion, but there's no explicit cast either
+        // We need: as_f64(x), as_i64(x), as_char(x), as_string(x)
+
+        // Workaround: to_string exists for display
+        let s = to_string(x);
+        log("to_string(65):", s);
+        // But no parse_int("42") -> 42
+        return 0;
+    }
+
+    // Gap 3: No recursion depth tracking
+    fn factorial(n: i64) -> i64 {
+        if n <= 1 {
+            return 1;
+        }
+        return n * factorial(n - 1);
+    }
+
+    fn gap_recursion() -> i64 {
+        log("--- Gap 3: Recursion ---");
+        // Does recursion work? Is it bounded?
+        let f10 = factorial(10);
+        log("10!:", f10);
+
+        // What about deep recursion? No max_depth enforcement
+        let f20 = factorial(20);
+        log("20!:", f20);
+        // 20! = 2432902008176640000 — fits in i64
+
+        // 21! = 51090942171709440000 — overflows i64
+        // Should this halt with overflow or with recursion depth?
+        return 0;
+    }
+
+    // Gap 4: No Map/HashMap operations
+    fn gap_map_ops() -> i64 {
+        log("--- Gap 4: Map operations ---");
+        // The type system has Map<K, V> but can we construct one at runtime?
+        // A symbol table needs: insert, get, contains_key, remove
+
+        // Contracts are the closest thing — but fields are fixed at compile time
+        // We can't add fields dynamically to a contract
+        return 0;
+    }
+
+    // Gap 5: No higher-order functions / closures
+    fn apply_twice(x: i64) -> i64 {
+        // Can't pass a function as an argument
+        // apply_twice(f, x) = f(f(x)) — impossible without HOF
+        return x;
+    }
+
+    fn gap_higher_order() -> i64 {
+        log("--- Gap 5: Higher-order functions ---");
+        // Pipeline |> is the closest thing, but it's syntax sugar, not a value
+        // We can't store a function in a variable
+        // We can't pass a function to another function
+        // We can't return a function from a function
+
+        // This blocks: visitor pattern, strategy pattern, callback-based APIs
+        log("No closures or function references available");
+        return 0;
+    }
+
+    // Gap 6: No error handling / Result type
+    fn gap_error_handling() -> i64 {
+        log("--- Gap 6: Error handling ---");
+        // A parser needs to return either Success or Error
+        // Currently: errors are Rust-level AxiomError, not Axiom-level values
+        // Need: Result<T> type with match, or try/catch, or something
+
+        // Enum-based workaround:
+        // enum ParseResult { Ok, Error }
+        // But enums don't carry associated data yet
+
+        // This blocks: any non-trivial error recovery in an Axiom compiler
+        return 0;
+    }
+
+    // Gap 7: No mutable arrays / dynamic arrays
+    fn gap_dynamic_arrays() -> i64 {
+        log("--- Gap 7: Dynamic arrays ---");
+        let tokens = [1, 2, 3];
+        log("Initial array:", length(tokens));
+
+        // Can we push to an array? tokens.push(4)?
+        // Can we set an element? tokens[0] = 99?
+        // A lexer produces a dynamic list of tokens — we need both
+
+        // Array mutation test:
+        // tokens[0] = 99;  // Does this work? Probably not
+
+        return 0;
+    }
+
+    // Gap 8: No string building / StringBuilder equivalent
+    fn gap_string_building() -> i64 {
+        log("--- Gap 8: String building ---");
+        // String concatenation works: "a" + "b"
+        // But building a string character by character is impossible
+        // without char access or a mutable buffer
+
+        let result = "";
+        let i = 0;
+        loop(i < 5, 10) {
+            result = result + "x";
+            i += 1;
+        }
+        log("Built string:", result);
+        log("Built length:", length(result));
+        // This works! But it's O(n^2) without a StringBuilder
+        return 0;
+    }
+
+    fn main() -> i64 {
+        log("=== Self-Hosting Gap Analysis ===");
+        gap_char_access();
+        gap_type_cast();
+        gap_recursion();
+        gap_map_ops();
+        gap_higher_order();
+        gap_error_handling();
+        gap_dynamic_arrays();
+        gap_string_building();
+        log("=== Gap analysis complete ===");
+        return 0;
+    }
+}

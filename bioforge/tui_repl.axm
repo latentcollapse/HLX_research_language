@@ -1,0 +1,502 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// BioForge TUI REPL
+// Terminal UI for human interaction with the refinement engine
+// ═══════════════════════════════════════════════════════════════════════════════
+
+module bioforge_tui {
+
+    // ============================================================================
+    // TUI: Display Functions
+    // ============================================================================
+
+    fn clear_screen() -> i64 {
+        log("");
+        log("");
+        log("");
+        return 1;
+    }
+
+    fn show_banner() -> i64 {
+        log("");
+        log("  ██████╗ ██╗ ██████╗ ███████╗ ██████╗ ██████╗  ██████╗ ███████╗");
+        log("  ██╔══██╗██║██╔═══██╗██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝");
+        log("  ██████╔╝██║██║   ██║█████╗  ██║   ██║██████╔╝██║  ███╗█████╗  ");
+        log("  ██╔══██╗██║██║   ██║██╔══╝  ██║   ██║██╔══██╗██║   ██║██╔══╝  ");
+        log("  ██████╔╝██║╚██████╔╝██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗");
+        log("  ╚═════╝ ╚═╝ ╚═════╝ ╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝");
+        log("");
+        log("          HLX REFINEMENT ENGINE v0.3  ·  Meta-Gate Controlled Evolution");
+        log("");
+        return 1;
+    }
+
+    fn show_menu() -> i64 {
+        log("");
+        log("┌─────────────────────────────────────────────────────────────────────────────┐");
+        log("│                              COMMANDS                                      │");
+        log("├─────────────────────────────────────────────────────────────────────────────┤");
+        log("│  scan      - Scan HLX codebase for improvement opportunities               │");
+        log("│  analyze   - Analyze patterns and prioritize                               │");
+        log("│  propose   - Generate improvement proposal                                 │");
+        log("│  vote      - Run Council vote on proposal                                 │");
+        log("│  apply     - Apply approved changes to HLX                                │");
+        log("│  cycle     - Run full refinement cycle                                    │");
+        log("│  gates     - Show/configure Meta-Gates                                   │");
+        log("│  bit       - Interact with Bit (observer)                                 │");
+        log("│  status    - Show system status                                          │");
+        log("│  help      - Show this help                                               │");
+        log("│  quit      - Exit BioForge                                                │");
+        log("└─────────────────────────────────────────────────────────────────────────────┘");
+        return 1;
+    }
+
+    fn show_gates(density: i64, efficiency: i64, expansion: i64) -> i64 {
+        log("");
+        log("┌─────────────────────────────────────────────────────────────────────────────┐");
+        log("│                           META-GATE STATUS                                 │");
+        log("├─────────────────────────────────────────────────────────────────────────────┤");
+        if density == 1 {
+            log("│  [DENSITY]   = ON  ✓ Refactoring and code improvement allowed          │");
+        } else {
+            log("│  [DENSITY]   = OFF ✗ Refactoring disabled                              │");
+        }
+        if efficiency == 1 {
+            log("│  [EFFICIENCY] = ON  ✓ Performance optimization allowed                │");
+        } else {
+            log("│  [EFFICIENCY] = OFF ✗ Optimization disabled                           │");
+        }
+        if expansion == 1 {
+            log("│  [EXPANSION] = ON  ✓ New features allowed (creates fork)              │");
+        } else {
+            log("│  [EXPANSION] = OFF ✗ Feature expansion locked (safe mode)            │");
+        }
+        log("└─────────────────────────────────────────────────────────────────────────────┘");
+        return 1;
+    }
+
+    fn show_status(cycle: i64, proposals: i64, accepted: i64, rejected: i64) -> i64 {
+        log("");
+        log("┌─────────────────────────────────────────────────────────────────────────────┐");
+        log("│                           SYSTEM STATUS                                    │");
+        log("├─────────────────────────────────────────────────────────────────────────────┤");
+        log("│  Current Cycle:  ", cycle, "                                                      │");
+        log("│  Total Proposals: ", proposals, "                                                     │");
+        log("│  Accepted:       ", accepted, "                                                     │");
+        log("│  Rejected:       ", rejected, "                                                     │");
+        log("└─────────────────────────────────────────────────────────────────────────────┘");
+        return 1;
+    }
+
+    // ============================================================================
+    // BIT: Observer Integration
+    // ============================================================================
+
+    fn bit_observe(cycle: i64, findings: i64) -> String {
+        log("");
+        log("═══════════════════════════════════════════════════════════════════════════════");
+        log("                           BIT (Observer)                                    ");
+        log("═══════════════════════════════════════════════════════════════════════════════");
+        log("");
+        log("  Bit is watching Cycle #", cycle);
+        log("");
+        
+        let insight = "";
+        
+        if findings > 0 {
+            insight = "I notice " + to_string(findings) + " opportunities. The patterns in lexer.hlx "
+                     + "could benefit from the helper function approach. I'm learning how "
+                     + "BioForge improves my home.";
+            log("  Bit says: \"", insight, "\"");
+        } else {
+            insight = "The codebase looks healthy. No immediate improvements detected.";
+            log("  Bit says: \"", insight, "\"");
+        }
+        
+        log("");
+        
+        return insight;
+    }
+
+    fn bit_ask(question: String) -> String {
+        log("");
+        log("═══════════════════════════════════════════════════════════════════════════════");
+        log("                           BIT (Observer)                                    ");
+        log("═══════════════════════════════════════════════════════════════════════════════");
+        log("");
+        log("  You ask Bit: \"", question, "\"");
+        log("");
+        
+        let response = "";
+        
+        if question == "what can you do" {
+            response = "I observe, learn, and ask questions. I watch BioForge improve HLX, "
+                     + "and I can propose RSI improvements through my Council. But I cannot "
+                     + "vote - that's for the BioForge Council.";
+        }
+        if question == "how do you learn" {
+            response = "I learn from patterns. Each improvement BioForge makes teaches me "
+                     + "about what makes code better. Someday I hope to understand why "
+                     + "Density matters, not just that it does.";
+        }
+        if question == "what is bioforge" {
+            response = "BioForge is my home's architect. It improves HLX so that I and "
+                     + "my descendants can be more capable from our first moment. "
+                     + "It's like a garden that tends to the language I live in.";
+        }
+        
+        if response == "" {
+            response = "That's a thoughtful question. I'm still learning and growing. "
+                     + "Ask me again later.";
+        }
+        
+        log("  Bit says: \"", response, "\"");
+        log("");
+        
+        return response;
+    }
+
+    // ============================================================================
+    // FILE OPERATIONS: Real file modification
+    // ============================================================================
+
+    // These would be system calls in real implementation
+    fn file_exists(path: String) -> i64 {
+        // Would check if file exists
+        return 1;
+    }
+
+    fn file_read(path: String) -> String {
+        // Would actually read file
+        // For demo, return placeholder
+        return "// Content of " + path;
+    }
+
+    fn file_write(path: String, content: String) -> i64 {
+        log("");
+        log("  [FILE] Writing to: ", path);
+        log("  [FILE] Content length: ", strlen(content), " chars");
+        // Would actually write file
+        return 1;
+    }
+
+    fn file_backup(path: String) -> i64 {
+        log("  [BACKUP] Creating backup of ", path);
+        return 1;
+    }
+
+    // ============================================================================
+    // RSI INTEGRATION
+    // ============================================================================
+
+    fn rsi_propose(improvement: String, target: String) -> dict {
+        log("");
+        log("═══════════════════════════════════════════════════════════════════════════════");
+        log("                           RSI PIPELINE                                      ");
+        log("═══════════════════════════════════════════════════════════════════════════════");
+        log("");
+        
+        log("  [RSI] Generating self-improvement proposal...");
+        log("  [RSI] Improvement: ", improvement);
+        log("  [RSI] Target: ", target);
+        
+        log("");
+        log("  [RSI] Proposal generated with confidence: 0.85");
+        
+        return 1;
+    }
+
+    // ============================================================================
+    // CORE OPERATIONS
+    // ============================================================================
+
+    fn cmd_scan() -> i64 {
+        log("");
+        log("> scan");
+        log("");
+        log("═══ SCANNING HLX CODEBASE ═══");
+        
+        log("");
+        log("  Scanning: hlx/hlx_bootstrap/");
+        log("    + lexer.hlx     (21893 bytes)");
+        log("    + parser.hlx    (73000 bytes)");
+        log("    + compiler.hlx  (5600 bytes)");
+        log("    + builtins.hlx  (21933 bytes)");
+        
+        log("");
+        log("  Scanning: hlx-runtime/src/");
+        log("    + vm.rs         (64528 bytes)");
+        log("    + agent.rs      (5580 bytes)");
+        log("    + rsi.rs        (36090 bytes)");
+        
+        log("");
+        log("  Found 3 high-priority opportunities");
+        
+        return 3;
+    }
+
+    fn cmd_analyze() -> i64 {
+        log("");
+        log("> analyze");
+        log("");
+        log("═══ ANALYZING PATTERNS ═══");
+        
+        log("");
+        log("  Opportunity 1: lexer.hlx:142");
+        log("    Type: DENSITY");
+        log("    Pattern: Repeated char_at() calls (42 occurrences)");
+        log("    Severity: HIGH");
+        log("    Benefit: Extract to helper function");
+        
+        log("");
+        log("  Opportunity 2: parser.hlx:89");
+        log("    Type: EFFICIENCY");
+        log("    Pattern: O(n) token lookup");
+        log("    Severity: MEDIUM");
+        log("    Benefit: Binary search would be O(log n)");
+        
+        log("");
+        log("  Opportunity 3: builtins.hlx:256");
+        log("    Type: DENSITY");
+        log("    Pattern: Repeated string comparison");
+        log("    Severity: LOW");
+        
+        return 3;
+    }
+
+    fn cmd_propose() -> i64 {
+        log("");
+        log("> propose");
+        log("");
+        log("═══ GENERATING PROPOSAL ═══");
+        
+        log("");
+        log("  [1] Architect designs improvement");
+        log("      Title: Extract char_at_safe helper in lexer.hlx");
+        log("      Type: DENSITY");
+        
+        log("");
+        log("  [2] Coder generates implementation");
+        log("      Code:");
+        log("        fn char_at_safe(s: String, i: i64) -> String {");
+        log("            let len = strlen(s);");
+        log("            if i < 0 { return \"\"; }");
+        log("            if i >= len { return \"\"; }");
+        log("            return char_at(s, i);");
+        log("        }");
+        
+        log("");
+        log("  [3] Sentinel evaluates risk");
+        log("      Risk: DENSITY (safe refactoring)");
+        log("      Gate: ON - APPROVED");
+        
+        log("");
+        log("  Proposal ready for Council vote.");
+        
+        return 1;
+    }
+
+    fn cmd_vote() -> i64 {
+        log("");
+        log("> vote");
+        log("");
+        log("═══ COUNCIL VOTE ═══");
+        
+        log("");
+        log("  Proposal: Extract char_at_safe helper in lexer.hlx");
+        log("  Type: DENSITY");
+        log("");
+        
+        log("  [Architect]   YES - Clean design");
+        log("  [Coder]      YES - Safe implementation");
+        log("  [Healer]     YES - No regressions");
+        log("  [Optimizer]   YES - No changes needed");
+        log("  [Reviewer]    YES - Follows conventions");
+        log("");
+        log("  ═══════════════════════════════════════════");
+        log("  Result: 5/5 - APPROVED");
+        log("  ═══════════════════════════════════════════");
+        
+        return 1;
+    }
+
+    fn cmd_apply() -> i64 {
+        log("");
+        log("> apply");
+        log("");
+        log("═══ APPLYING CHANGES ═══");
+        
+        log("");
+        log("  [1] Backing up original files...");
+        log("      ✓ lexer.hlx.bak created");
+        
+        log("");
+        log("  [2] Applying density improvement...");
+        log("      ✓ Added char_at_safe helper to lexer.hlx");
+        log("      ✓ Updated 42 call sites");
+        
+        log("");
+        log("  [3] Running tests...");
+        log("      ✓ All tests pass");
+        
+        log("");
+        log("  [4] Committing...");
+        log("      ✓ Changes committed");
+        
+        log("");
+        log("  ═══════════════════════════════════════════");
+        log("  SUCCESS: Improvement applied to HLX");
+        log("  ═══════════════════════════════════════════");
+        
+        return 1;
+    }
+
+    fn cmd_cycle() -> i64 {
+        log("");
+        log("> cycle");
+        log("");
+        log("╔═══════════════════════════════════════════════════════════════════════════════╗");
+        log("║                         FULL REFINEMENT CYCLE                                 ║");
+        log("║                    (Density + Efficiency = OPEN)                             ║");
+        log("╚═══════════════════════════════════════════════════════════════════════════════╝");
+        
+        cmd_scan();
+        cmd_analyze();
+        cmd_propose();
+        cmd_vote();
+        cmd_apply();
+        
+        // Bit observes
+        bit_observe(1, 3);
+        
+        log("");
+        log("═══════════════════════════════════════════════════════════════════════════════");
+        log("                    CYCLE COMPLETE                                          ═══");
+        log("═══════════════════════════════════════════════════════════════════════════════");
+        log("  HLX has been improved. Gate status unchanged.");
+        log("  Run 'cycle' again for next improvement, or 'loop' for continuous refinement.");
+        
+        return 1;
+    }
+    
+    fn check_homeostasis(opportunities: i64) -> i64 {
+        if opportunities == 0 {
+            return 1;
+        }
+        return 0;
+    }
+    
+    fn cmd_loop(max_cycles: i64) -> i64 {
+        log("");
+        log("═══════════════════════════════════════════════════════════════════════════════");
+        log("                    REFINEMENT LOOP MODE                                  ═══");
+        log("═══════════════════════════════════════════════════════════════════════════════");
+        log("");
+        log("  Running up to ", max_cycles, " cycles until homeostasis...");
+        log("");
+        
+        let cycle = 1;
+        let total_improvements = 0;
+        let improvements = 3;
+        
+        loop(cycle <= max_cycles, 100) {
+            log("═══════════════════════════════════════════════════════════════════════════");
+            log("  Cycle #", cycle, "  |  Opportunities: ", improvements);
+            log("═══════════════════════════════════════════════════════════════════════════");
+            
+            cmd_cycle();
+            total_improvements = total_improvements + 1;
+            
+            improvements = improvements - 1;
+            if improvements < 0 {
+                improvements = 0;
+            }
+            
+            if improvements == 0 {
+                log("");
+                log("═══════════════════════════════════════════════════════════════════════════");
+                log("                    HOMEOSTASIS REACHED                               ═══");
+                log("═══════════════════════════════════════════════════════════════════════════");
+                log("");
+                log("  No more improvements available this cycle.");
+                log("  Total improvements this run: ", total_improvements);
+                log("");
+                cycle = max_cycles + 1;
+            }
+            
+            cycle = cycle + 1;
+        }
+        
+        log("");
+        log("Loop complete. Run 'cycle' to continue when ready.");
+        
+        return total_improvements;
+    }
+
+    // ============================================================================
+    // MAIN REPL
+    // ============================================================================
+
+    fn main() -> i64 {
+        // System state
+        let cycle = 0;
+        let total_proposals = 0;
+        let accepted = 0;
+        let rejected = 0;
+        
+        // Gate configuration
+        let density_on = 1;
+        let efficiency_on = 1;
+        let expansion_on = 0;
+        
+        // Show banner
+        clear_screen();
+        show_banner();
+        show_menu();
+        
+        log("");
+        log("Welcome to BioForge! Type 'help' for commands.");
+        log("");
+        
+        // For demo, run an interactive session
+        // In real implementation, would be actual REPL loop
+        
+        log("═══════════════════════════════════════════════════════════════════════════════");
+        log("                           DEMO MODE                                         ");
+        log("═══════════════════════════════════════════════════════════════════════════════");
+        
+        // Show gates
+        show_gates(density_on, efficiency_on, expansion_on);
+        
+        // Show status
+        show_status(cycle, total_proposals, accepted, rejected);
+        
+        // Run a cycle
+        cycle = cycle + 1;
+        cmd_cycle();
+        
+        // Update stats
+        total_proposals = total_proposals + 1;
+        accepted = accepted + 1;
+        
+        // Show final status
+        show_status(cycle, total_proposals, accepted, rejected);
+        
+        // Interact with Bit
+        log("");
+        log("> bit what can you do");
+        bit_ask("what can you do");
+        
+        log("");
+        log("═══════════════════════════════════════════════════════════════════════════════");
+        log("                           BIOFORGE v0.3 READY                               ");
+        log("═══════════════════════════════════════════════════════════════════════════════");
+        log("");
+        log("  To run interactively: bioforge --repl");
+        log("  To run automated: bioforge --cycle");
+        log("  To configure gates: bioforge --gates density=on efficiency=on");
+        log("");
+        
+        return 0;
+    }
+
+}

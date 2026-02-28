@@ -1,0 +1,1601 @@
+// parser.axm — Self-hosting recursive descent parser for Axiom, written in Axiom
+//
+// Consumes the flat token array produced by lexer.axm and builds an AST.
+//
+// AST nodes are represented as maps with a "type" key.
+// Every parse function follows the functional threading convention:
+//   fn parse_X(tokens, pos) -> [ast_node, new_pos]
+// This is the standard approach for recursive descent without mutable references.
+//
+// Expression parsing uses precedence climbing (Pratt-style).
+//
+// Supported grammar:
+//   module <name> { <items>... }
+//   fn <name>(<params>) -> <type> { <body> }
+//   export fn ...
+//   let <name> [: <type>] = <expr>;
+//   if <expr> { <stmts> } [else { <stmts> }]
+//   loop(<expr>, <expr>) { <stmts> }
+//   match <expr> { <arms> }
+//   return [<expr>];
+//   break; / continue;
+//   <expr>;
+//   <lhs> = <expr>;  /  <lhs> += <expr>;  /  <lhs> -= <expr>;
+//
+// Expressions:
+//   Literals: int, float, string, bool
+//   Identifiers
+//   Unary: !, -
+//   Binary: + - * / % == != < > <= >= && || |> >>
+//   Postfix: call f(), index a[], field a.b
+//   Array literal: [a, b, c]
+//   Grouping: (expr)
+
+module axiom_parser {
+
+    // ================================================================
+    // Token access helpers
+    // ================================================================
+
+    fn tok_kind(tok: i64) -> String {
+        return tok[0];
+    }
+
+    fn tok_value(tok: i64) -> String {
+        return tok[1];
+    }
+
+    fn peek_kind(tokens: i64, pos: i64) -> String {
+        return tokens[pos][0];
+    }
+
+    fn peek_value(tokens: i64, pos: i64) -> String {
+        return tokens[pos][1];
+    }
+
+    // ================================================================
+    // Result constructors — [node, new_pos]
+    // ================================================================
+
+    fn result(node: i64, pos: i64) -> i64 {
+        let r = [];
+        r = push(r, node);
+        r = push(r, pos);
+        return r;
+    }
+
+    fn res_node(r: i64) -> i64 {
+        return r[0];
+    }
+
+    fn res_pos(r: i64) -> i64 {
+        return r[1];
+    }
+
+    // ================================================================
+    // AST node constructors
+    // ================================================================
+
+    fn node_module(name: String, items: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "Module");
+        n = map_insert(n, "name", name);
+        n = map_insert(n, "items", items);
+        return n;
+    }
+
+    fn node_fn(name: String, params: i64, ret_type: String, body: i64, is_export: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "FnDecl");
+        n = map_insert(n, "name", name);
+        n = map_insert(n, "params", params);
+        n = map_insert(n, "ret_type", ret_type);
+        n = map_insert(n, "body", body);
+        n = map_insert(n, "is_export", is_export);
+        return n;
+    }
+
+    fn node_param(name: String, type_ann: String) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "Param");
+        n = map_insert(n, "name", name);
+        n = map_insert(n, "type_ann", type_ann);
+        return n;
+    }
+
+    fn node_let(name: String, type_ann: String, init: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "LetStmt");
+        n = map_insert(n, "name", name);
+        n = map_insert(n, "type_ann", type_ann);
+        n = map_insert(n, "init", init);
+        return n;
+    }
+
+    fn node_return(value: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "ReturnStmt");
+        n = map_insert(n, "value", value);
+        return n;
+    }
+
+    fn node_break() -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "BreakStmt");
+        return n;
+    }
+
+    fn node_continue() -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "ContinueStmt");
+        return n;
+    }
+
+    fn node_if(cond: i64, then_body: i64, else_body: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "IfStmt");
+        n = map_insert(n, "cond", cond);
+        n = map_insert(n, "then_body", then_body);
+        n = map_insert(n, "else_body", else_body);
+        return n;
+    }
+
+    fn node_loop(cond: i64, max_iter: i64, body: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "LoopStmt");
+        n = map_insert(n, "cond", cond);
+        n = map_insert(n, "max_iter", max_iter);
+        n = map_insert(n, "body", body);
+        return n;
+    }
+
+    fn node_match(subject: i64, arms: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "MatchExpr");
+        n = map_insert(n, "subject", subject);
+        n = map_insert(n, "arms", arms);
+        return n;
+    }
+
+    fn node_match_arm(pattern: i64, body: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "MatchArm");
+        n = map_insert(n, "pattern", pattern);
+        n = map_insert(n, "body", body);
+        return n;
+    }
+
+    fn node_assign(target: String, op: String, value: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "AssignStmt");
+        n = map_insert(n, "target", target);
+        n = map_insert(n, "op", op);
+        n = map_insert(n, "value", value);
+        return n;
+    }
+
+    fn node_expr_stmt(expr: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "ExprStmt");
+        n = map_insert(n, "expr", expr);
+        return n;
+    }
+
+    fn node_int_lit(value: String) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "IntLit");
+        n = map_insert(n, "value", value);
+        return n;
+    }
+
+    fn node_float_lit(value: String) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "FloatLit");
+        n = map_insert(n, "value", value);
+        return n;
+    }
+
+    fn node_string_lit(value: String) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "StringLit");
+        n = map_insert(n, "value", value);
+        return n;
+    }
+
+    fn node_bool_lit(value: String) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "BoolLit");
+        n = map_insert(n, "value", value);
+        return n;
+    }
+
+    fn node_ident(name: String) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "Ident");
+        n = map_insert(n, "name", name);
+        return n;
+    }
+
+    fn node_binary(op: String, left: i64, right: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "BinaryOp");
+        n = map_insert(n, "op", op);
+        n = map_insert(n, "left", left);
+        n = map_insert(n, "right", right);
+        return n;
+    }
+
+    fn node_unary(op: String, operand: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "UnaryOp");
+        n = map_insert(n, "op", op);
+        n = map_insert(n, "operand", operand);
+        return n;
+    }
+
+    fn node_call(callee: i64, args: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "CallExpr");
+        n = map_insert(n, "callee", callee);
+        n = map_insert(n, "args", args);
+        return n;
+    }
+
+    fn node_index(object: i64, index: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "IndexExpr");
+        n = map_insert(n, "object", object);
+        n = map_insert(n, "index", index);
+        return n;
+    }
+
+    fn node_field(object: i64, field: String) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "FieldExpr");
+        n = map_insert(n, "object", object);
+        n = map_insert(n, "field", field);
+        return n;
+    }
+
+    fn node_array_lit(elements: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "ArrayLit");
+        n = map_insert(n, "elements", elements);
+        return n;
+    }
+
+    fn node_contract_lit(name: String, fields: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "ContractLit");
+        n = map_insert(n, "name", name);
+        n = map_insert(n, "fields", fields);
+        return n;
+    }
+
+    fn node_do_expr(intent_name: String, fields: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "DoExpr");
+        n = map_insert(n, "intent_name", intent_name);
+        n = map_insert(n, "fields", fields);
+        return n;
+    }
+
+    fn node_contract_decl(name: String, fields: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "ContractDecl");
+        n = map_insert(n, "name", name);
+        n = map_insert(n, "fields", fields);
+        return n;
+    }
+
+    fn node_enum_decl(name: String, variants: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "EnumDecl");
+        n = map_insert(n, "name", name);
+        n = map_insert(n, "variants", variants);
+        return n;
+    }
+
+    fn node_intent_decl(name: String, clauses: i64) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "IntentDecl");
+        n = map_insert(n, "name", name);
+        n = map_insert(n, "clauses", clauses);
+        return n;
+    }
+
+    fn node_import(path: String) -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "ImportDecl");
+        n = map_insert(n, "path", path);
+        return n;
+    }
+
+    fn node_wildcard() -> i64 {
+        let n = map_new();
+        n = map_insert(n, "type", "Wildcard");
+        return n;
+    }
+
+    // ================================================================
+    // Error helper
+    // ================================================================
+
+    fn parse_error(msg: String, tokens: i64, pos: i64) -> i64 {
+        let kind = peek_kind(tokens, pos);
+        let val = peek_value(tokens, pos);
+        log("PARSE ERROR:", msg, "at token", kind, val, "pos", pos);
+        let n = map_new();
+        n = map_insert(n, "type", "Error");
+        n = map_insert(n, "message", msg);
+        return result(n, pos + 1);
+    }
+
+    // ================================================================
+    // Expect helpers
+    // ================================================================
+
+    fn expect(tokens: i64, pos: i64, kind: String) -> i64 {
+        let actual = peek_kind(tokens, pos);
+        if actual == kind {
+            return pos + 1;
+        }
+        log("PARSE ERROR: expected", kind, "got", actual, "at pos", pos);
+        return pos;
+    }
+
+    fn expect_ident(tokens: i64, pos: i64) -> i64 {
+        // Returns [name, new_pos]
+        let kind = peek_kind(tokens, pos);
+        if kind == "IDENT" {
+            let name = peek_value(tokens, pos);
+            let r = [];
+            r = push(r, name);
+            r = push(r, pos + 1);
+            return r;
+        }
+        log("PARSE ERROR: expected IDENT got", kind, "at pos", pos);
+        let r = [];
+        r = push(r, "???");
+        r = push(r, pos);
+        return r;
+    }
+
+    // ================================================================
+    // Type annotation parsing
+    // ================================================================
+
+    fn parse_type(tokens: i64, pos: i64) -> i64 {
+        // Parse a type expression — returns [type_string, new_pos]
+        // Types: i64, f64, bool, String, [T], custom names
+        let kind = peek_kind(tokens, pos);
+
+        // Array type: [T]
+        if kind == "LBRACKET" {
+            let p = pos + 1;
+            let inner = parse_type(tokens, p);
+            let inner_str = inner[0];
+            p = inner[1];
+            p = expect(tokens, p, "RBRACKET");
+            let r = [];
+            r = push(r, "[" + inner_str + "]");
+            r = push(r, p);
+            return r;
+        }
+
+        // Named type
+        if kind == "IDENT" || kind == "KW_FN" {
+            let name = peek_value(tokens, pos);
+            let r = [];
+            r = push(r, name);
+            r = push(r, pos + 1);
+            return r;
+        }
+
+        // Keyword types that are identifiers in type position
+        let r = [];
+        r = push(r, "unknown");
+        r = push(r, pos);
+        return r;
+    }
+
+    // ================================================================
+    // Expression parsing — Precedence climbing
+    // ================================================================
+    //
+    // Precedence levels (low to high):
+    //   1: |> >>     (pipeline, compose)
+    //   2: ||        (logical or)
+    //   3: &&        (logical and)
+    //   4: == !=     (equality)
+    //   5: < > <= >= (comparison)
+    //   6: + -       (additive)
+    //   7: * / %     (multiplicative)
+
+    fn op_precedence(kind: String) -> i64 {
+        if kind == "PIPELINE" { return 1; }
+        if kind == "COMPOSE" { return 1; }
+        if kind == "OR" { return 2; }
+        if kind == "AND" { return 3; }
+        if kind == "EQ_EQ" { return 4; }
+        if kind == "NOT_EQ" { return 4; }
+        if kind == "LT" { return 5; }
+        if kind == "GT" { return 5; }
+        if kind == "LT_EQ" { return 5; }
+        if kind == "GT_EQ" { return 5; }
+        if kind == "PLUS" { return 6; }
+        if kind == "MINUS" { return 6; }
+        if kind == "STAR" { return 7; }
+        if kind == "SLASH" { return 7; }
+        if kind == "PERCENT" { return 7; }
+        return 0;
+    }
+
+    fn op_string(kind: String) -> String {
+        if kind == "PIPELINE" { return "|>"; }
+        if kind == "COMPOSE" { return ">>"; }
+        if kind == "OR" { return "||"; }
+        if kind == "AND" { return "&&"; }
+        if kind == "EQ_EQ" { return "=="; }
+        if kind == "NOT_EQ" { return "!="; }
+        if kind == "LT" { return "<"; }
+        if kind == "GT" { return ">"; }
+        if kind == "LT_EQ" { return "<="; }
+        if kind == "GT_EQ" { return ">="; }
+        if kind == "PLUS" { return "+"; }
+        if kind == "MINUS" { return "-"; }
+        if kind == "STAR" { return "*"; }
+        if kind == "SLASH" { return "/"; }
+        if kind == "PERCENT" { return "%"; }
+        return "?";
+    }
+
+    // --- Primary expressions ---
+
+    fn parse_primary(tokens: i64, pos: i64) -> i64 {
+        let kind = peek_kind(tokens, pos);
+        let val = peek_value(tokens, pos);
+
+        // Integer literal
+        if kind == "INT" {
+            return result(node_int_lit(val), pos + 1);
+        }
+
+        // Float literal
+        if kind == "FLOAT" {
+            return result(node_float_lit(val), pos + 1);
+        }
+
+        // String literal
+        if kind == "STRING" {
+            return result(node_string_lit(val), pos + 1);
+        }
+
+        // Boolean literals
+        if kind == "TRUE" {
+            return result(node_bool_lit("true"), pos + 1);
+        }
+        if kind == "FALSE" {
+            return result(node_bool_lit("false"), pos + 1);
+        }
+
+        // Identifier (or contract literal / do expr lookahead handled in postfix)
+        if kind == "IDENT" {
+            return result(node_ident(val), pos + 1);
+        }
+
+        // Unary operators
+        if kind == "BANG" {
+            let inner = parse_unary(tokens, pos + 1);
+            return result(node_unary("!", res_node(inner)), res_pos(inner));
+        }
+        if kind == "MINUS" {
+            let inner = parse_unary(tokens, pos + 1);
+            return result(node_unary("-", res_node(inner)), res_pos(inner));
+        }
+
+        // Parenthesized expression
+        if kind == "LPAREN" {
+            let inner = parse_expr(tokens, pos + 1);
+            let p = expect(tokens, res_pos(inner), "RPAREN");
+            return result(res_node(inner), p);
+        }
+
+        // Array literal: [expr, expr, ...]
+        if kind == "LBRACKET" {
+            return parse_array_literal(tokens, pos);
+        }
+
+        // do <IntentName> { fields }
+        if kind == "KW_DO" {
+            return parse_do_expr(tokens, pos);
+        }
+
+        // match expression
+        if kind == "KW_MATCH" {
+            return parse_match_expr(tokens, pos);
+        }
+
+        return parse_error("unexpected token in expression", tokens, pos);
+    }
+
+    fn parse_unary(tokens: i64, pos: i64) -> i64 {
+        let kind = peek_kind(tokens, pos);
+        if kind == "BANG" {
+            let inner = parse_unary(tokens, pos + 1);
+            return result(node_unary("!", res_node(inner)), res_pos(inner));
+        }
+        if kind == "MINUS" {
+            let inner = parse_unary(tokens, pos + 1);
+            return result(node_unary("-", res_node(inner)), res_pos(inner));
+        }
+        return parse_postfix(tokens, pos);
+    }
+
+    // --- Postfix: calls, indexing, field access ---
+
+    fn parse_postfix(tokens: i64, pos: i64) -> i64 {
+        let prim = parse_primary(tokens, pos);
+        let node = res_node(prim);
+        let p = res_pos(prim);
+
+        // Loop to handle chained postfix operations: f(x)[0].field(y)
+        let running = true;
+        loop(running, 1000) {
+            let k = peek_kind(tokens, p);
+
+            // Function call: expr(args)
+            if k == "LPAREN" {
+                p = p + 1;
+                let args = [];
+                let first = true;
+                loop(peek_kind(tokens, p) != "RPAREN", 1000) {
+                    if first == false {
+                        p = expect(tokens, p, "COMMA");
+                    }
+                    let arg = parse_expr(tokens, p);
+                    args = push(args, res_node(arg));
+                    p = res_pos(arg);
+                    first = false;
+                }
+                p = expect(tokens, p, "RPAREN");
+                node = node_call(node, args);
+                continue;
+            }
+
+            // Index: expr[index]
+            if k == "LBRACKET" {
+                p = p + 1;
+                let idx = parse_expr(tokens, p);
+                p = expect(tokens, res_pos(idx), "RBRACKET");
+                node = node_index(node, res_node(idx));
+                continue;
+            }
+
+            // Field access: expr.field
+            if k == "DOT" {
+                p = p + 1;
+                let field_name = peek_value(tokens, p);
+                p = p + 1;
+                node = node_field(node, field_name);
+                continue;
+            }
+
+            // Contract literal: Ident { field: val, ... }
+            // Only if the base is an Ident and next is LBRACE
+            if k == "LBRACE" {
+                let ntype = map_get(node, "type");
+                if ntype == "Ident" {
+                    let cname = map_get(node, "name");
+                    // Check first char is uppercase — contract names are PascalCase
+                    let first_code = char_code(char_at(cname, 0));
+                    if first_code >= 65 && first_code <= 90 {
+                        let clit = parse_contract_literal_body(cname, tokens, p);
+                        node = res_node(clit);
+                        p = res_pos(clit);
+                        continue;
+                    }
+                }
+            }
+
+            // No more postfix — break
+            running = false;
+        }
+
+        return result(node, p);
+    }
+
+    // --- Precedence climbing for binary operators ---
+
+    fn parse_expr_prec(tokens: i64, pos: i64, min_prec: i64) -> i64 {
+        let left_r = parse_unary(tokens, pos);
+        let left = res_node(left_r);
+        let p = res_pos(left_r);
+
+        loop(true, 10000) {
+            let op_kind = peek_kind(tokens, p);
+            let prec = op_precedence(op_kind);
+            if prec < min_prec || prec == 0 {
+                break;
+            }
+            let op_str = op_string(op_kind);
+            p = p + 1;
+            let right_r = parse_expr_prec(tokens, p, prec + 1);
+            let right = res_node(right_r);
+            p = res_pos(right_r);
+            left = node_binary(op_str, left, right);
+        }
+
+        return result(left, p);
+    }
+
+    fn parse_expr(tokens: i64, pos: i64) -> i64 {
+        return parse_expr_prec(tokens, pos, 1);
+    }
+
+    // --- Array literal ---
+
+    fn parse_array_literal(tokens: i64, pos: i64) -> i64 {
+        // pos is at LBRACKET
+        let p = pos + 1;
+        let elements = [];
+        let first = true;
+        loop(peek_kind(tokens, p) != "RBRACKET", 1000) {
+            if first == false {
+                p = expect(tokens, p, "COMMA");
+            }
+            let elem = parse_expr(tokens, p);
+            elements = push(elements, res_node(elem));
+            p = res_pos(elem);
+            first = false;
+        }
+        p = expect(tokens, p, "RBRACKET");
+        return result(node_array_lit(elements), p);
+    }
+
+    // --- Contract literal body: { field: value, ... } ---
+
+    fn parse_contract_literal_body(name: String, tokens: i64, pos: i64) -> i64 {
+        // pos is at LBRACE
+        let p = pos + 1;
+        let fields = [];
+        let first = true;
+        loop(peek_kind(tokens, p) != "RBRACE", 1000) {
+            if first == false {
+                p = expect(tokens, p, "COMMA");
+                // Allow trailing comma
+                if peek_kind(tokens, p) == "RBRACE" {
+                    break;
+                }
+            }
+            let fname_r = expect_ident(tokens, p);
+            let fname = fname_r[0];
+            p = fname_r[1];
+            p = expect(tokens, p, "COLON");
+            let fval = parse_expr(tokens, p);
+            let field_node = map_new();
+            field_node = map_insert(field_node, "name", fname);
+            field_node = map_insert(field_node, "value", res_node(fval));
+            fields = push(fields, field_node);
+            p = res_pos(fval);
+            first = false;
+        }
+        p = expect(tokens, p, "RBRACE");
+        return result(node_contract_lit(name, fields), p);
+    }
+
+    // --- do expression ---
+
+    fn parse_do_expr(tokens: i64, pos: i64) -> i64 {
+        // pos is at KW_DO
+        let p = pos + 1;
+        let name_r = expect_ident(tokens, p);
+        let iname = name_r[0];
+        p = name_r[1];
+        // Parse { field: value, ... }
+        let body = parse_contract_literal_body(iname, tokens, p);
+        return result(node_do_expr(iname, res_node(body)), res_pos(body));
+    }
+
+    // --- match expression ---
+
+    fn parse_match_expr(tokens: i64, pos: i64) -> i64 {
+        // pos is at KW_MATCH
+        let p = pos + 1;
+        let subject = parse_expr(tokens, p);
+        p = res_pos(subject);
+        p = expect(tokens, p, "LBRACE");
+
+        let arms = [];
+        loop(peek_kind(tokens, p) != "RBRACE", 1000) {
+            // Parse pattern
+            let pat = parse_match_pattern(tokens, p);
+            p = res_pos(pat);
+
+            p = expect(tokens, p, "FAT_ARROW");
+
+            // Parse arm body — could be an expression or a block
+            let body = parse_expr(tokens, p);
+            p = res_pos(body);
+
+            // Optional comma after arm
+            if peek_kind(tokens, p) == "COMMA" {
+                p = p + 1;
+            }
+
+            arms = push(arms, node_match_arm(res_node(pat), res_node(body)));
+        }
+        p = expect(tokens, p, "RBRACE");
+        return result(node_match(res_node(subject), arms), p);
+    }
+
+    fn parse_match_pattern(tokens: i64, pos: i64) -> i64 {
+        let kind = peek_kind(tokens, pos);
+        let val = peek_value(tokens, pos);
+
+        // Wildcard: _
+        // In Axiom, _ lexes as IDENT with value "_"
+        if kind == "IDENT" && val == "_" {
+            return result(node_wildcard(), pos + 1);
+        }
+
+        // Literal patterns
+        if kind == "INT" {
+            return result(node_int_lit(val), pos + 1);
+        }
+        if kind == "STRING" {
+            return result(node_string_lit(val), pos + 1);
+        }
+        if kind == "TRUE" {
+            return result(node_bool_lit("true"), pos + 1);
+        }
+        if kind == "FALSE" {
+            return result(node_bool_lit("false"), pos + 1);
+        }
+
+        // Enum variant or ident pattern
+        if kind == "IDENT" {
+            let name = val;
+            let p = pos + 1;
+            // Check for Variant(binding)
+            if peek_kind(tokens, p) == "LPAREN" {
+                p = p + 1;
+                let inner = expect_ident(tokens, p);
+                p = inner[1];
+                p = expect(tokens, p, "RPAREN");
+                let pat = map_new();
+                pat = map_insert(pat, "type", "EnumPattern");
+                pat = map_insert(pat, "variant", name);
+                pat = map_insert(pat, "binding", inner[0]);
+                return result(pat, p);
+            }
+            return result(node_ident(name), pos + 1);
+        }
+
+        return parse_error("unexpected token in match pattern", tokens, pos);
+    }
+
+    // ================================================================
+    // Statement parsing
+    // ================================================================
+
+    fn parse_stmt(tokens: i64, pos: i64) -> i64 {
+        let kind = peek_kind(tokens, pos);
+
+        // let statement
+        if kind == "KW_LET" {
+            return parse_let_stmt(tokens, pos);
+        }
+
+        // return statement
+        if kind == "KW_RETURN" {
+            return parse_return_stmt(tokens, pos);
+        }
+
+        // break
+        if kind == "KW_BREAK" {
+            let p = pos + 1;
+            p = expect(tokens, p, "SEMICOLON");
+            return result(node_break(), p);
+        }
+
+        // continue
+        if kind == "KW_CONTINUE" {
+            let p = pos + 1;
+            p = expect(tokens, p, "SEMICOLON");
+            return result(node_continue(), p);
+        }
+
+        // if statement
+        if kind == "KW_IF" {
+            return parse_if_stmt(tokens, pos);
+        }
+
+        // loop statement
+        if kind == "KW_LOOP" {
+            return parse_loop_stmt(tokens, pos);
+        }
+
+        // Expression statement or assignment
+        return parse_expr_or_assign_stmt(tokens, pos);
+    }
+
+    // --- let statement ---
+
+    fn parse_let_stmt(tokens: i64, pos: i64) -> i64 {
+        // pos is at KW_LET
+        let p = pos + 1;
+        let name_r = expect_ident(tokens, p);
+        let name = name_r[0];
+        p = name_r[1];
+
+        // Optional type annotation
+        let type_ann = "";
+        if peek_kind(tokens, p) == "COLON" {
+            p = p + 1;
+            let ty = parse_type(tokens, p);
+            type_ann = ty[0];
+            p = ty[1];
+        }
+
+        // = initializer
+        p = expect(tokens, p, "EQ");
+        let init = parse_expr(tokens, p);
+        p = res_pos(init);
+        p = expect(tokens, p, "SEMICOLON");
+
+        return result(node_let(name, type_ann, res_node(init)), p);
+    }
+
+    // --- return statement ---
+
+    fn parse_return_stmt(tokens: i64, pos: i64) -> i64 {
+        // pos is at KW_RETURN
+        let p = pos + 1;
+
+        // Check for bare return;
+        if peek_kind(tokens, p) == "SEMICOLON" {
+            p = p + 1;
+            let empty = map_new();
+            empty = map_insert(empty, "type", "Void");
+            return result(node_return(empty), p);
+        }
+
+        let val = parse_expr(tokens, p);
+        p = res_pos(val);
+        p = expect(tokens, p, "SEMICOLON");
+        return result(node_return(res_node(val)), p);
+    }
+
+    // --- if statement ---
+
+    fn parse_if_stmt(tokens: i64, pos: i64) -> i64 {
+        // pos is at KW_IF
+        let p = pos + 1;
+        let cond = parse_expr(tokens, p);
+        p = res_pos(cond);
+
+        // then block
+        p = expect(tokens, p, "LBRACE");
+        let then_body = parse_block(tokens, p);
+        p = then_body[1];
+        p = expect(tokens, p, "RBRACE");
+
+        // optional else
+        let else_body = [];
+        if peek_kind(tokens, p) == "KW_ELSE" {
+            p = p + 1;
+            // else if
+            if peek_kind(tokens, p) == "KW_IF" {
+                let nested = parse_if_stmt(tokens, p);
+                else_body = push(else_body, res_node(nested));
+                p = res_pos(nested);
+            } else {
+                p = expect(tokens, p, "LBRACE");
+                let eb = parse_block(tokens, p);
+                else_body = eb[0];
+                p = eb[1];
+                p = expect(tokens, p, "RBRACE");
+            }
+        }
+
+        return result(node_if(res_node(cond), then_body[0], else_body), p);
+    }
+
+    // --- loop statement ---
+
+    fn parse_loop_stmt(tokens: i64, pos: i64) -> i64 {
+        // pos is at KW_LOOP
+        let p = pos + 1;
+
+        // loop(cond, max_iter) { body }
+        p = expect(tokens, p, "LPAREN");
+        let cond = parse_expr(tokens, p);
+        p = res_pos(cond);
+        p = expect(tokens, p, "COMMA");
+        let max_iter = parse_expr(tokens, p);
+        p = res_pos(max_iter);
+        p = expect(tokens, p, "RPAREN");
+
+        p = expect(tokens, p, "LBRACE");
+        let body = parse_block(tokens, p);
+        p = body[1];
+        p = expect(tokens, p, "RBRACE");
+
+        return result(node_loop(res_node(cond), res_node(max_iter), body[0]), p);
+    }
+
+    // --- Expression statement or assignment ---
+
+    fn parse_expr_or_assign_stmt(tokens: i64, pos: i64) -> i64 {
+        let expr = parse_expr(tokens, pos);
+        let p = res_pos(expr);
+        let k = peek_kind(tokens, p);
+
+        // Assignment: ident = expr;
+        if k == "EQ" {
+            let val = parse_expr(tokens, p + 1);
+            let np = expect(tokens, res_pos(val), "SEMICOLON");
+            let target = map_get(res_node(expr), "name");
+            return result(node_assign(target, "=", res_node(val)), np);
+        }
+
+        // Compound assignment: ident += expr; / ident -= expr;
+        if k == "PLUS_EQ" {
+            let val = parse_expr(tokens, p + 1);
+            let np = expect(tokens, res_pos(val), "SEMICOLON");
+            let target = map_get(res_node(expr), "name");
+            return result(node_assign(target, "+=", res_node(val)), np);
+        }
+        if k == "MINUS_EQ" {
+            let val = parse_expr(tokens, p + 1);
+            let np = expect(tokens, res_pos(val), "SEMICOLON");
+            let target = map_get(res_node(expr), "name");
+            return result(node_assign(target, "-=", res_node(val)), np);
+        }
+
+        // Plain expression statement
+        p = expect(tokens, p, "SEMICOLON");
+        return result(node_expr_stmt(res_node(expr)), p);
+    }
+
+    // --- Block: sequence of statements ---
+
+    fn parse_block(tokens: i64, pos: i64) -> i64 {
+        // Returns [stmts_array, new_pos]
+        let stmts = [];
+        let p = pos;
+        loop(peek_kind(tokens, p) != "RBRACE" && peek_kind(tokens, p) != "EOF", 10000) {
+            let s = parse_stmt(tokens, p);
+            stmts = push(stmts, res_node(s));
+            p = res_pos(s);
+        }
+        let r = [];
+        r = push(r, stmts);
+        r = push(r, p);
+        return r;
+    }
+
+    // ================================================================
+    // Top-level declaration parsing
+    // ================================================================
+
+    fn parse_fn_decl(tokens: i64, pos: i64, is_export: i64) -> i64 {
+        // pos is at KW_FN
+        let p = pos + 1;
+        let name_r = expect_ident(tokens, p);
+        let fn_name = name_r[0];
+        p = name_r[1];
+
+        // Parameters
+        p = expect(tokens, p, "LPAREN");
+        let params = [];
+        let first = true;
+        loop(peek_kind(tokens, p) != "RPAREN", 100) {
+            if first == false {
+                p = expect(tokens, p, "COMMA");
+            }
+            let pname_r = expect_ident(tokens, p);
+            let pname = pname_r[0];
+            p = pname_r[1];
+            p = expect(tokens, p, "COLON");
+            let pty = parse_type(tokens, p);
+            params = push(params, node_param(pname, pty[0]));
+            p = pty[1];
+            first = false;
+        }
+        p = expect(tokens, p, "RPAREN");
+
+        // Return type
+        let ret = "void";
+        if peek_kind(tokens, p) == "ARROW" {
+            p = p + 1;
+            let rty = parse_type(tokens, p);
+            ret = rty[0];
+            p = rty[1];
+        }
+
+        // Body
+        p = expect(tokens, p, "LBRACE");
+        let body = parse_block(tokens, p);
+        p = body[1];
+        p = expect(tokens, p, "RBRACE");
+
+        return result(node_fn(fn_name, params, ret, body[0], is_export), p);
+    }
+
+    fn parse_contract_decl(tokens: i64, pos: i64) -> i64 {
+        // pos is at KW_CONTRACT
+        let p = pos + 1;
+        let name_r = expect_ident(tokens, p);
+        let cname = name_r[0];
+        p = name_r[1];
+
+        p = expect(tokens, p, "LBRACE");
+        let fields = [];
+        loop(peek_kind(tokens, p) != "RBRACE", 100) {
+            // Optional @N: slot annotation
+            if peek_kind(tokens, p) == "AT" {
+                p = p + 1;
+                // Skip slot number
+                p = p + 1;
+                p = expect(tokens, p, "COLON");
+            }
+            let fname_r = expect_ident(tokens, p);
+            let fname = fname_r[0];
+            p = fname_r[1];
+            p = expect(tokens, p, "COLON");
+            let fty = parse_type(tokens, p);
+            let field = node_param(fname, fty[0]);
+            p = fty[1];
+            fields = push(fields, field);
+            // Optional comma or attributes
+            if peek_kind(tokens, p) == "COMMA" {
+                p = p + 1;
+            }
+            // Skip [conflict = ...] attribute blocks
+            if peek_kind(tokens, p) == "LBRACKET" {
+                p = p + 1;
+                loop(peek_kind(tokens, p) != "RBRACKET", 100) {
+                    p = p + 1;
+                }
+                p = p + 1;
+                // Skip trailing comma
+                if peek_kind(tokens, p) == "COMMA" {
+                    p = p + 1;
+                }
+            }
+        }
+        p = expect(tokens, p, "RBRACE");
+        return result(node_contract_decl(cname, fields), p);
+    }
+
+    fn parse_enum_decl(tokens: i64, pos: i64) -> i64 {
+        // pos is at KW_ENUM
+        let p = pos + 1;
+        let name_r = expect_ident(tokens, p);
+        let ename = name_r[0];
+        p = name_r[1];
+
+        p = expect(tokens, p, "LBRACE");
+        let variants = [];
+        loop(peek_kind(tokens, p) != "RBRACE", 100) {
+            let vname_r = expect_ident(tokens, p);
+            let vname = vname_r[0];
+            p = vname_r[1];
+
+            let variant = map_new();
+            variant = map_insert(variant, "name", vname);
+
+            // Optional (fields)
+            if peek_kind(tokens, p) == "LPAREN" {
+                p = p + 1;
+                let vfields = [];
+                let first = true;
+                loop(peek_kind(tokens, p) != "RPAREN", 100) {
+                    if first == false {
+                        p = expect(tokens, p, "COMMA");
+                    }
+                    let pname_r = expect_ident(tokens, p);
+                    p = pname_r[1];
+                    p = expect(tokens, p, "COLON");
+                    let pty = parse_type(tokens, p);
+                    vfields = push(vfields, node_param(pname_r[0], pty[0]));
+                    p = pty[1];
+                    first = false;
+                }
+                p = expect(tokens, p, "RPAREN");
+                variant = map_insert(variant, "fields", vfields);
+            }
+
+            variants = push(variants, variant);
+
+            if peek_kind(tokens, p) == "COMMA" {
+                p = p + 1;
+            }
+        }
+        p = expect(tokens, p, "RBRACE");
+        return result(node_enum_decl(ename, variants), p);
+    }
+
+    fn parse_intent_decl(tokens: i64, pos: i64) -> i64 {
+        // pos is at KW_INTENT
+        let p = pos + 1;
+        let name_r = expect_ident(tokens, p);
+        let iname = name_r[0];
+        p = name_r[1];
+
+        p = expect(tokens, p, "LBRACE");
+        let clauses = [];
+        loop(peek_kind(tokens, p) != "RBRACE", 100) {
+            // Each clause: keyword: value;
+            let clause_kind = peek_value(tokens, p);
+            p = p + 1;
+            p = expect(tokens, p, "COLON");
+
+            // Collect everything until semicolon or newline as the clause value
+            let clause_tokens = [];
+            loop(peek_kind(tokens, p) != "SEMICOLON" && peek_kind(tokens, p) != "RBRACE", 100) {
+                clause_tokens = push(clause_tokens, peek_value(tokens, p));
+                p = p + 1;
+            }
+            if peek_kind(tokens, p) == "SEMICOLON" {
+                p = p + 1;
+            }
+
+            let clause = map_new();
+            clause = map_insert(clause, "kind", clause_kind);
+            clause = map_insert(clause, "tokens", clause_tokens);
+            clauses = push(clauses, clause);
+        }
+        p = expect(tokens, p, "RBRACE");
+        return result(node_intent_decl(iname, clauses), p);
+    }
+
+    fn parse_import(tokens: i64, pos: i64) -> i64 {
+        // pos is at KW_IMPORT
+        let p = pos + 1;
+        let path = peek_value(tokens, p);
+        p = p + 1;
+        p = expect(tokens, p, "SEMICOLON");
+        return result(node_import(path), p);
+    }
+
+    // ================================================================
+    // Module parsing
+    // ================================================================
+
+    fn parse_module_item(tokens: i64, pos: i64) -> i64 {
+        let kind = peek_kind(tokens, pos);
+
+        if kind == "KW_FN" {
+            return parse_fn_decl(tokens, pos, 0);
+        }
+
+        if kind == "KW_EXPORT" {
+            // export fn ...
+            let p = pos + 1;
+            if peek_kind(tokens, p) == "KW_FN" {
+                return parse_fn_decl(tokens, p, 1);
+            }
+            return parse_error("expected fn after export", tokens, p);
+        }
+
+        if kind == "KW_CONTRACT" {
+            return parse_contract_decl(tokens, pos);
+        }
+
+        if kind == "KW_ENUM" {
+            return parse_enum_decl(tokens, pos);
+        }
+
+        if kind == "KW_INTENT" {
+            return parse_intent_decl(tokens, pos);
+        }
+
+        if kind == "KW_IMPORT" {
+            return parse_import(tokens, pos);
+        }
+
+        if kind == "KW_LET" {
+            return parse_let_stmt(tokens, pos);
+        }
+
+        return parse_error("unexpected token at module level", tokens, pos);
+    }
+
+    fn parse_module(tokens: i64, pos: i64) -> i64 {
+        // pos is at KW_MODULE
+        let p = pos + 1;
+        let name_r = expect_ident(tokens, p);
+        let mod_name = name_r[0];
+        p = name_r[1];
+
+        p = expect(tokens, p, "LBRACE");
+
+        let items = [];
+        loop(peek_kind(tokens, p) != "RBRACE" && peek_kind(tokens, p) != "EOF", 10000) {
+            let item = parse_module_item(tokens, p);
+            items = push(items, res_node(item));
+            p = res_pos(item);
+        }
+        p = expect(tokens, p, "RBRACE");
+
+        return result(node_module(mod_name, items), p);
+    }
+
+    // ================================================================
+    // Top-level entry point
+    // ================================================================
+
+    fn parse(tokens: i64) -> i64 {
+        let pos = 0;
+        let kind = peek_kind(tokens, pos);
+
+        if kind == "KW_MODULE" {
+            let r = parse_module(tokens, pos);
+            return res_node(r);
+        }
+
+        // No module wrapper — parse as implicit module
+        let items = [];
+        loop(peek_kind(tokens, pos) != "EOF", 10000) {
+            let item = parse_module_item(tokens, pos);
+            items = push(items, res_node(item));
+            pos = res_pos(item);
+        }
+        return node_module("_implicit", items);
+    }
+
+    // ================================================================
+    // AST Pretty-printer
+    // ================================================================
+
+    fn indent_str(depth: i64) -> String {
+        let s = "";
+        let i = 0;
+        loop(i < depth, 100) {
+            s = s + "  ";
+            i += 1;
+        }
+        return s;
+    }
+
+    fn print_ast(node: i64, depth: i64) -> i64 {
+        let ntype = map_get(node, "type");
+        let pad = indent_str(depth);
+
+        if ntype == "Module" {
+            log(pad + "Module: " + map_get(node, "name"));
+            let items = map_get(node, "items");
+            let i = 0;
+            loop(i < length(items), 10000) {
+                print_ast(items[i], depth + 1);
+                i += 1;
+            }
+            return 0;
+        }
+
+        if ntype == "FnDecl" {
+            let exp = "";
+            if map_get(node, "is_export") == 1 {
+                exp = "export ";
+            }
+            log(pad + exp + "fn " + map_get(node, "name") + " -> " + map_get(node, "ret_type"));
+            let params = map_get(node, "params");
+            let i = 0;
+            loop(i < length(params), 100) {
+                let pm = params[i];
+                log(pad + "  param: " + map_get(pm, "name") + ": " + map_get(pm, "type_ann"));
+                i += 1;
+            }
+            let body = map_get(node, "body");
+            i = 0;
+            loop(i < length(body), 10000) {
+                print_ast(body[i], depth + 1);
+                i += 1;
+            }
+            return 0;
+        }
+
+        if ntype == "LetStmt" {
+            let ty = map_get(node, "type_ann");
+            let ty_str = "";
+            if ty != "" {
+                ty_str = ": " + ty;
+            }
+            log(pad + "let " + map_get(node, "name") + ty_str + " =");
+            print_ast(map_get(node, "init"), depth + 1);
+            return 0;
+        }
+
+        if ntype == "ReturnStmt" {
+            log(pad + "return");
+            print_ast(map_get(node, "value"), depth + 1);
+            return 0;
+        }
+
+        if ntype == "BreakStmt" {
+            log(pad + "break");
+            return 0;
+        }
+
+        if ntype == "ContinueStmt" {
+            log(pad + "continue");
+            return 0;
+        }
+
+        if ntype == "IfStmt" {
+            log(pad + "if");
+            print_ast(map_get(node, "cond"), depth + 1);
+            log(pad + "then:");
+            let then_b = map_get(node, "then_body");
+            let i = 0;
+            loop(i < length(then_b), 10000) {
+                print_ast(then_b[i], depth + 1);
+                i += 1;
+            }
+            let else_b = map_get(node, "else_body");
+            if length(else_b) > 0 {
+                log(pad + "else:");
+                i = 0;
+                loop(i < length(else_b), 10000) {
+                    print_ast(else_b[i], depth + 1);
+                    i += 1;
+                }
+            }
+            return 0;
+        }
+
+        if ntype == "LoopStmt" {
+            log(pad + "loop");
+            log(pad + "  cond:");
+            print_ast(map_get(node, "cond"), depth + 2);
+            log(pad + "  max_iter:");
+            print_ast(map_get(node, "max_iter"), depth + 2);
+            log(pad + "  body:");
+            let body = map_get(node, "body");
+            let i = 0;
+            loop(i < length(body), 10000) {
+                print_ast(body[i], depth + 2);
+                i += 1;
+            }
+            return 0;
+        }
+
+        if ntype == "MatchExpr" {
+            log(pad + "match");
+            print_ast(map_get(node, "subject"), depth + 1);
+            let arms = map_get(node, "arms");
+            let i = 0;
+            loop(i < length(arms), 100) {
+                let arm = arms[i];
+                log(pad + "  arm:");
+                log(pad + "    pattern:");
+                print_ast(map_get(arm, "pattern"), depth + 3);
+                log(pad + "    body:");
+                print_ast(map_get(arm, "body"), depth + 3);
+                i += 1;
+            }
+            return 0;
+        }
+
+        if ntype == "AssignStmt" {
+            log(pad + "assign " + map_get(node, "target") + " " + map_get(node, "op"));
+            print_ast(map_get(node, "value"), depth + 1);
+            return 0;
+        }
+
+        if ntype == "ExprStmt" {
+            log(pad + "expr_stmt:");
+            print_ast(map_get(node, "expr"), depth + 1);
+            return 0;
+        }
+
+        // --- Expression nodes ---
+
+        if ntype == "IntLit" {
+            log(pad + "int(" + map_get(node, "value") + ")");
+            return 0;
+        }
+
+        if ntype == "FloatLit" {
+            log(pad + "float(" + map_get(node, "value") + ")");
+            return 0;
+        }
+
+        if ntype == "StringLit" {
+            log(pad + "string(\"" + map_get(node, "value") + "\")");
+            return 0;
+        }
+
+        if ntype == "BoolLit" {
+            log(pad + "bool(" + map_get(node, "value") + ")");
+            return 0;
+        }
+
+        if ntype == "Ident" {
+            log(pad + "ident(" + map_get(node, "name") + ")");
+            return 0;
+        }
+
+        if ntype == "BinaryOp" {
+            log(pad + "binary(" + map_get(node, "op") + ")");
+            print_ast(map_get(node, "left"), depth + 1);
+            print_ast(map_get(node, "right"), depth + 1);
+            return 0;
+        }
+
+        if ntype == "UnaryOp" {
+            log(pad + "unary(" + map_get(node, "op") + ")");
+            print_ast(map_get(node, "operand"), depth + 1);
+            return 0;
+        }
+
+        if ntype == "CallExpr" {
+            log(pad + "call:");
+            print_ast(map_get(node, "callee"), depth + 1);
+            let args = map_get(node, "args");
+            let i = 0;
+            loop(i < length(args), 100) {
+                log(pad + "  arg:");
+                print_ast(args[i], depth + 2);
+                i += 1;
+            }
+            return 0;
+        }
+
+        if ntype == "IndexExpr" {
+            log(pad + "index:");
+            print_ast(map_get(node, "object"), depth + 1);
+            log(pad + "  at:");
+            print_ast(map_get(node, "index"), depth + 2);
+            return 0;
+        }
+
+        if ntype == "FieldExpr" {
+            log(pad + "field(." + map_get(node, "field") + ")");
+            print_ast(map_get(node, "object"), depth + 1);
+            return 0;
+        }
+
+        if ntype == "ArrayLit" {
+            let elems = map_get(node, "elements");
+            log(pad + "array[" + to_string(length(elems)) + "]");
+            let i = 0;
+            loop(i < length(elems), 100) {
+                print_ast(elems[i], depth + 1);
+                i += 1;
+            }
+            return 0;
+        }
+
+        if ntype == "ContractLit" {
+            log(pad + "contract_lit(" + map_get(node, "name") + ")");
+            return 0;
+        }
+
+        if ntype == "DoExpr" {
+            log(pad + "do " + map_get(node, "intent_name"));
+            return 0;
+        }
+
+        if ntype == "ContractDecl" {
+            log(pad + "contract " + map_get(node, "name"));
+            let fields = map_get(node, "fields");
+            let i = 0;
+            loop(i < length(fields), 100) {
+                let f = fields[i];
+                log(pad + "  " + map_get(f, "name") + ": " + map_get(f, "type_ann"));
+                i += 1;
+            }
+            return 0;
+        }
+
+        if ntype == "EnumDecl" {
+            log(pad + "enum " + map_get(node, "name"));
+            return 0;
+        }
+
+        if ntype == "IntentDecl" {
+            log(pad + "intent " + map_get(node, "name"));
+            return 0;
+        }
+
+        if ntype == "ImportDecl" {
+            log(pad + "import " + map_get(node, "path"));
+            return 0;
+        }
+
+        if ntype == "Wildcard" {
+            log(pad + "_");
+            return 0;
+        }
+
+        if ntype == "Void" {
+            log(pad + "void");
+            return 0;
+        }
+
+        if ntype == "Error" {
+            log(pad + "ERROR: " + map_get(node, "message"));
+            return 0;
+        }
+
+        log(pad + "<unknown node type: " + to_string(ntype) + ">");
+        return 0;
+    }
+
+    // ================================================================
+    // Test suite
+    // ================================================================
+
+    fn test_parse(label: String, source: String) -> i64 {
+        log("--- " + label + " ---");
+        log("Source: " + source);
+        log("");
+
+        // We need the lexer — inline a minimal one for testing
+        // In real usage, import axiom_lexer and call lex()
+        // For now, we call lex() assuming the lexer module is loaded
+        let tokens = lex(source);
+        let ast = parse(tokens);
+        print_ast(ast, 0);
+        log("");
+        return 0;
+    }
+
+    fn main() -> i64 {
+        log("=== Axiom Self-Hosting Parser ===");
+        log("");
+
+        // Test 1: Simple let
+        test_parse("Let binding", "module t { fn main() -> i64 { let x = 42; return x; } }");
+
+        // Test 2: Arithmetic with precedence
+        test_parse("Precedence", "module t { fn f() -> i64 { let r = 1 + 2 * 3; return r; } }");
+
+        // Test 3: Function call
+        test_parse("Call", "module t { fn f() -> i64 { let v = add(1, 2); return v; } }");
+
+        // Test 4: If/else
+        test_parse("If/else", "module t { fn f(x: i64) -> i64 { if x > 0 { return x; } else { return 0; } } }");
+
+        // Test 5: Loop
+        test_parse("Loop", "module t { fn f() -> i64 { let i = 0; loop(i < 10, 100) { i += 1; } return i; } }");
+
+        // Test 6: Array literal and indexing
+        test_parse("Array", "module t { fn f() -> i64 { let a = [1, 2, 3]; return a[0]; } }");
+
+        // Test 7: Chained calls and field access
+        test_parse("Chain", "module t { fn f() -> i64 { let v = foo(x).bar(y); return v; } }");
+
+        // Test 8: Boolean and comparison
+        test_parse("Boolean", "module t { fn f(a: bool) -> bool { return a && true || false; } }");
+
+        // Test 9: Unary operators
+        test_parse("Unary", "module t { fn f(x: i64) -> i64 { return -x + !flag; } }");
+
+        // Test 10: Nested expressions
+        test_parse("Nested", "module t { fn f() -> i64 { return (1 + 2) * (3 - 4); } }");
+
+        // Test 11: Multiple functions
+        test_parse("Multi-fn",
+            "module math { fn add(a: i64, b: i64) -> i64 { return a + b; } fn mul(a: i64, b: i64) -> i64 { return a * b; } }");
+
+        // Test 12: Pipeline operator
+        test_parse("Pipeline", "module t { fn f() -> i64 { let v = data |> transform; return v; } }");
+
+        // Test 13: String literal
+        test_parse("String", "module t { fn f() -> String { let s = \"hello world\"; return s; } }");
+
+        // Test 14: Assignment operators
+        test_parse("Assign ops", "module t { fn f() -> i64 { let x = 0; x = 1; x += 2; x -= 1; return x; } }");
+
+        // Test 15: Empty array
+        test_parse("Empty array", "module t { fn f() -> i64 { let a = []; return length(a); } }");
+
+        log("=== Parser bootstrap: COMPLETE ===");
+        return 0;
+    }
+}

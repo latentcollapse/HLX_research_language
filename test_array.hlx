@@ -1,0 +1,4 @@
+program bit {
+let x: i64 = 5;
+fn main() -> i64 { return x; }
+}
