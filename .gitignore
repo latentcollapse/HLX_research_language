@@ -1,4 +1,4 @@
-# Rust
+# Rust build artifacts
 target/
 Cargo.lock
 
@@ -7,21 +7,28 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
 *.so
 *.egg
 *.egg-info/
 dist/
 build/
 venv/
+.venv/
 .pytest_cache/
 
-# SPIR-V compiled shaders
-# *.spv
+# GGUF model weights — too large, store separately
+*.gguf
+*.bin
+*.safetensors
 
-# Benchmark results
-benchmarks/results/*.csv
-benchmarks/results/*.json
+# Training data — datasets are large, store separately
+Bitsy/training_data/
+Bitsy/corpus.db
+Bitsy/glm5/corpus.db
+
+# Compiled binaries in bin/
+bin/hlx-run
+bin/hlx-bond
 
 # Docker
 .docker/
@@ -32,56 +39,28 @@ benchmarks/results/*.json
 *.swp
 *~
 
-# Node.js / VS Code Extension
+# Node.js
 node_modules/
-vscode-hlx/node_modules/
-vscode-hlx/out/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Personal / Documentation
-_docs/*.png
-screenshots for gemini/
-_audits/
-
-# Performance and Debugging
+# Performance / debug
 perf.data
 perf.data.old
 *.lcb
 *.lcc
 reactor_dump.json
-output.mp4
 
-# Build Artifacts
+# Build logs
 build.log
 *.o
-hlx/test_cfg
-hlx/test_typed_arrays
-hlx/test_typed_simple
+
+# Test DBs
+test.db
+*.db
 
 # External repos (not submodules)
 Axiom-main/
 TinyRecursiveModels-main/
-
-# HLX Runtime Source — compiled artifact only, never to GitHub
-axiom-hlx-stdlib/src/
-axiom-hlx-stdlib/axiom_py/src/
-hlx-runtime/src/
-hlx-runtime/tests/
-hlx-bond/src/
-hlx/hlx_bootstrap/
-backends/
-experimental/
-scripts/
-
-# Bit — symbiote core, private
-axiom-hlx-stdlib/axiom_py/python/axiom/bit.py
-axiom-hlx-stdlib/axiom_py/python/axiom/test_bit.py
-bit/
-*.db
-
-# Bitsy's Place — private
-Bitsy/
-

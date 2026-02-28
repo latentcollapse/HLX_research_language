@@ -1,9 +1,0 @@
-{
-  "$schema": "https://kilo.ai/config.json",
-  "mcp": {
-    "vision": {
-      "type": "local",
-      "command": ["/home/matt/.opencode/mcp-servers/vision-mcp/run.sh"]
-    }
-  }
-}
