@@ -4,11 +4,14 @@
 //! This is the bridge between the rich, introspectable AST and executable bytecode.
 
 use crate::ast::{
-    AgentDef, BinaryOp, CycleLevel, ExprKind, Expression, Function, Gate, Item, Parameter, Program,
-    Statement, StmtKind, UnaryOp,
+    AgentDef, BinaryOp, CycleLevel, ExprKind, Expression, Function, Gate, Import, Item, ModuleDef,
+    Parameter, Program, Statement, StmtKind, UnaryOp,
 };
+use crate::ast_parser::AstParser;
+use crate::resolver::{ImportStyle, ModuleResolver};
 use crate::{Bytecode, Opcode, Value};
 use std::collections::HashMap;
+use std::path::Path;
 
 /// Errors that can occur during lowering
 #[derive(Debug, Clone)]
@@ -32,6 +35,13 @@ impl LowerError {
 
 type LowerResult<T> = Result<T, LowerError>;
 
+/// Function to be loaded after main program
+#[derive(Debug, Clone)]
+struct PendingImport {
+    name: String,
+    func: Function,
+}
+
 /// Lowers a `Program` AST into `Bytecode` + function table.
 pub struct Lowerer {
     bytecode: Bytecode,
@@ -44,6 +54,8 @@ pub struct Lowerer {
     patch_points: Vec<(usize, String)>,
     /// Loop context for break/continue
     loop_stack: Vec<LoopContext>,
+    /// Imports to be loaded after main program
+    pending_imports: Vec<PendingImport>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,13 +76,82 @@ impl Lowerer {
             next_tmp_reg: 20,
             patch_points: Vec::new(),
             loop_stack: Vec::new(),
+            pending_imports: Vec::new(),
         }
+    }
+
+    /// Lower with pre-resolved imports (from ModuleResolver)
+    /// Main program is lowered first so it starts at PC 0
+    pub fn lower_with_imports(
+        program: &Program,
+        resolver_imports: HashMap<String, Function>,
+    ) -> LowerResult<(Bytecode, HashMap<String, (u32, u32)>)> {
+        let mut lowerer = Lowerer::new();
+
+        // First, lower the main program so it starts at PC 0
+        lowerer.lower_program(program)?;
+
+        // Process any dynamic imports collected during program lowering
+        // (e.g., from Item::Import nodes that use lower_import())
+        while !lowerer.pending_imports.is_empty() {
+            let pending: Vec<_> = std::mem::take(&mut lowerer.pending_imports);
+            for import in pending {
+                eprintln!(
+                    "[lowerer] Loading pending import '{}' at PC {}",
+                    import.name,
+                    lowerer.current_pc()
+                );
+                lowerer.lower_imported_function_to_pending(&import.name, &import.func)?;
+            }
+        }
+
+        // Then, add resolver-imported functions after the main program
+        for (name, func) in resolver_imports {
+            lowerer.lower_imported_function_to_pending(&name, &func)?;
+        }
+
+        // Now patch all forward calls
+        lowerer.patch_forward_calls()?;
+
+        Ok((lowerer.bytecode, lowerer.functions))
+    }
+
+    /// Lower a single imported function to the pending section
+    fn lower_imported_function_to_pending(
+        &mut self,
+        name: &str,
+        func: &Function,
+    ) -> LowerResult<()> {
+        // Emit jump over the function so top-level execution doesn't run it
+        self.emit(Opcode::Jump);
+        let skip_pos = self.current_pc();
+        self.emit_u32(0);
+
+        // Now the function body starts
+        let start_pc = self.current_pc() as u32;
+        let param_count = func.parameters.len() as u32;
+
+        self.functions
+            .insert(name.to_string(), (start_pc, param_count));
+
+        self.with_scope(|this| {
+            this.bind_params(&func.parameters);
+            this.lower_body(&func.body)?;
+            this.emit(Opcode::Return);
+            Ok(())
+        })?;
+
+        let end_pc = self.current_pc();
+        self.patch_jump(skip_pos, end_pc)?;
+
+        Ok(())
     }
 
     /// Lower a complete Program AST to bytecode.
     pub fn lower(program: &Program) -> LowerResult<(Bytecode, HashMap<String, (u32, u32)>)> {
         let mut lowerer = Lowerer::new();
         lowerer.lower_program(program)?;
+        lowerer.patch_forward_calls()?;
         Ok((lowerer.bytecode, lowerer.functions))
     }
 
@@ -79,7 +160,7 @@ impl Lowerer {
             self.lower_item(item)?;
         }
         self.emit(Opcode::Halt);
-        self.patch_forward_calls()?;
+        // Don't patch forward calls here - caller should do it after all functions are added
         Ok(())
     }
 
@@ -95,8 +176,111 @@ impl Lowerer {
                 Ok(())
             }
             Item::Struct(_) => Ok(()), // No bytecode for struct definitions (types only)
-            Item::Import(_) | Item::Export(_) => Ok(()),
+            Item::Export(_) => Ok(()), // TODO: implement exports
+            Item::Import(import) => self.lower_import(import),
         }
+    }
+
+    /// Lower an import: resolve module path, read file, parse, and queue functions for later loading
+    fn lower_import(&mut self, import: &Import) -> LowerResult<()> {
+        // Resolve the module path to a file
+        let resolver = ModuleResolver::new();
+        let style = ModuleResolver::detect_style(&import.module);
+
+        let file_path = resolver
+            .module_path_to_file(&import.module, style.clone())
+            .ok_or_else(|| LowerError::new(format!("Module not found: {}", import.module)))?;
+
+        eprintln!(
+            "[import] Queueing module '{}' from {:?}",
+            import.module, file_path
+        );
+
+        // Read and parse the module file
+        let source = std::fs::read_to_string(&file_path).map_err(|e| {
+            LowerError::new(format!("Failed to read {}: {}", file_path.display(), e))
+        })?;
+
+        let ast = AstParser::parse(&source).map_err(|e| {
+            LowerError::new(format!("Parse error in {}: {:?}", file_path.display(), e))
+        })?;
+
+        // Queue imported functions for later loading (after main program)
+        // This prevents PC corruption in the main program bytecode
+        for item in &ast.items {
+            if let Item::Function(func) = item {
+                let import_name = if import.items.is_empty()
+                    || import.items.contains(&crate::ast::ImportItem::Wildcard)
+                {
+                    // Wildcard import: use function name directly
+                    func.name.clone()
+                } else {
+                    // Specific imports: check if this function is in the list
+                    let func_name = &func.name;
+                    let should_import = import.items.iter().any(|i| match i {
+                        crate::ast::ImportItem::Named(name) => name == func_name,
+                        crate::ast::ImportItem::Aliased { name, alias: _ } => name == func_name,
+                        crate::ast::ImportItem::Wildcard => true,
+                    });
+                    if !should_import {
+                        continue;
+                    }
+                    func_name.clone()
+                };
+
+                // Queue for later loading (don't emit bytecode now)
+                self.pending_imports.push(PendingImport {
+                    name: import_name.clone(),
+                    func: func.clone(),
+                });
+                eprintln!(
+                    "[import] Queued function '{}' from '{}'",
+                    import_name, import.module
+                );
+            } else if let Item::Module(module) = item {
+                // Recursively queue items from module blocks
+                for sub_item in &module.items {
+                    if let Item::Function(func) = sub_item {
+                        self.pending_imports.push(PendingImport {
+                            name: func.name.clone(),
+                            func: func.clone(),
+                        });
+                        eprintln!(
+                            "[import] Queued function '{}' from module '{}'",
+                            func.name, import.module
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Lower a single imported function (emit immediately - for use after main program)
+    fn lower_imported_function(&mut self, name: &str, func: &Function) -> LowerResult<()> {
+        // Emit jump over function body (same pattern as lower_function for non-main)
+        self.emit(Opcode::Jump);
+        let skip_pos = self.current_pc();
+        self.emit_u32(0);
+
+        let start_pc = self.current_pc() as u32;
+        let param_count = func.parameters.len() as u32;
+
+        self.functions
+            .insert(name.to_string(), (start_pc, param_count));
+
+        self.with_scope(|this| {
+            this.bind_params(&func.parameters);
+            this.lower_body(&func.body)?;
+            this.emit(Opcode::Return);
+            Ok(())
+        })?;
+
+        let end_pc = self.current_pc();
+        self.patch_jump(skip_pos, end_pc)?;
+
+        Ok(())
     }
 
     // ─── Functions ──────────────────────────────────────────────────────
@@ -465,7 +649,7 @@ impl Lowerer {
                 self.emit_u8(dst);
 
                 if !self.functions.contains_key(function) {
-                    let call_site = self.current_pc() - 7;
+                    let call_site = self.current_pc() - 6; // -6 because emit() writes u16 (2 bytes) + u32 name_idx (4 bytes) = 6 bytes before arg_count/dst
                     self.patch_points.push((call_site, function.clone()));
                 }
             }
@@ -790,7 +974,31 @@ impl Lowerer {
         let patches = std::mem::take(&mut self.patch_points);
         for (call_site, func_name) in patches {
             if let Some(&(start_pc, _)) = self.functions.get(&func_name) {
-                self.patch_jump(call_site, start_pc as usize)?;
+                // Found the function - convert CALL to CALL_ADDR for direct jump
+                // call_site points to the name_idx (4 bytes), which we replace with 16-bit PC
+                // Layout was: CALL [1] + name_idx [4] + arg_count [1] + dst [1] = 7 bytes
+                // New layout: CALL_ADDR [1] + pc_lo [1] + pc_hi [1] + arg_count [1] + dst [1] = 5 bytes
+                // We write: CALL_ADDR opcode, then 16-bit PC, then arg_count, then dst
+                // Need to shift bytes due to size difference (7 -> 5)
+
+                // call_site points to name_idx[0] (first byte after the u16 opcode).
+                // CALL layout: [op_lo][op_hi][name_idx u32 4 bytes][arg_count u8][dst u8] = 8 bytes
+                // CALL_ADDR layout: same 8 bytes — opcode replaced, name_idx slot reused as u32 PC.
+                // arg_count and dst stay at call_site+4 and call_site+5 — no shifting needed.
+                let call_opcode_pos = call_site - 2; // low byte of the u16 opcode slot
+                if call_site + 3 < self.bytecode.code.len() {
+                    // Overwrite opcode low byte with CallAddr; high byte is already 0x00
+                    self.bytecode.code[call_opcode_pos] = Opcode::CallAddr as u8;
+
+                    // Write 32-bit PC into the name_idx slot (same 4 bytes, no size change)
+                    self.bytecode.code[call_site]     = (start_pc & 0xFF) as u8;
+                    self.bytecode.code[call_site + 1] = ((start_pc >> 8) & 0xFF) as u8;
+                    self.bytecode.code[call_site + 2] = ((start_pc >> 16) & 0xFF) as u8;
+                    self.bytecode.code[call_site + 3] = ((start_pc >> 24) & 0xFF) as u8;
+                    // arg_count at call_site+4 and dst at call_site+5 remain untouched
+
+                    eprintln!("[patch] {} -> CALL_ADDR PC {}", func_name, start_pc);
+                }
             }
             // If function not found, leave the patch as-is (could be a built-in)
         }

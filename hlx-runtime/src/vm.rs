@@ -1304,6 +1304,49 @@ impl Vm {
                         }
                     }
                 }
+
+                Opcode::CallAddr => {
+                    // Call by direct PC address (used for cross-module imports)
+                    // Read 32-bit target PC (matches the u32 written by patch_forward_calls)
+                    let target_pc = bytecode.read_u32(&mut pc)? as usize;
+                    let arg_count = bytecode.read_u8(&mut pc)? as usize;
+                    let dst = bytecode.read_u8(&mut pc)? as usize;
+
+                    // Find the function at this PC to get param_count
+                    let mut param_count = 0;
+                    for (_, &(start_pc, params)) in &self.functions {
+                        if start_pc == target_pc as usize {
+                            param_count = params as usize;
+                            break;
+                        }
+                    }
+
+                    let saved_regs: Vec<Value> =
+                        self.registers[..self.config.saved_register_count].to_vec();
+
+                    let arg_base = self.config.arg_base_register;
+                    let max_args = arg_count.min(param_count);
+                    if arg_base + max_args > self.registers.len() {
+                        return Err(RuntimeError::new(
+                            format!(
+                                "CallAddr arg_base ({}) + arg_count ({}) exceeds register limit ({})",
+                                arg_base, max_args, self.registers.len()
+                            ),
+                            pc,
+                        ));
+                    }
+                    for i in 0..max_args {
+                        self.registers[i + 1] = self.registers[arg_base + i].clone();
+                    }
+
+                    self.call_stack.push(CallFrame {
+                        return_pc: pc,
+                        base_reg: dst,
+                        arg_count,
+                        saved_regs,
+                    });
+                    pc = target_pc as usize;
+                }
             }
         }
 
