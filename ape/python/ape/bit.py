@@ -227,6 +227,139 @@ class BitSeed:
             "relevance": relevance,
         }
 
+
+    def reason_symbolically(self, question: str) -> tuple[str, float]:
+        """
+        Reason about a question using symbolic knowledge from corpus and learned patterns.
+        
+        Returns:
+            Tuple of (symbolic_answer, confidence_0_to_1)
+        """
+        import string
+        import re
+        
+        # Tokenize question into word set
+        question_lower = question.lower()
+        question_lower = re.sub(r'[^\w\s]', '', question_lower)  # Strip punctuation
+        question_words = set(question_lower.split())
+        
+        if not question_words:
+            return ("", 0.0)
+        
+        matches = []
+        
+        # Query corpus rules
+        try:
+            conn = sqlite3.connect(self.corpus_path)
+            cursor = conn.cursor()
+            
+            # Get rules
+            cursor.execute(
+                "SELECT name, description, content, confidence FROM rules ORDER BY confidence DESC"
+            )
+            for row in cursor.fetchall():
+                name, description, content, confidence = row
+                rule_text = f"{name} {description} {content}"
+                rule_words = set(re.sub(r'[^\w\s]', '', rule_text.lower()).split())
+                overlap = len(question_words & rule_words)
+                if overlap > 0:
+                    matches.append({
+                        'type': 'rule',
+                        'name': name,
+                        'content': content,
+                        'confidence': confidence,
+                        'overlap': overlap
+                    })
+            
+            # Get recent memory (last 30)
+            cursor.execute(
+                "SELECT source, content, relevance FROM memory ORDER BY relevance DESC, created_at DESC LIMIT 30"
+            )
+            for row in cursor.fetchall():
+                source, content, relevance = row
+                mem_text = f"{source} {content}"
+                mem_words = set(re.sub(r'[^\w\s]', '', mem_text.lower()).split())
+                overlap = len(question_words & mem_words)
+                if overlap > 0:
+                    matches.append({
+                        'type': 'memory',
+                        'source': source,
+                        'content': content,
+                        'confidence': relevance,
+                        'overlap': overlap
+                    })
+            
+            conn.close()
+        except Exception as e:
+            # If DB fails, continue with learned patterns only
+            pass
+        
+        # Score learned patterns
+        for pattern in self.learned_patterns:
+            pattern_text = pattern.get('pattern', '')
+            pattern_conf = pattern.get('confidence', 0.5)
+            pattern_words = set(re.sub(r'[^\w\s]', '', pattern_text.lower()).split())
+            overlap = len(question_words & pattern_words)
+            if overlap > 0:
+                matches.append({
+                    'type': 'pattern',
+                    'content': pattern_text,
+                    'confidence': pattern_conf,
+                    'overlap': overlap
+                })
+        
+        if not matches:
+            return ("", 0.0)
+        
+        # Sort by overlap (best matches first)
+        matches.sort(key=lambda x: x['overlap'], reverse=True)
+        
+        # Calculate confidence
+        confidence = 0.0
+        best_rule = next((m for m in matches if m['type'] == 'rule'), None)
+        best_pattern = next((m for m in matches if m['type'] == 'pattern'), None)
+        
+        if best_rule:
+            rule_contrib = best_rule['confidence'] * min(best_rule['overlap'] / 3.0, 1.0)
+            confidence += rule_contrib
+        
+        if best_pattern:
+            pattern_contrib = best_pattern['confidence'] * 0.7 * min(best_pattern['overlap'] / 2.0, 1.0)
+            confidence += pattern_contrib
+        
+        confidence = min(confidence, 1.0)
+        
+        # Build answer from top matches
+        answer_parts = []
+        
+        # Add top rules (up to 3)
+        rules = [m for m in matches[:5] if m['type'] == 'rule'][:3]
+        if rules:
+            answer_parts.append("Based on my conscience rules:")
+            for rule in rules:
+                answer_parts.append(f"  - {rule['name']}: {rule.get('content', rule.get('description', ''))}")
+        
+        # Add top patterns (up to 2)
+        patterns = [m for m in matches[:5] if m['type'] == 'pattern'][:2]
+        if patterns:
+            if rules:
+                answer_parts.append("
+And from learned patterns:")
+            else:
+                answer_parts.append("From my learned patterns:")
+            for pat in patterns:
+                answer_parts.append(f"  - {pat['content']}")
+        
+        # Add memory context if relevant (up to 1)
+        memory = next((m for m in matches if m['type'] == 'memory'), None)
+        if memory:
+            answer_parts.append(f"
+Context from {memory['source']}: {memory['content']}")
+        
+        answer = "
+".join(answer_parts) if answer_parts else ""
+        return (answer, confidence)
+
     def ask(self, question: str) -> str:
         """
         Ask Bit a question. She answers from her current knowledge.
