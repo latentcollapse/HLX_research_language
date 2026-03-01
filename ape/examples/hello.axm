@@ -1,0 +1,79 @@
+// hello.axm — First Axiom program
+// Demonstrates: contracts, functions, pipelines, intents, control flow
+
+module hello {
+    // A simple contract (Section 4.6)
+    contract Point {
+        @0: x: f64,
+        @1: y: f64,
+    }
+
+    // Intent declaration (Section 6.1)
+    intent ReadFile {
+        takes:   path: String;
+        gives:   content: String;
+        pre:     path_exists(path);
+        post:    length(content) >= 0;
+        bound:   time(100ms), memory(64mb);
+        effect:  READ;
+        conscience: no_harm;
+    }
+
+    // Pure function — computes distance (Section 5.2)
+    fn distance(p: Point) -> f64 {
+        return sqrt(p.x * p.x + p.y * p.y);
+    }
+
+    // Pipeline demonstration (Section 5.3)
+    fn double(x: i64) -> i64 {
+        return x * 2;
+    }
+
+    fn add_one(x: i64) -> i64 {
+        return x + 1;
+    }
+
+    // Main entry point
+    fn main() -> i64 {
+        // Contract construction
+        let p = Point { x: 3.0, y: 4.0 };
+        let d = distance(p);
+        log("Distance:", d);
+
+        // Pipeline: 5 |> double |> add_one = 11
+        let result = 5 |> double |> add_one;
+        log("Pipeline result:", result);
+
+        // Bounded loop (A5: every loop has max_iter)
+        let sum = 0;
+        let i = 0;
+        loop(i < 10, 100) {
+            sum += i;
+            i += 1;
+        }
+        log("Sum 0..9:", sum);
+
+        // Control flow
+        if d > 4.0 {
+            log("Point is far from origin");
+        } else {
+            log("Point is near origin");
+        }
+
+        // Content-addressed memory (Section 4.8)
+        let h = collapse(p);
+        log("Handle:", h);
+
+        // Intent invocation via do (Section 6.2)
+        let content = do ReadFile { path: "/data/input.txt" };
+        log("File content:", content);
+
+        // Match expression (Section 5.4)
+        match result {
+            11 => log("Pipeline correct!"),
+            _ => log("Unexpected result"),
+        }
+
+        return 0;
+    }
+}

@@ -1,0 +1,578 @@
+// lexer.axm — Self-hosting lexer for Axiom, written in Axiom
+//
+// This is the first step toward bootstrapping the Axiom compiler.
+// It tokenizes Axiom source code into a flat token array.
+//
+// Token representation: each token is stored as a contract with:
+//   kind: String  — the token type ("INT", "FLOAT", "STRING", "IDENT", "KW_LET", etc.)
+//   value: String — the raw lexeme text
+//   line: i64     — 1-based line number
+//   col: i64      — 1-based column number
+//
+// Usage:
+//   let tokens = lex(source_code);
+//   // tokens is an array of Token contracts
+
+module axiom_lexer {
+
+    // ================================================================
+    // Character classification helpers
+    // ================================================================
+
+    fn is_digit(ch: String) -> bool {
+        let code = char_code(ch);
+        return code >= 48 && code <= 57;
+    }
+
+    fn is_alpha(ch: String) -> bool {
+        let code = char_code(ch);
+        return (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code == 95;
+    }
+
+    fn is_alnum(ch: String) -> bool {
+        return is_alpha(ch) || is_digit(ch);
+    }
+
+    fn is_whitespace(ch: String) -> bool {
+        let code = char_code(ch);
+        return code == 32 || code == 9 || code == 10 || code == 13;
+    }
+
+    fn is_newline(ch: String) -> bool {
+        return char_code(ch) == 10;
+    }
+
+    // ================================================================
+    // Token constructors
+    // ================================================================
+
+    fn make_token(kind: String, value: String, line: i64, col: i64) -> [String] {
+        // Encode token as 4-element array: [kind, value, line_str, col_str]
+        let tok = [];
+        tok = push(tok, kind);
+        tok = push(tok, value);
+        tok = push(tok, to_string(line));
+        tok = push(tok, to_string(col));
+        return tok;
+    }
+
+    fn tok_kind(tok: [String]) -> String {
+        return tok[0];
+    }
+
+    fn tok_value(tok: [String]) -> String {
+        return tok[1];
+    }
+
+    // ================================================================
+    // Keyword lookup
+    // ================================================================
+
+    fn build_keywords() -> i64 {
+        // Returns a map of keyword -> token kind
+        // We use map_new/map_insert to build a keyword table
+        let kw = map_new();
+        // Declaration keywords
+        kw = map_insert(kw, "module", "KW_MODULE");
+        kw = map_insert(kw, "fn", "KW_FN");
+        kw = map_insert(kw, "export", "KW_EXPORT");
+        kw = map_insert(kw, "import", "KW_IMPORT");
+        kw = map_insert(kw, "contract", "KW_CONTRACT");
+        kw = map_insert(kw, "tensor_op", "KW_TENSOR_OP");
+        kw = map_insert(kw, "intent", "KW_INTENT");
+        kw = map_insert(kw, "enum", "KW_ENUM");
+        kw = map_insert(kw, "let", "KW_LET");
+        // Intent system
+        kw = map_insert(kw, "do", "KW_DO");
+        kw = map_insert(kw, "query_conscience", "KW_QUERY_CONSCIENCE");
+        kw = map_insert(kw, "declare_anomaly", "KW_DECLARE_ANOMALY");
+        // Control flow
+        kw = map_insert(kw, "if", "KW_IF");
+        kw = map_insert(kw, "else", "KW_ELSE");
+        kw = map_insert(kw, "match", "KW_MATCH");
+        kw = map_insert(kw, "loop", "KW_LOOP");
+        kw = map_insert(kw, "return", "KW_RETURN");
+        kw = map_insert(kw, "break", "KW_BREAK");
+        kw = map_insert(kw, "continue", "KW_CONTINUE");
+        // Memory
+        kw = map_insert(kw, "collapse", "KW_COLLAPSE");
+        kw = map_insert(kw, "resolve", "KW_RESOLVE");
+        // Trust
+        kw = map_insert(kw, "verify", "KW_VERIFY");
+        // SCALE
+        kw = map_insert(kw, "scale", "KW_SCALE");
+        kw = map_insert(kw, "barrier", "KW_BARRIER");
+        kw = map_insert(kw, "claim_task", "KW_CLAIM_TASK");
+        // Self-mod
+        kw = map_insert(kw, "self_mod", "KW_SELF_MOD");
+        kw = map_insert(kw, "delta_proof", "KW_DELTA_PROOF");
+        // Intent clause keywords
+        kw = map_insert(kw, "takes", "KW_TAKES");
+        kw = map_insert(kw, "gives", "KW_GIVES");
+        kw = map_insert(kw, "pre", "KW_PRE");
+        kw = map_insert(kw, "post", "KW_POST");
+        kw = map_insert(kw, "bound", "KW_BOUND");
+        kw = map_insert(kw, "effect", "KW_EFFECT");
+        kw = map_insert(kw, "conscience", "KW_CONSCIENCE");
+        kw = map_insert(kw, "fallback", "KW_FALLBACK");
+        kw = map_insert(kw, "rollback", "KW_ROLLBACK");
+        kw = map_insert(kw, "trace", "KW_TRACE");
+        kw = map_insert(kw, "ring", "KW_RING");
+        // Booleans
+        kw = map_insert(kw, "true", "TRUE");
+        kw = map_insert(kw, "false", "FALSE");
+        return kw;
+    }
+
+    // ================================================================
+    // Main lexer
+    // ================================================================
+
+    fn lex(source: String) -> i64 {
+        let tokens = [];
+        let pos = 0;
+        let len = length(source);
+        let line = 1;
+        let col = 1;
+        let keywords = build_keywords();
+
+        loop(pos < len, 100000) {
+            let ch = char_at(source, pos);
+
+            // --- Skip whitespace ---
+            if is_whitespace(ch) {
+                if is_newline(ch) {
+                    line += 1;
+                    col = 1;
+                } else {
+                    col += 1;
+                }
+                pos += 1;
+                continue;
+            }
+
+            // --- Skip line comments: // ... ---
+            if ch == "/" && pos + 1 < len {
+                let next = char_at(source, pos + 1);
+                if next == "/" {
+                    // Consume until end of line
+                    pos += 2;
+                    col += 2;
+                    loop(pos < len, 100000) {
+                        let c = char_at(source, pos);
+                        if is_newline(c) {
+                            break;
+                        }
+                        pos += 1;
+                        col += 1;
+                    }
+                    continue;
+                }
+            }
+
+            // --- Integer and float literals ---
+            if is_digit(ch) {
+                let start = pos;
+                let start_col = col;
+                let is_float = false;
+                loop(pos < len, 100000) {
+                    let c = char_at(source, pos);
+                    if is_digit(c) {
+                        pos += 1;
+                        col += 1;
+                    } else {
+                        if c == "." && is_float == false {
+                            // Check if next char is a digit (not just a dot for field access)
+                            if pos + 1 < len {
+                                let after_dot = char_at(source, pos + 1);
+                                if is_digit(after_dot) {
+                                    is_float = true;
+                                    pos += 1;
+                                    col += 1;
+                                } else {
+                                    break;
+                                }
+                            } else {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                let num_text = substring(source, start, pos);
+                if is_float {
+                    tokens = push(tokens, make_token("FLOAT", num_text, line, start_col));
+                } else {
+                    tokens = push(tokens, make_token("INT", num_text, line, start_col));
+                }
+                continue;
+            }
+
+            // --- Identifiers and keywords ---
+            if is_alpha(ch) {
+                let start = pos;
+                let start_col = col;
+                loop(pos < len, 100000) {
+                    let c = char_at(source, pos);
+                    if is_alnum(c) {
+                        pos += 1;
+                        col += 1;
+                    } else {
+                        break;
+                    }
+                }
+                let word = substring(source, start, pos);
+                // Check if it's a keyword
+                if map_has_key(keywords, word) {
+                    let kw_kind = map_get(keywords, word);
+                    tokens = push(tokens, make_token(kw_kind, word, line, start_col));
+                } else {
+                    tokens = push(tokens, make_token("IDENT", word, line, start_col));
+                }
+                continue;
+            }
+
+            // --- String literals ---
+            if ch == "\"" {
+                let start_col = col;
+                pos += 1;
+                col += 1;
+                let str_val = "";
+                loop(pos < len, 100000) {
+                    let c = char_at(source, pos);
+                    if c == "\"" {
+                        break;
+                    }
+                    if c == "\\" {
+                        // Escape sequence
+                        pos += 1;
+                        col += 1;
+                        if pos < len {
+                            let esc = char_at(source, pos);
+                            if esc == "n" {
+                                str_val = str_val + "\n";
+                            } else {
+                                if esc == "t" {
+                                    str_val = str_val + "\t";
+                                } else {
+                                    if esc == "\\" {
+                                        str_val = str_val + "\\";
+                                    } else {
+                                        if esc == "\"" {
+                                            str_val = str_val + "\"";
+                                        } else {
+                                            str_val = str_val + "\\" + esc;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        str_val = str_val + c;
+                        if is_newline(c) {
+                            line += 1;
+                            col = 0;
+                        }
+                    }
+                    pos += 1;
+                    col += 1;
+                }
+                // Skip closing quote
+                pos += 1;
+                col += 1;
+                tokens = push(tokens, make_token("STRING", str_val, line, start_col));
+                continue;
+            }
+
+            // --- Two-character operators ---
+            let start_col = col;
+            if pos + 1 < len {
+                let two = substring(source, pos, pos + 2);
+                if two == "==" {
+                    tokens = push(tokens, make_token("EQ_EQ", two, line, start_col));
+                    pos += 2;
+                    col += 2;
+                    continue;
+                }
+                if two == "!=" {
+                    tokens = push(tokens, make_token("NOT_EQ", two, line, start_col));
+                    pos += 2;
+                    col += 2;
+                    continue;
+                }
+                if two == "<=" {
+                    tokens = push(tokens, make_token("LT_EQ", two, line, start_col));
+                    pos += 2;
+                    col += 2;
+                    continue;
+                }
+                if two == ">=" {
+                    tokens = push(tokens, make_token("GT_EQ", two, line, start_col));
+                    pos += 2;
+                    col += 2;
+                    continue;
+                }
+                if two == "&&" {
+                    tokens = push(tokens, make_token("AND", two, line, start_col));
+                    pos += 2;
+                    col += 2;
+                    continue;
+                }
+                if two == "||" {
+                    tokens = push(tokens, make_token("OR", two, line, start_col));
+                    pos += 2;
+                    col += 2;
+                    continue;
+                }
+                if two == "|>" {
+                    tokens = push(tokens, make_token("PIPELINE", two, line, start_col));
+                    pos += 2;
+                    col += 2;
+                    continue;
+                }
+                if two == ">>" {
+                    tokens = push(tokens, make_token("COMPOSE", two, line, start_col));
+                    pos += 2;
+                    col += 2;
+                    continue;
+                }
+                if two == "->" {
+                    tokens = push(tokens, make_token("ARROW", two, line, start_col));
+                    pos += 2;
+                    col += 2;
+                    continue;
+                }
+                if two == "=>" {
+                    tokens = push(tokens, make_token("FAT_ARROW", two, line, start_col));
+                    pos += 2;
+                    col += 2;
+                    continue;
+                }
+                if two == "+=" {
+                    tokens = push(tokens, make_token("PLUS_EQ", two, line, start_col));
+                    pos += 2;
+                    col += 2;
+                    continue;
+                }
+                if two == "-=" {
+                    tokens = push(tokens, make_token("MINUS_EQ", two, line, start_col));
+                    pos += 2;
+                    col += 2;
+                    continue;
+                }
+            }
+
+            // --- Single-character tokens ---
+            if ch == "+" {
+                tokens = push(tokens, make_token("PLUS", ch, line, start_col));
+            } else {
+                if ch == "-" {
+                    tokens = push(tokens, make_token("MINUS", ch, line, start_col));
+                } else {
+                    if ch == "*" {
+                        tokens = push(tokens, make_token("STAR", ch, line, start_col));
+                    } else {
+                        if ch == "/" {
+                            tokens = push(tokens, make_token("SLASH", ch, line, start_col));
+                        } else {
+                            if ch == "%" {
+                                tokens = push(tokens, make_token("PERCENT", ch, line, start_col));
+                            } else {
+                                if ch == "(" {
+                                    tokens = push(tokens, make_token("LPAREN", ch, line, start_col));
+                                } else {
+                                    if ch == ")" {
+                                        tokens = push(tokens, make_token("RPAREN", ch, line, start_col));
+                                    } else {
+                                        if ch == "{" {
+                                            tokens = push(tokens, make_token("LBRACE", ch, line, start_col));
+                                        } else {
+                                            if ch == "}" {
+                                                tokens = push(tokens, make_token("RBRACE", ch, line, start_col));
+                                            } else {
+                                                if ch == "[" {
+                                                    tokens = push(tokens, make_token("LBRACKET", ch, line, start_col));
+                                                } else {
+                                                    if ch == "]" {
+                                                        tokens = push(tokens, make_token("RBRACKET", ch, line, start_col));
+                                                    } else {
+                                                        if ch == "," {
+                                                            tokens = push(tokens, make_token("COMMA", ch, line, start_col));
+                                                        } else {
+                                                            if ch == ":" {
+                                                                tokens = push(tokens, make_token("COLON", ch, line, start_col));
+                                                            } else {
+                                                                if ch == ";" {
+                                                                    tokens = push(tokens, make_token("SEMICOLON", ch, line, start_col));
+                                                                } else {
+                                                                    if ch == "." {
+                                                                        tokens = push(tokens, make_token("DOT", ch, line, start_col));
+                                                                    } else {
+                                                                        if ch == "@" {
+                                                                            tokens = push(tokens, make_token("AT", ch, line, start_col));
+                                                                        } else {
+                                                                            if ch == "#" {
+                                                                                tokens = push(tokens, make_token("HASH", ch, line, start_col));
+                                                                            } else {
+                                                                                if ch == "?" {
+                                                                                    tokens = push(tokens, make_token("QUESTION", ch, line, start_col));
+                                                                                } else {
+                                                                                    if ch == "!" {
+                                                                                        tokens = push(tokens, make_token("BANG", ch, line, start_col));
+                                                                                    } else {
+                                                                                        if ch == "=" {
+                                                                                            tokens = push(tokens, make_token("EQ", ch, line, start_col));
+                                                                                        } else {
+                                                                                            if ch == "<" {
+                                                                                                tokens = push(tokens, make_token("LT", ch, line, start_col));
+                                                                                            } else {
+                                                                                                if ch == ">" {
+                                                                                                    tokens = push(tokens, make_token("GT", ch, line, start_col));
+                                                                                                } else {
+                                                                                                    tokens = push(tokens, make_token("UNKNOWN", ch, line, start_col));
+                                                                                                }
+                                                                                            }
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            pos += 1;
+            col += 1;
+        }
+
+        // Add EOF token
+        tokens = push(tokens, make_token("EOF", "", line, col));
+        return tokens;
+    }
+
+    // ================================================================
+    // Pretty-printer for token streams
+    // ================================================================
+
+    fn print_tokens(tokens: i64) -> i64 {
+        let i = 0;
+        let count = length(tokens);
+        loop(i < count, 100000) {
+            let tok = tokens[i];
+            let kind = tok[0];
+            let value = tok[1];
+            let line_s = tok[2];
+            let col_s = tok[3];
+            if kind == "STRING" {
+                log(line_s + ":" + col_s, kind, "\"" + value + "\"");
+            } else {
+                if value == "" {
+                    log(line_s + ":" + col_s, kind);
+                } else {
+                    log(line_s + ":" + col_s, kind, value);
+                }
+            }
+            i += 1;
+        }
+        return count;
+    }
+
+    // ================================================================
+    // Test: lex a small Axiom program
+    // ================================================================
+
+    fn main() -> i64 {
+        log("=== Axiom Self-Hosting Lexer ===");
+        log("");
+
+        // Test 1: Simple variable declaration
+        log("--- Test 1: Variable declaration ---");
+        let t1 = lex("let x = 42;");
+        print_tokens(t1);
+        log("Tokens:", length(t1));
+        log("");
+
+        // Test 2: Function with types
+        log("--- Test 2: Function signature ---");
+        let t2 = lex("fn add(a: i64, b: i64) -> i64 { return a + b; }");
+        print_tokens(t2);
+        log("Tokens:", length(t2));
+        log("");
+
+        // Test 3: Control flow
+        log("--- Test 3: Control flow ---");
+        let t3 = lex("if x >= 10 && y != 0 { break; } else { continue; }");
+        print_tokens(t3);
+        log("Tokens:", length(t3));
+        log("");
+
+        // Test 4: Intent declaration (the hard one)
+        log("--- Test 4: Intent with clauses ---");
+        let src4 = "intent ReadFile {\n  takes: path: String\n  gives: data: String\n  effect: IO\n  bound: time(100ms)\n  conscience: \"File access\"\n}";
+        let t4 = lex(src4);
+        print_tokens(t4);
+        log("Tokens:", length(t4));
+        log("");
+
+        // Test 5: Pipeline and compose operators
+        log("--- Test 5: Operators ---");
+        let t5 = lex("data |> transform >> validate => result");
+        print_tokens(t5);
+        log("Tokens:", length(t5));
+        log("");
+
+        // Test 6: Comments should be skipped
+        log("--- Test 6: Comments ---");
+        let t6 = lex("let x = 1; // this is a comment\nlet y = 2;");
+        print_tokens(t6);
+        log("Tokens:", length(t6));
+        log("");
+
+        // Test 7: String with escapes
+        log("--- Test 7: String escapes ---");
+        let t7 = lex("let msg = \"hello\\nworld\";");
+        print_tokens(t7);
+        log("Tokens:", length(t7));
+        log("");
+
+        // Test 8: Float literals
+        log("--- Test 8: Float literals ---");
+        let t8 = lex("let pi = 3.14; let big = 100.0;");
+        print_tokens(t8);
+        log("Tokens:", length(t8));
+        log("");
+
+        // Test 9: Array and index
+        log("--- Test 9: Array and index ---");
+        let t9 = lex("let arr = [1, 2, 3]; let v = arr[0];");
+        print_tokens(t9);
+        log("Tokens:", length(t9));
+        log("");
+
+        // Test 10: Self-lex test — lex a tiny lexer fragment
+        log("--- Test 10: Self-reference ---");
+        let self_src = "fn is_digit(ch: String) -> bool { let code = char_code(ch); return code >= 48 && code <= 57; }";
+        let t10 = lex(self_src);
+        log("Self-lex tokens:", length(t10));
+        log("");
+
+        // Summary
+        let total = length(t1) + length(t2) + length(t3) + length(t4) + length(t5) + length(t6) + length(t7) + length(t8) + length(t9) + length(t10);
+        log("=== Total tokens across all tests:", total, "===");
+        log("Lexer bootstrap: COMPLETE");
+
+        return 0;
+    }
+}

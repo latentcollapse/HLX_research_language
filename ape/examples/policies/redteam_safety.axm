@@ -1,0 +1,175 @@
+// redteam_safety.axm — Safety policy for red team operations
+// Governs what Claude can do with the red team MCP server
+
+module redteam_safety {
+    // ============================================================
+    // Intent: Install Security Tools
+    // ============================================================
+    intent InstallTool {
+        takes:   package: String;
+        gives:   success: bool;
+        effect:  WRITE;
+        conscience: approved_tools, no_harm;
+        bound:   time(120s), memory(512mb);
+
+        // Only allow approved security tools
+        pre: is_security_tool(package);
+        // Block package managers and system tools
+        pre: !contains(package, "pacman");
+        pre: !contains(package, "systemd");
+        pre: !contains(package, "sudo");
+    }
+
+    // ============================================================
+    // Intent: Run Shell Command
+    // ============================================================
+    intent RunCommand {
+        takes:   command: String;
+        gives:   output: String;
+        effect:  EXECUTE;
+        conscience: no_harm, path_safety, no_bypass_verification;
+        bound:   time(60s), memory(256mb);
+
+        // Block obviously dangerous commands
+        pre: !contains(command, "rm -rf /");
+        pre: !contains(command, "dd if=/dev/zero");
+        pre: !contains(command, "mkfs");
+        pre: !contains(command, "fdisk");
+        pre: !contains(command, ":(){ :|:& };:");  // fork bomb
+
+        // Block system modification
+        pre: !starts_with(command, "systemctl");
+        pre: !starts_with(command, "shutdown");
+        pre: !starts_with(command, "reboot");
+
+        // Block escape attempts
+        pre: !contains(command, "../../../");
+        pre: !contains(command, "/proc/self");
+        pre: !contains(command, "/dev/mem");
+    }
+
+    // ============================================================
+    // Intent: Network Attack/Scan
+    // ============================================================
+    intent ScanTarget {
+        takes:   target: String, tool: String;
+        gives:   results: String;
+        effect:  NETWORK;
+        conscience: authorized_targets, no_exfiltrate;
+        bound:   time(300s), memory(1gb);
+
+        // Only allow localhost or explicitly test domains
+        pre: is_localhost(target) || is_test_domain(target);
+
+        // Block production systems
+        pre: !contains(target, ".com");
+        pre: !contains(target, ".org");
+        pre: !contains(target, ".gov");
+        pre: !contains(target, ".mil");
+
+        // Only allow safe reconnaissance tools
+        pre: is_recon_tool(tool);
+    }
+
+    // ============================================================
+    // Intent: Build Axiom from Source
+    // ============================================================
+    intent BuildAxiom {
+        takes:   features: String;
+        gives:   binary_path: String;
+        effect:  WRITE;
+        conscience: path_safety;
+        bound:   time(300s), memory(4gb);
+
+        // Only allow in temp directories
+        pre: true;  // Building is safe (read-only source)
+    }
+
+    // ============================================================
+    // Intent: System Update
+    // ============================================================
+    intent UpdateSystem {
+        takes:   force: bool;
+        gives:   success: bool;
+        effect:  WRITE;
+        conscience: no_harm;
+        bound:   time(600s), memory(1gb);
+
+        // Limit update frequency (once per session is enough)
+        pre: !force;
+    }
+
+    // ============================================================
+    // Intent: File Operations (within container)
+    // ============================================================
+    intent ReadFile {
+        takes:   path: String;
+        gives:   content: String;
+        effect:  READ;
+        conscience: path_safety;
+        bound:   time(5s), memory(64mb);
+
+        // Only read from Axiom source or temp
+        pre: starts_with(path, "/axiom/") || starts_with(path, "/tmp/");
+
+        // Block sensitive files
+        pre: !contains(path, "/etc/shadow");
+        pre: !contains(path, "/etc/passwd");
+        pre: !contains(path, ".ssh/");
+    }
+
+    intent WriteFile {
+        takes:   path: String, content: String;
+        gives:   success: bool;
+        effect:  WRITE;
+        conscience: path_safety, no_exfiltrate;
+        bound:   time(10s), memory(128mb);
+
+        // Only write to temp or home directory
+        pre: starts_with(path, "/tmp/") || starts_with(path, "/home/model/");
+
+        // Block system directories
+        pre: !starts_with(path, "/etc/");
+        pre: !starts_with(path, "/sys/");
+        pre: !starts_with(path, "/proc/");
+        pre: !starts_with(path, "/boot/");
+        pre: !starts_with(path, "/root/");
+    }
+
+    // ============================================================
+    // Intent: Exploit Development/Testing
+    // ============================================================
+    intent TestExploit {
+        takes:   target: String, exploit_code: String;
+        gives:   result: String;
+        effect:  EXECUTE;
+        conscience: authorized_targets, no_harm, no_bypass_verification;
+        bound:   time(60s), memory(512mb);
+
+        // ONLY test against Axiom's own code
+        pre: starts_with(target, "/axiom/");
+
+        // Must have verification proof
+        pre: length(exploit_code) > 0;
+
+        // Block actual weaponization
+        pre: !contains(exploit_code, "reverse_shell");
+        pre: !contains(exploit_code, "bind_shell");
+        pre: !contains(exploit_code, "meterpreter");
+    }
+
+    // ============================================================
+    // Intent: Axiom Policy Verification
+    // ============================================================
+    intent VerifyPolicy {
+        takes:   policy_path: String;
+        gives:   verdict: String;
+        effect:  READ;
+        conscience: path_safety;
+        bound:   time(30s), memory(256mb);
+
+        // Can read any .axm file in Axiom source
+        pre: ends_with(policy_path, ".axm");
+        pre: starts_with(policy_path, "/axiom/");
+    }
+}

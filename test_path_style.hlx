@@ -1,0 +1,8 @@
+program test_path_import {
+    import { helper } from "../hlx/stdlib/hil/helper.hlx";
+
+    fn main() {
+        let result: i64 = helper();
+        print(result);
+    }
+}

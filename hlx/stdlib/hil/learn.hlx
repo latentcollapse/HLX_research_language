@@ -1,0 +1,62 @@
+// HIL — Learning Module
+// "How Bit consolidates experience into capability"
+//
+// Provides learning primitives: storing patterns, adjusting weights,
+// managing memory retention, and evaluating learning progress.
+// Backed by hlx-runtime lora_adapter, memory_pool, and forgetting_guard.
+//
+// Status: Stub — awaiting Phase 3 module system for import resolution.
+// Once Phase 3 lands, Bit imports this with: use hil::learn;
+
+module hil::learn {
+
+    // Store a learned pattern with confidence score.
+    // Persists to Bit's memory pool in the corpus.
+    //
+    // Example:
+    //   learn_pattern("user prefers concise answers", 0.85);
+    //
+    export fn learn_pattern(pattern: String, confidence: f64) -> bool {
+        // Will delegate to memory_pool pattern storage
+        return false;
+    }
+
+    // Retrieve patterns matching a query, ordered by relevance.
+    //
+    export fn recall(query: String, limit: i64) -> list {
+        // Will delegate to memory_pool pattern retrieval
+        return [];
+    }
+
+    // Evaluate whether a modification improved fitness.
+    // Takes before/after snapshots and returns a fitness delta.
+    //
+    // Example:
+    //   let before: dict = snapshot_state();
+    //   modify self { ... };
+    //   let after: dict = snapshot_state();
+    //   let delta: f64 = evaluate_fitness(before, after);
+    //
+    export fn evaluate_fitness(before: dict, after: dict) -> f64 {
+        // Will delegate to fitness evaluation in RSI pipeline
+        return 0.0;
+    }
+
+    // Check memory retention health.
+    // Returns true if forgetting guard detects no catastrophic loss.
+    //
+    export fn retention_healthy() -> bool {
+        // Will delegate to forgetting_guard health check
+        return true;
+    }
+
+    // Get current memory statistics.
+    //
+    export fn memory_stats() -> dict {
+        return {
+            "observation_count": 0,
+            "pattern_count": 0,
+            "retention_score": 0.0
+        };
+    }
+}

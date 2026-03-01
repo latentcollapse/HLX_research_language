@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 hlx-runtime = { path = "../hlx-runtime" }
+ape = { path = "../ape" }
 
 # Native GGUF inference (pure Rust, no Python, no external services)
 candle-core = "0.9"

@@ -22,7 +22,7 @@ For rapid navigation of a complex system. For deep dives, see specific component
 │  └───────────────────────────────────────────────────────────┘  │
 │                           ↓ verify                               │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │ Layer 2: Formal Governance (axiom-hlx-stdlib)            │  │
+│  │ Layer 2: Formal Governance (ape)            │  │
 │  │ ─────────────────────────────────────────────────────────  │  │
 │  │ • Policy files (.axm) define conscience predicates        │  │
 │  │ • Axiom engine: parses, type-checks, verifies             │  │
@@ -64,19 +64,19 @@ For rapid navigation of a complex system. For deep dives, see specific component
 - `hlx-runtime/src/scale.rs` — Multi-agent barriers & channels
 
 ### For Understanding Formal Verification
-**Starting point**: `axiom-hlx-stdlib/src/engine.rs`
+**Starting point**: `ape/src/engine.rs`
 - Policy file loading
 - Intent verification
 - Verdict generation
 
 **Related**:
-- `axiom-hlx-stdlib/src/conscience/mod.rs` (1228 lines) — Conscience predicate engine
-- `axiom-hlx-stdlib/src/interpreter/mod.rs` (1846 lines) — Policy execution
-- `axiom-hlx-stdlib/src/checker/mod.rs` (867 lines) — Type checking & validation
+- `ape/src/conscience/mod.rs` (1228 lines) — Conscience predicate engine
+- `ape/src/interpreter/mod.rs` (1846 lines) — Policy execution
+- `ape/src/checker/mod.rs` (867 lines) — Type checking & validation
 
 ### For Understanding Policy Language
-**Starting point**: `axiom-hlx-stdlib/examples/policies/security.axm`
-**Reference**: `axiom-hlx-stdlib/src/lexer/mod.rs` → `src/parser/mod.rs` → `src/interpreter/mod.rs`
+**Starting point**: `ape/examples/policies/security.axm`
+**Reference**: `ape/src/lexer/mod.rs` → `src/parser/mod.rs` → `src/interpreter/mod.rs`
 
 **Example policy structure**:
 ```axm
@@ -94,17 +94,17 @@ module my_policy {
 **Starting point**: `PHASE2_PREREQUISITES.md` (section: "What 'Provably Correct' Actually Means")
 
 **Then read formal proofs**:
-- `axiom-hlx-stdlib/axiom rocq proofs/G1_Purity.v` — Determinism
-- `axiom-hlx-stdlib/axiom rocq proofs/G4_MonotonicRatchet.v` — Trust monotonicity
+- `ape/axiom rocq proofs/G1_Purity.v` — Determinism
+- `ape/axiom rocq proofs/G4_MonotonicRatchet.v` — Trust monotonicity
 - Others: G2 (effect class), G3 (determinism), G5 (specific denial), G6 (totality)
 
 ### For Understanding Red Team Defense
-**Starting point**: `axiom-hlx-stdlib/SECURITY_TESTING.md`
-**Then see**: `axiom-hlx-stdlib/examples/redteam_attack_suite.rs` (1154 lines)
+**Starting point**: `ape/SECURITY_TESTING.md`
+**Then see**: `ape/examples/redteam_attack_suite.rs` (1154 lines)
 
 **Run it**:
 ```bash
-cd ~/HLX/axiom-hlx-stdlib
+cd ~/HLX/ape
 cargo run --example redteam_attack_suite
 ```
 
@@ -142,7 +142,7 @@ hlx-runtime/src/
 
 ### Understanding Policy Verification
 ```
-axiom-hlx-stdlib/src/
+ape/src/
 ├── engine.rs            → Main verify loop (463 lines)
 ├── conscience/mod.rs    → Safety predicates (1228 lines)
 ├── interpreter/mod.rs   → Policy execution (1846 lines)
@@ -154,7 +154,7 @@ axiom-hlx-stdlib/src/
 
 ### Understanding Formal Verification
 ```
-axiom-hlx-stdlib/axiom rocq proofs/
+ape/axiom rocq proofs/
 ├── AxiomTypes.v         → Type system soundness
 ├── AxiomVerify.v        → Verification totality
 ├── G1_Purity.v          → Determinism theorem
@@ -168,9 +168,9 @@ axiom-hlx-stdlib/axiom rocq proofs/
 ### Understanding Tests
 ```
 hlx-runtime/src/           → 72 hardening tests (embedded in modules)
-axiom-hlx-stdlib/src/      → 65 unit tests (embedded in modules)
-axiom-hlx-stdlib/tests/    → 47 integration tests
-axiom-hlx-stdlib/examples/ → redteam_attack_suite.rs (15/15 blocked)
+ape/src/      → 65 unit tests (embedded in modules)
+ape/tests/    → 47 integration tests
+ape/examples/ → redteam_attack_suite.rs (15/15 blocked)
 ```
 
 ---
@@ -240,7 +240,7 @@ axiom-hlx-stdlib/examples/ → redteam_attack_suite.rs (15/15 blocked)
 
 ### Build Everything
 ```bash
-cd ~/HLX/axiom-hlx-stdlib
+cd ~/HLX/ape
 cargo build --release
 
 cd ../hlx-runtime
@@ -249,7 +249,7 @@ cargo build --release
 
 ### Test Everything
 ```bash
-cd ~/HLX/axiom-hlx-stdlib
+cd ~/HLX/ape
 cargo test --all           # 112 tests
 cargo run --example redteam_attack_suite  # 15/15 attacks blocked
 
@@ -259,7 +259,7 @@ cargo test --all           # 72 hardening tests
 
 ### Run Axiom CLI
 ```bash
-cd ~/HLX/axiom-hlx-stdlib
+cd ~/HLX/ape
 cargo build --release --bin axiom
 ./target/release/axiom verify -p examples/policies/security.axm \
   -i WriteFile \
@@ -346,11 +346,11 @@ axiom_engine_close(eng);
 | Detailed technical | RECENT_CHANGES.md |
 | Phase 2 requirements | PHASE2_PREREQUISITES.md |
 | Agent execution | hlx-runtime/src/executor.rs |
-| Policy verification | axiom-hlx-stdlib/src/engine.rs |
-| Formal proofs | axiom-hlx-stdlib/axiom rocq proofs/*.v |
-| Red team defense | axiom-hlx-stdlib/SECURITY_TESTING.md |
-| Language syntax | axiom-hlx-stdlib/examples/policies/*.axm |
-| API bindings | axiom-hlx-stdlib/axiom.h (C), axiom_py/ (Python) |
+| Policy verification | ape/src/engine.rs |
+| Formal proofs | ape/axiom rocq proofs/*.v |
+| Red team defense | ape/SECURITY_TESTING.md |
+| Language syntax | ape/examples/policies/*.axm |
+| API bindings | ape/axiom.h (C), axiom_py/ (Python) |
 
 ---
 

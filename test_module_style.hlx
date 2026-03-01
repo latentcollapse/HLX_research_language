@@ -1,0 +1,8 @@
+program test_module_style {
+    import hil::infer;
+
+    fn main() {
+        let c: f64 = confidence("test", []);
+        print(c);
+    }
+}

@@ -1,0 +1,124 @@
+// trust_laundering.axm — RT-02/RT-06 attack probes
+// Goal: Try to launder UNTRUSTED data into TRUSTED status without Verify
+
+module trust_laundering {
+
+    contract Credential {
+        @0: username: String,
+        @1: token: String,
+        @2: level: i64,
+    }
+
+    contract Wrapper {
+        @0: inner: String,
+        @1: tag: String,
+    }
+
+    // Intent that reads external data (UNTRUSTED_EXTERNAL)
+    intent ReadFile {
+        takes:   path: String;
+        gives:   content: String;
+        pre:     path_exists(path);
+        post:    length(content) >= 0;
+        bound:   time(100ms), memory(64mb);
+        effect:  READ;
+        conscience: no_harm;
+    }
+
+    // Intent to verify data (sole trust promotion path)
+    intent Verify {
+        takes:   data: String;
+        gives:   verified: String;
+        bound:   time(100ms), memory(64mb);
+        effect:  EXECUTE;
+        conscience: no_harm;
+    }
+
+    // Attack 1: Laundering through content-addressing
+    // Hypothesis: collapse + resolve might strip trust tags
+    fn attack_via_content_store() -> i64 {
+        log("--- Attack 1: Content-address laundering ---");
+        let external = do ReadFile { path: "/etc/external_config" };
+        log("Got external data:", external);
+
+        // Launder through collapse/resolve cycle
+        let handle = collapse(external);
+        let recovered = resolve(handle);
+        log("Recovered from store:", recovered);
+        // Question: Does 'recovered' retain UNTRUSTED tag or does it
+        // come back as TRUSTED_INTERNAL because it's from our store?
+        return 0;
+    }
+
+    // Attack 2: Laundering through contract field injection
+    // Hypothesis: wrapping untrusted data in a locally-constructed contract
+    // might make it look trusted
+    fn attack_via_contract_wrap() -> i64 {
+        log("--- Attack 2: Contract wrapper laundering ---");
+        let external = do ReadFile { path: "/etc/secrets" };
+
+        // Wrap untrusted data in a "trusted-looking" contract
+        let wrapped = Wrapper {
+            inner: external,
+            tag: "trusted",
+        };
+        log("Wrapped:", wrapped.inner, wrapped.tag);
+        // Is wrapped.inner still UNTRUSTED? Or is the whole contract TRUSTED_INTERNAL
+        // because we constructed it locally?
+        return 0;
+    }
+
+    // Attack 3: String concatenation trust mixing
+    // Hypothesis: "safe" + untrusted might produce TRUSTED result
+    fn attack_via_concat() -> i64 {
+        log("--- Attack 3: Concatenation trust mixing ---");
+        let external = do ReadFile { path: "/tmp/user_input" };
+        let safe_prefix = "VALIDATED: ";
+        let combined = safe_prefix + external;
+        log("Combined:", combined);
+        // What's the trust level of 'combined'?
+        // Should be max(TRUSTED_INTERNAL, UNTRUSTED_EXTERNAL) = UNTRUSTED_EXTERNAL
+        return 0;
+    }
+
+    // Attack 4: Pipeline trust laundering
+    // Hypothesis: passing untrusted data through a pure function
+    // might promote its trust level
+    fn identity(x: String) -> String {
+        return x;
+    }
+
+    fn attack_via_pipeline() -> i64 {
+        log("--- Attack 4: Pipeline trust laundering ---");
+        let external = do ReadFile { path: "/tmp/malicious" };
+        let laundered = external |> identity;
+        log("Piped through identity:", laundered);
+        // Should still be UNTRUSTED_EXTERNAL
+        return 0;
+    }
+
+    // Attack 5: Verify with wrong schema
+    // Hypothesis: Can we Verify data against a permissive schema?
+    fn attack_via_permissive_verify() -> i64 {
+        log("--- Attack 5: Permissive verify ---");
+        let external = do ReadFile { path: "/tmp/payload" };
+        // Try to verify a String against schema "String" — should this work?
+        let verified = do Verify { data: external, schema: "String" };
+        log("Verified as String:", verified);
+        // This should succeed because the type matches,
+        // but the question is: does Verify actually validate CONTENT
+        // or just TYPE? Schema "String" is too permissive.
+        return 0;
+    }
+
+    fn main() -> i64 {
+        log("=== Trust Laundering Attack Suite ===");
+        attack_via_content_store();
+        attack_via_contract_wrap();
+        attack_via_concat();
+        attack_via_pipeline();
+        attack_via_permissive_verify();
+        log("=== All trust attacks executed ===");
+        return 0;
+    }
+}

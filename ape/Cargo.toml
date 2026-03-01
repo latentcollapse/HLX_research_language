@@ -1,0 +1,20 @@
+[package]
+name = "ape"
+version = "0.1.0"
+edition = "2021"
+description = "APE (Axiom Policy Engine) — verification-first policy engine for AI agents"
+license = "AGPL-3.0-only"
+repository = "https://github.com/latentcollapse/hlx-compiler"
+
+[lib]
+name = "ape"
+path = "src/lib.rs"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "ape"
+path = "src/main.rs"
+
+[dependencies]
+blake3 = "1"
+regex = "1"

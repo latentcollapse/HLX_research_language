@@ -16,6 +16,10 @@ mod lora_adapter;
 mod lowerer;
 mod memory_pool;
 mod promotion;
+<<<<<<< HEAD
+=======
+mod resolver;
+>>>>>>> origin/experimental
 mod rsi;
 mod scale;
 mod shader_attestation;
@@ -72,6 +76,10 @@ pub use memory_pool::{
 pub use promotion::{
     CriteriaProgress, ModificationTypeClass, PromotionCriteria, PromotionGate, PromotionLevel,
 };
+<<<<<<< HEAD
+=======
+pub use resolver::{ModuleResolver, ResolvedModule};
+>>>>>>> origin/experimental
 pub use rsi::{AgentMemory, ModificationType, ProposalStatus, RSIPipeline, RSIProposal};
 pub use scale::{Barrier, Consensus, ConsensusResult, Scale, ScalePool};
 pub use shader_attestation::{ShaderAttestationError, ShaderInfo, ShaderRegistry};

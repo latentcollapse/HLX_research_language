@@ -1,0 +1,199 @@
+// self_hosting_primitives.axm — Verify the new built-in functions
+// Tests: char_at, char_code, char_from_code, substring, push,
+//        parse_int, as_f64, as_i64, contains
+
+module self_hosting_primitives {
+
+    fn test_char_ops() -> i64 {
+        log("--- char_at / char_code / char_from_code ---");
+        let source = "hello world";
+        let h = char_at(source, 0);
+        let e = char_at(source, 1);
+        let space = char_at(source, 5);
+        log("source[0]:", h);
+        log("source[1]:", e);
+        log("source[5]:", space);
+
+        let code_h = char_code(h);
+        log("char_code('h'):", code_h);  // 104
+
+        let back = char_from_code(104);
+        log("char_from_code(104):", back);  // h
+
+        if h == "h" {
+            log("OK: char_at returns single-char string");
+        }
+        if code_h == 104 {
+            log("OK: char_code('h') == 104");
+        }
+        return 0;
+    }
+
+    fn test_substring() -> i64 {
+        log("--- substring ---");
+        let source = "let x = 42;";
+        let keyword = substring(source, 0, 3);
+        let number = substring(source, 8, 10);
+        log("substring(0,3):", keyword);  // "let"
+        log("substring(8,10):", number);  // "42"
+
+        if keyword == "let" {
+            log("OK: extracted keyword");
+        }
+        if number == "42" {
+            log("OK: extracted number");
+        }
+        return 0;
+    }
+
+    fn test_push() -> i64 {
+        log("--- push ---");
+        let arr = [1, 2, 3];
+        log("Before push:", length(arr));
+
+        let arr2 = push(arr, 4);
+        log("After push:", length(arr2));
+
+        // Build array incrementally
+        let tokens = [];
+        tokens = push(tokens, 10);
+        tokens = push(tokens, 20);
+        tokens = push(tokens, 30);
+        log("Built array length:", length(tokens));
+        log("tokens[0]:", tokens[0]);
+        log("tokens[2]:", tokens[2]);
+        return 0;
+    }
+
+    fn test_type_casting() -> i64 {
+        log("--- parse_int / as_f64 / as_i64 ---");
+        let n = parse_int("42");
+        log("parse_int('42'):", n);
+        if n == 42 {
+            log("OK: parse_int works");
+        }
+
+        let f = as_f64(100);
+        log("as_f64(100):", f);
+        // f is now f64, so we can do float math with it
+        let half = f / 2.0;
+        log("100.0 / 2.0:", half);
+
+        let i = as_i64(3.7);
+        log("as_i64(3.7):", i);  // truncates to 3
+        if i == 3 {
+            log("OK: as_i64 truncates");
+        }
+        return 0;
+    }
+
+    fn test_contains() -> i64 {
+        log("--- contains ---");
+        let keywords = "let fn return if else loop match";
+        if contains(keywords, "let") {
+            log("OK: 'let' found in keywords");
+        }
+        if contains(keywords, "while") == false {
+            log("OK: 'while' not in keywords");
+        }
+        return 0;
+    }
+
+    // Mini lexer — demonstrates we can now tokenize!
+    fn is_digit(ch: String) -> bool {
+        let code = char_code(ch);
+        return code >= 48 && code <= 57;
+    }
+
+    fn is_alpha(ch: String) -> bool {
+        let code = char_code(ch);
+        return (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code == 95;
+    }
+
+    fn is_whitespace(ch: String) -> bool {
+        let code = char_code(ch);
+        return code == 32 || code == 9 || code == 10 || code == 13;
+    }
+
+    fn mini_lexer(source: String) -> i64 {
+        log("--- Mini Lexer Demo ---");
+        log("Lexing:", source);
+        let pos = 0;
+        let len = length(source);
+        let token_count = 0;
+
+        loop(pos < len, 1000) {
+            let ch = char_at(source, pos);
+
+            if is_whitespace(ch) {
+                pos += 1;
+            } else {
+                if is_alpha(ch) {
+                    // Identifier or keyword
+                    let start = pos;
+                    loop(pos < len, 1000) {
+                        let c = char_at(source, pos);
+                        if is_alpha(c) || is_digit(c) {
+                            pos += 1;
+                        } else {
+                            pos = len; // break
+                        }
+                    }
+                    // Workaround: we can't break, so we re-scan
+                    // This is a limitation — we need break/continue
+                    pos = start;
+                    let word = "";
+                    loop(pos < len, 1000) {
+                        let c = char_at(source, pos);
+                        if is_alpha(c) || is_digit(c) {
+                            word = word + c;
+                            pos += 1;
+                        } else {
+                            pos = len; // force exit
+                        }
+                    }
+                    log("TOKEN(ident):", word);
+                    token_count += 1;
+                    // Reset pos properly — we consumed the word
+                    pos = start + length(word);
+                } else {
+                    if is_digit(ch) {
+                        let start = pos;
+                        let num = "";
+                        loop(pos < len, 1000) {
+                            let c = char_at(source, pos);
+                            if is_digit(c) {
+                                num = num + c;
+                                pos += 1;
+                            } else {
+                                pos = len;
+                            }
+                        }
+                        log("TOKEN(int):", num);
+                        token_count += 1;
+                        pos = start + length(num);
+                    } else {
+                        log("TOKEN(sym):", ch);
+                        token_count += 1;
+                        pos += 1;
+                    }
+                }
+            }
+        }
+
+        log("Total tokens:", token_count);
+        return token_count;
+    }
+
+    fn main() -> i64 {
+        log("=== Self-Hosting Primitives Test ===");
+        test_char_ops();
+        test_substring();
+        test_push();
+        test_type_casting();
+        test_contains();
+        mini_lexer("let x = 42");
+        log("=== Primitives test complete ===");
+        return 0;
+    }
+}

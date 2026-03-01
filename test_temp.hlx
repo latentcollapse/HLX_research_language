@@ -1,0 +1,10 @@
+program test {
+    fn confidence(hypothesis: String, evidence: list) -> f64 {
+        return 0.85;
+    }
+
+    fn main() {
+        let result: f64 = confidence("test", []);
+        print(result);
+    }
+}

@@ -1,0 +1,7 @@
+program test {
+    import { helper } from "./hlx/stdlib/hil/helper.hlx";
+
+    fn main() {
+        let result: i64 = helper();
+    }
+}
