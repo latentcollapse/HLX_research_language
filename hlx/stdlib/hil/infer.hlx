@@ -1,0 +1,42 @@
+// HIL — Inference Module
+// "How Bit reasons about uncertainty"
+//
+// Provides confidence-scored inference, hypothesis testing, and reasoning chains.
+// Backed by hlx-runtime tensor operations and bond protocol.
+//
+// Status: Stub — awaiting Phase 3 module system for import resolution.
+// Once Phase 3 lands, Bit imports this with: use hil::infer;
+
+module hil::infer {
+
+    // Score confidence in a hypothesis given evidence.
+    // Returns f64 in [0.0, 1.0].
+    //
+    // Example:
+    //   let c: f64 = confidence(hypothesis, evidence_list);
+    //   if c > 0.8 { apply_hypothesis(hypothesis); }
+    //
+    export fn confidence(hypothesis: String, evidence: list) -> f64 {
+        // Will delegate to tensor dot-product scoring in Rust backend
+        return 0.0;
+    }
+
+    // Test whether a hypothesis passes a confidence threshold.
+    // Shorthand for: confidence(h, e) >= threshold
+    //
+    export fn passes_threshold(hypothesis: String, evidence: list, threshold: f64) -> bool {
+        let c: f64 = confidence(hypothesis, evidence);
+        return c >= threshold;
+    }
+
+    // Call the bonded LLM for open-ended inference.
+    // Requires hlx-bond server running.
+    //
+    // Example:
+    //   let answer: String = reason("What is the entropy of this pattern?", context);
+    //
+    export fn reason(prompt: String, context: dict) -> String {
+        // Will delegate to bond() builtin once Phase 5 wires it
+        return "";
+    }
+}

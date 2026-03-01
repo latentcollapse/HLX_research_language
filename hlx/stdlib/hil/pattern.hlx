@@ -1,0 +1,46 @@
+// HIL — Pattern Module
+// "How Bit sees structure in observation"
+//
+// Provides pattern extraction, matching, and recognition over Bit's
+// observation stream. Backed by hlx-runtime memory_pool.
+//
+// Status: Stub — awaiting Phase 3 module system for import resolution.
+// Once Phase 3 lands, Bit imports this with: use hil::pattern;
+
+module hil::pattern {
+
+    // Extract patterns from a list of observations.
+    // Returns a list of {pattern: String, confidence: f64} dicts.
+    //
+    // Example:
+    //   let obs: list = get_recent_observations(100);
+    //   let patterns: list = extract(obs);
+    //   for p in patterns { learn(p["pattern"], p["confidence"]); }
+    //
+    export fn extract(observations: list) -> list {
+        // Will delegate to Rust pattern extraction in memory_pool
+        return [];
+    }
+
+    // Match a single observation against known patterns.
+    // Returns the best matching pattern or nil.
+    //
+    export fn match_observation(observation: String, known_patterns: list) -> dict {
+        // Will use similarity scoring from tensor ops
+        return {};
+    }
+
+    // Check if an observation matches a specific pattern with given confidence.
+    //
+    export fn matches(observation: String, pattern: String, min_confidence: f64) -> bool {
+        return false;
+    }
+
+    // Count pattern frequency in an observation window.
+    //
+    export fn frequency(pattern: String, observations: list) -> i64 {
+        let count: i64 = 0;
+        // Will iterate and score similarity
+        return count;
+    }
+}

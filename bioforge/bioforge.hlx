@@ -24,7 +24,7 @@ let expansion_enabled: i64 = 0;    // Default OFF
 // Paths
 let hlx_root: String = "./hlx";
 let runtime_root: String = "./hlx-runtime";
-let stdlib_root: String = "./axiom-hlx-stdlib";
+let stdlib_root: String = "./ape";
 
 // ============================================================================
 // DATA STRUCTURES

@@ -240,7 +240,7 @@ pub struct Import {
 }
 
 /// Import item (specific or wildcard)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ImportItem {
     /// import { foo, bar }
     Named(String),

@@ -268,13 +268,22 @@ impl AgentMemory {
                     }
                 }
             }
-            ModificationType::RuleAdd { name, description, confidence } => {
-                self.rules.push((name.clone(), description.clone(), *confidence));
+            ModificationType::RuleAdd {
+                name,
+                description,
+                confidence,
+            } => {
+                self.rules
+                    .push((name.clone(), description.clone(), *confidence));
             }
             ModificationType::RuleRemove { name } => {
                 self.rules.retain(|(n, _, _)| n != name);
             }
-            ModificationType::RuleUpdate { name, description, confidence } => {
+            ModificationType::RuleUpdate {
+                name,
+                description,
+                confidence,
+            } => {
                 if let Some(rule) = self.rules.iter_mut().find(|(n, _, _)| n == name) {
                     rule.1 = description.clone();
                     rule.2 = *confidence;
@@ -714,7 +723,8 @@ impl RSIPipeline {
         }
 
         // Record the modification on the homeostasis gate (updates pressure tracking)
-        self.homeostasis_gate.record_modification(&proposal.modification);
+        self.homeostasis_gate
+            .record_modification(&proposal.modification);
 
         // Notify the promotion gate of a successful modification
         self.promotion_gate.on_successful_modification();

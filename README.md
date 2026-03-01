@@ -134,7 +134,7 @@ When conscience predicates are first-class syntax, any model trained on HLX code
 
 ## Axiom — Formal Policy Engine
 
-[Axiom](./axiom-hlx-stdlib) is HLX's conscience specification layer. A small, embeddable policy verification engine — think SQLite for AI governance. You write a policy file declaring what your agent is and isn't allowed to do, and Axiom checks intentions against it before anything executes.
+[Axiom](./ape) is HLX's conscience specification layer. A small, embeddable policy verification engine — think SQLite for AI governance. You write a policy file declaring what your agent is and isn't allowed to do, and Axiom checks intentions against it before anything executes.
 
 ```axm
 module security_policy {
@@ -169,7 +169,7 @@ if verdict.allowed() {
 | G5 SpecificDenial | Denials are targeted, never overapplied |
 | G6 Totality | All execution paths terminate with a verdict |
 
-**Red team tested:** 15/15 attack vectors blocked (path traversal, null byte injection, command injection, unicode homoglyphs, DoS, and more). See [SECURITY_TESTING.md](./axiom-hlx-stdlib/SECURITY_TESTING.md).
+**Red team tested:** 15/15 attack vectors blocked (path traversal, null byte injection, command injection, unicode homoglyphs, DoS, and more). See [SECURITY_TESTING.md](./ape/SECURITY_TESTING.md).
 
 Three execution modes:
 - **Flow** — infer all trust tags (prototyping)
@@ -184,7 +184,7 @@ Three execution modes:
 hlx-bond (Rust binary)
 ├── candle 0.9 — pure Rust GGUF inference (quantized_qwen3)
 ├── hlx-runtime — bond protocol, governance, RSI, SCALE, tensor ops
-├── axiom-hlx-stdlib — formal policy verification engine
+├── ape — formal policy verification engine
 └── Klyntar corpus.db (SQLite) — rules, memory, documents
 
 HLX Language Runtime (hlx-runtime/src/)
@@ -204,7 +204,7 @@ HLX Language Runtime (hlx-runtime/src/)
 ├── dd_protocol.rs       — Document→Destroy containment protocol
 └── lora_adapter.rs      — LoRA adapter isolation + provenance
 
-Axiom Policy Engine (axiom-hlx-stdlib/src/)
+Axiom Policy Engine (ape/src/)
 ├── engine.rs            — core verification loop
 ├── conscience/          — built-in safety predicates
 ├── interpreter/         — policy execution
@@ -214,7 +214,7 @@ Axiom Policy Engine (axiom-hlx-stdlib/src/)
 ├── lcb/                 — content-addressed storage (BLAKE3)
 └── experimental/        — DSF, SCALE, self-modification research
 
-Formal Proofs (axiom-hlx-stdlib/axiom rocq proofs/)
+Formal Proofs (ape/axiom rocq proofs/)
 ├── G1_Purity.v through G6_Totality.v — mechanically verified
 
 Backends
@@ -293,7 +293,7 @@ Other GGUF architectures (LLaMA, Mistral, etc.) require a corresponding `quantiz
 ## Related
 
 - **[Klyntar](https://github.com/latentcollapse/klyntar)** — the symbolic AI package (`pip install klyntar`)
-- **[Axiom](./axiom-hlx-stdlib)** — formal policy verification engine
+- **[Axiom](./ape)** — formal policy verification engine
 - **[TinyRecursiveModels](./TinyRecursiveModels-main)** — the TRM paper (theoretical foundation)
 - **[Phase 2 Prerequisites](./PHASE2_PREREQUISITES.md)** — what must be provably correct before LoRA enters HLX
 

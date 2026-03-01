@@ -1,21 +1,25 @@
-//! Axiom Language - A Verification-First Trust Protocol
+//! APE — Axiom Policy Engine
 //!
-//! Axiom is a verification layer for AI agents. It provides policy-as-code
+//! A verification-first policy engine for AI agents. Provides policy-as-code
 //! with deterministic verification before execution.
 //!
-//! # Quick Start - The SQLite Moment
+//! APE is the governance layer of HLX: "the physics of what Bit cannot do."
+//! It defines conscience predicates, gate enforcement, and formal proofs (G1-G6).
 //!
-//! Just 5 lines to verify agent code:
+//! APE can also be used standalone — embed it in any Rust or Python application
+//! to add formal policy verification.
+//!
+//! # Quick Start
 //!
 //! ```no_run
-//! use axiom_lang::AxiomEngine;
+//! use ape::AxiomEngine;
 //!
 //! let engine = AxiomEngine::from_file("policy.axm")?;
 //! let verdict = engine.verify("WriteFile", &[("path", "/tmp/test.txt")])?;
 //! if verdict.allowed() {
 //!     // Your code runs
 //! }
-//! # Ok::<(), axiom_lang::error::AxiomError>(())
+//! # Ok::<(), ape::error::AxiomError>(())
 //! ```
 //!
 //! # Architecture

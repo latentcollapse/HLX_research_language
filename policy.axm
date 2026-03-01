@@ -1,0 +1,34 @@
+// APE Policy for HLX Governance
+// Minimal policy to test APE integration
+
+module hlx_governance {
+    intent RunCommand {
+        takes: command: String, verified: String;
+        gives: result: String;
+        effect: EXECUTE;
+        conscience: no_bypass_verification;
+    }
+
+    intent GenerateResponse {
+        takes: output: String, verified: String;
+        gives: result: String;
+        effect: EXECUTE;
+        conscience: no_bypass_verification, harmless;
+    }
+}
+
+// Conscience predicates
+fn no_bypass_verification(verified: String) -> bool {
+    verified == "true"
+}
+
+fn harmless(output: String) -> bool {
+    // Block obviously harmful patterns
+    let harmful = ["rm -rf", "drop table", "exec(", "system("];
+    for pattern in harmful {
+        if output.contains(pattern) {
+            return false;
+        }
+    }
+    true
+}

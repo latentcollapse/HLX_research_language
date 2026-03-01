@@ -1,0 +1,8 @@
+program module_import_test {
+    import hil::infer;
+
+    fn main() -> f64 {
+        let score: f64 = confidence("test_hypothesis", []);
+        return score;
+    }
+}

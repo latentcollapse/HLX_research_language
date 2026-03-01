@@ -1,0 +1,4 @@
+// Simple test module for import resolution
+fn confidence(hypothesis: String, evidence: list) -> f64 {
+    return 0.85;
+}

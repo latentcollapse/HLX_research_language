@@ -6,6 +6,7 @@
 //! Phases: HELLO → SYNC → BOND → READY → REPL
 
 use anyhow::{Context, Result};
+use ape::AxiomEngine;
 use candle_core::quantized::gguf_file;
 use candle_core::{DType, Device, Tensor};
 use candle_transformers::generation::LogitsProcessor;
@@ -62,6 +63,14 @@ struct Args {
     /// Max memory entries to pull from corpus for context
     #[arg(long, default_value_t = 10)]
     max_memory: usize,
+
+    /// Path to APE policy file (.axm) for governance
+    #[arg(long, default_value = "policy.axm")]
+    ape_policy: String,
+
+    /// Disable APE governance (skip verification)
+    #[arg(long)]
+    no_verify: bool,
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -654,6 +663,28 @@ fn run_repl(
     let stdin = io::stdin();
     let mut history: Vec<(String, String)> = Vec::new();
 
+    // Initialize APE engine for governance
+    let ape_engine = if args.no_verify {
+        None
+    } else {
+        match AxiomEngine::from_file(&args.ape_policy) {
+            Ok(engine) => {
+                eprintln!("[APE] Governance loaded: {}", args.ape_policy);
+                Some(engine)
+            }
+            Err(e) => {
+                eprintln!(
+                    "[APE] Warning: Could not load policy '{}': {}",
+                    args.ape_policy, e
+                );
+                eprintln!(
+                    "[APE] Running without governance. Use --no-verify to suppress this warning."
+                );
+                None
+            }
+        }
+    };
+
     println!("Neurosymbolic AI ready. Type your message (Ctrl+D to exit).\n");
 
     loop {
@@ -731,6 +762,32 @@ fn run_repl(
             }
 
             state.step_count += 1;
+        }
+
+        // APE Governance: Verify LLM output before displaying
+        if let Some(ref engine) = ape_engine {
+            let verdict = engine.verify(
+                "GenerateResponse",
+                &[
+                    ("output", &final_response),
+                    ("verified", "true"), // Required for Execute-class intents
+                ],
+            );
+
+            match verdict {
+                Ok(v) if v.allowed() => {
+                    eprintln!("[APE] ✓ Response verified");
+                }
+                Ok(v) => {
+                    let reason = v.reason().unwrap_or("unknown policy violation");
+                    eprintln!("[APE] ✗ Response denied: {}", reason);
+                    final_response = format!("[Governance: Response blocked - {}]", reason);
+                }
+                Err(e) => {
+                    eprintln!("[APE] ⚠ Verification error: {}", e);
+                    // Continue with response but warn
+                }
+            }
         }
 
         println!("hlx> {}\n", final_response);

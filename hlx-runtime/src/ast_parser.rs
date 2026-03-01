@@ -434,17 +434,36 @@ impl AstParser {
     }
 
     fn parse_program(&mut self) -> Result<Program, ParseError> {
-        let mut name = "main".to_string();
+        let mut name_parts = vec!["main".to_string()];
 
         if matches!(self.current(), Token::Program | Token::Module) {
             self.advance();
+            // Parse name or name::subname::... path
             if let Token::Ident(n) = self.current().clone() {
-                name = n;
                 self.advance();
+                name_parts = vec![n];
+
+                // Handle :: for nested module paths
+                while matches!(self.current(), Token::Colon) {
+                    self.advance();
+                    self.expect(&Token::Colon)?;
+
+                    if let Token::Ident(part) = self.current().clone() {
+                        self.advance();
+                        name_parts.push(part);
+                    } else {
+                        return Err(ParseError {
+                            message: "Expected module name after ::".to_string(),
+                            line: 0,
+                            col: 0,
+                        });
+                    }
+                }
             }
             self.expect(&Token::LBrace)?;
         }
 
+        let name = name_parts.join("::");
         let mut prog = Program::new(name);
 
         while !matches!(self.current(), Token::Eof | Token::RBrace) {
@@ -949,13 +968,37 @@ impl AstParser {
     fn parse_module(&mut self) -> Result<ModuleDef, ParseError> {
         self.expect(&Token::Module)?;
 
-        let name = match self.current().clone() {
+        // Parse module path: name or name::subname::...
+        let mut name_parts = Vec::new();
+
+        match self.current().clone() {
             Token::Ident(n) => {
                 self.advance();
-                n
+                name_parts.push(n);
             }
-            _ => "anonymous".to_string(),
+            _ => {
+                name_parts.push("anonymous".to_string());
+            }
         };
+
+        // Handle :: for nested module paths
+        while matches!(self.current(), Token::Colon) {
+            self.advance();
+            self.expect(&Token::Colon)?;
+
+            if let Token::Ident(part) = self.current().clone() {
+                self.advance();
+                name_parts.push(part);
+            } else {
+                return Err(ParseError {
+                    message: "Expected module name after ::".to_string(),
+                    line: 0,
+                    col: 0,
+                });
+            }
+        }
+
+        let name = name_parts.join("::");
 
         self.expect(&Token::LBrace)?;
 
@@ -1031,10 +1074,82 @@ impl AstParser {
     fn parse_import(&mut self) -> Result<Import, ParseError> {
         self.expect(&Token::Import)?;
 
-        let module = match self.current().clone() {
+        // Check for "from" syntax: import { foo, bar } from "module";
+        if matches!(self.current(), Token::LBrace) {
+            // import { items } from "module";
+            let mut items = Vec::new();
+
+            self.expect(&Token::LBrace)?;
+            while !matches!(self.current(), Token::RBrace) {
+                if let Token::Ident(name) = self.current().clone() {
+                    self.advance();
+                    if let Token::Ident(a) = self.current().clone() {
+                        if a == "as" {
+                            self.advance();
+                            if let Token::Ident(alias) = self.current().clone() {
+                                self.advance();
+                                items.push(ImportItem::Aliased { name, alias });
+                            }
+                        } else {
+                            items.push(ImportItem::Named(name));
+                        }
+                    } else {
+                        items.push(ImportItem::Named(name));
+                    }
+                }
+                if matches!(self.current(), Token::Comma) {
+                    self.advance();
+                }
+            }
+            self.expect(&Token::RBrace)?;
+
+            // Expect "from"
+            self.expect(&Token::Ident("from".to_string()))?;
+
+            // Module name (string or ident)
+            let module = match self.current().clone() {
+                Token::String(s) => {
+                    self.advance();
+                    s
+                }
+                Token::Ident(n) => {
+                    self.advance();
+                    n
+                }
+                _ => {
+                    return Err(ParseError {
+                        message: "Expected module name".to_string(),
+                        line: 0,
+                        col: 0,
+                    })
+                }
+            };
+
+            self.expect(&Token::Semi)?;
+
+            return Ok(Import {
+                id: NodeId::new(),
+                span: SourceSpan::unknown(),
+                module,
+                items,
+            });
+        }
+
+        // Parse module path and optional items selection
+        // Supports:
+        //   import module;           -> module="module"
+        //   import module::*;        -> module="module", items=[Wildcard]
+        //   import module::{foo};     -> module="module", items=[Named("foo")]
+        //   import module::sub;       -> module="module::sub" (nested module)
+        //   import module::sub::*;    -> module="module::sub", items=[Wildcard]
+        let mut module_parts = Vec::new();
+        let mut items = Vec::new();
+
+        // Parse first module name component
+        match self.current().clone() {
             Token::Ident(n) => {
                 self.advance();
-                n
+                module_parts.push(n);
             }
             _ => {
                 return Err(ParseError {
@@ -1045,41 +1160,72 @@ impl AstParser {
             }
         };
 
-        let mut items = Vec::new();
+        // Handle :: separators - need to distinguish between:
+        // - module::submodule (part of module path)
+        // - module::* or module::{...} (items selection)
+        loop {
+            if !matches!(self.current(), Token::Colon) {
+                break;
+            }
 
-        if matches!(self.current(), Token::Colon) {
+            // Look ahead: we have ::, what's after it?
+            // Save position for potential backtracking
             self.advance();
             self.expect(&Token::Colon)?;
-            if matches!(self.current(), Token::Star) {
-                self.advance();
-                items.push(ImportItem::Wildcard);
-            } else {
-                self.expect(&Token::LBrace)?;
-                while !matches!(self.current(), Token::RBrace) {
-                    if let Token::Ident(name) = self.current().clone() {
-                        self.advance();
-                        if let Token::Ident(a) = self.current().clone() {
-                            if a == "as" {
-                                self.advance();
-                                if let Token::Ident(alias) = self.current().clone() {
+
+            match self.current().clone() {
+                Token::Star => {
+                    // module::* - wildcard import
+                    self.advance();
+                    items.push(ImportItem::Wildcard);
+                    break;
+                }
+                Token::LBrace => {
+                    // module::{...} - named imports
+                    self.expect(&Token::LBrace)?;
+                    while !matches!(self.current(), Token::RBrace) {
+                        if let Token::Ident(name) = self.current().clone() {
+                            self.advance();
+                            if let Token::Ident(a) = self.current().clone() {
+                                if a == "as" {
                                     self.advance();
-                                    items.push(ImportItem::Aliased { name, alias });
+                                    if let Token::Ident(alias) = self.current().clone() {
+                                        self.advance();
+                                        items.push(ImportItem::Aliased { name, alias });
+                                    }
+                                } else {
+                                    items.push(ImportItem::Named(name));
                                 }
                             } else {
                                 items.push(ImportItem::Named(name));
                             }
-                        } else {
-                            items.push(ImportItem::Named(name));
+                        }
+                        if matches!(self.current(), Token::Comma) {
+                            self.advance();
                         }
                     }
-                    if matches!(self.current(), Token::Comma) {
-                        self.advance();
-                    }
+                    self.expect(&Token::RBrace)?;
+                    break;
                 }
-                self.expect(&Token::RBrace)?;
+                Token::Ident(part) => {
+                    // Could be submodule or could be that we misread
+                    // Look further ahead: if next is ::, definitely submodule
+                    // If next is ;, this is the last part of the module path
+                    self.advance();
+                    module_parts.push(part);
+                    // Continue loop to check for more ::
+                }
+                _ => {
+                    return Err(ParseError {
+                        message: "Expected *, {, or module name after ::".to_string(),
+                        line: 0,
+                        col: 0,
+                    });
+                }
             }
         }
 
+        let module = module_parts.join("::");
         self.expect(&Token::Semi)?;
 
         Ok(Import {
@@ -1771,6 +1917,7 @@ mod tests {
         };
         if let StmtKind::Let { name, value, .. } = &func.body[0].kind {
             assert_eq!(name, "x");
+            let value = value.as_ref().expect("Expected value");
             assert!(matches!(value.kind, ExprKind::Int(42)));
         } else {
             panic!("Expected let statement");
@@ -1785,6 +1932,7 @@ mod tests {
             _ => panic!("Expected function wrapper"),
         };
         if let StmtKind::Let { value, .. } = &func.body[0].kind {
+            let value = value.as_ref().expect("Expected value");
             if let ExprKind::Float(n) = value.kind {
                 assert!((n - 3.14).abs() < 0.001);
             } else {
@@ -1801,6 +1949,7 @@ mod tests {
             _ => panic!("Expected function wrapper"),
         };
         if let StmtKind::Let { value, .. } = &func.body[0].kind {
+            let value = value.as_ref().expect("Expected value");
             if let ExprKind::String(ref s) = value.kind {
                 assert_eq!(s, "hello world");
             } else {
@@ -1817,6 +1966,7 @@ mod tests {
             _ => panic!("Expected function"),
         };
         if let StmtKind::Let { value, .. } = &func0.body[0].kind {
+            let value = value.as_ref().expect("Expected value");
             assert!(matches!(value.kind, ExprKind::Bool(true)));
         }
     }
@@ -1936,6 +2086,7 @@ mod tests {
             _ => panic!("Expected function"),
         };
         if let StmtKind::Let { value, .. } = &func.body[0].kind {
+            let value = value.as_ref().expect("Expected value");
             if let ExprKind::Array(ref elems) = value.kind {
                 assert_eq!(elems.len(), 3);
             } else {
