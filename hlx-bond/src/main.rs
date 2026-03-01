@@ -49,7 +49,7 @@ struct Args {
     temperature: f64,
 
     /// Max tokens to generate per response
-    #[arg(long, default_value_t = 512)]
+    #[arg(long, default_value_t = 1024)]
     max_tokens: usize,
 
     /// TRM H-cycles: recursive reasoning loops per user message
@@ -1221,6 +1221,9 @@ fn handle_infer(
 
     // Run inference
     let history: Vec<(String, String)> = Vec::new();
+    // Disable Qwen3 thinking mode for serve calls (saves tokens for answer)
+    system.push_str("\n/no_think");
+    
     let prompt_tokens = tokenizer.encode_chat(&system, &history, prompt);
 
     let generated = match engine.generate(&prompt_tokens, args.max_tokens) {
