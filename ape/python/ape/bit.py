@@ -719,7 +719,7 @@ class BitSeed:
                 return (f"I am {b['object']}", b['confidence'])
 
         if re.search(r'who (built|made|created) you', question_lower):
-            beliefs = self.query_beliefs(subject="I", limit=5)
+            beliefs = self.query_beliefs(subject="I", limit=100)
             for b in beliefs:
                 if 'built' in b['object'] or 'created' in b['object'] or 'by' in b['object']:
                     return (f"I am {b['object']}", b['confidence'])
