@@ -1,0 +1,15 @@
+program test_learn {
+    import hil::learn;
+
+    fn main() -> list {
+        // Learn some patterns about the user
+        learn_pattern("user prefers concise answers", 0.85);
+        learn_pattern("user enjoys neurosymbolic systems", 0.92);
+        learn_pattern("user builds HLX runtime", 0.99);
+        
+        // Recall patterns matching "user"
+        let results: list = recall("user", 3);
+        
+        return results;
+    }
+}

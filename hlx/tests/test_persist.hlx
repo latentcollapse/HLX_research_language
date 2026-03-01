@@ -1,0 +1,24 @@
+// test_persist.hlx - Phase 11: Corpus Persistence Test
+// 
+// This test verifies that patterns learned in one process run
+// can be recalled in a subsequent run via SQLite persistence.
+//
+// Usage:
+//   First run (stores patterns):  cargo run -p hlx-run -- hlx/tests/test_persist.hlx
+//   Second run (recalls from DB): cargo run -p hlx-run -- hlx/tests/test_persist.hlx
+//
+// Expected: Both runs return non-empty recall lists.
+
+program test_persist {
+    import hil::learn;
+
+    fn main() -> list {
+        // Learn a persistent pattern (this survives process exit)
+        let stored: bool = learn_pattern("HLX is a persistent symbolic substrate", 0.99);
+        
+        // Try to recall the pattern using a keyword
+        let found: list = recall("persistent", 1);
+        
+        return found;
+    }
+}

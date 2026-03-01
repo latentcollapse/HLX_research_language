@@ -1,0 +1,8 @@
+program test_reason {
+    import hil::infer;
+
+    fn main() -> String {
+        let answer: String = reason("What is the entropy of this pattern?", {});
+        return answer;
+    }
+}

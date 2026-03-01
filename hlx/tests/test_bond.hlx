@@ -1,0 +1,22 @@
+// test_bond.hlx - Phase 12: Bond Protocol Handshake Test
+//
+// This test verifies the full HELLO->SYNC->BOND->READY handshake with an LLM endpoint.
+//
+// Usage:
+//   Stub mode:   cargo run -p hlx-run -- hlx/tests/test_bond.hlx
+//   Live mode:   HLX_BOND_ENDPOINT=http://localhost:8765 cargo run -p hlx-run -- hlx/tests/test_bond.hlx
+//
+// Expected:
+//   Stub mode: Returns "[Bond LLM response to: What is the nature of recursive intelligence?]"
+//   Live mode: Returns "Mock LLM response to: What is the nature of recursive intelligence?"
+
+program test_bond {
+    import hil::infer;
+
+    fn main() -> String {
+        // Use reason() which delegates to bond() builtin
+        let answer: String = reason("What is the nature of recursive intelligence?", {});
+        
+        return answer;
+    }
+}

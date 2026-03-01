@@ -104,6 +104,13 @@ struct CycleFrame {
     start_pc: usize,
 }
 
+/// Simple memory entry for HIL learn/recall
+#[derive(Debug, Clone)]
+pub struct MemEntry {
+    pub pattern: String,
+    pub confidence: f64,
+}
+
 pub struct Vm {
     registers: Vec<Value>,
     call_stack: Vec<CallFrame>,
@@ -126,6 +133,11 @@ pub struct Vm {
     spawn_rate_limit: SpawnRateLimit,
     max_total_agents: usize,
     config: RuntimeConfig,
+    /// Native function registry for builtins like bond(), mem_store(), mem_query()
+    /// Functions get &mut Vm so they can access VM state (memory, etc.)
+    natives: HashMap<String, Box<dyn Fn(&mut Vm, Vec<Value>) -> Value + Send + Sync>>,
+    /// In-memory storage for HIL learn/recall (Phase 10)
+    memory: Vec<MemEntry>,
 }
 
 impl Vm {
@@ -158,7 +170,51 @@ impl Vm {
             ),
             max_total_agents: config.max_total_agents,
             config,
+            natives: HashMap::new(),
+            memory: Vec::new(),
         }
+    }
+
+    /// Register a native function that can be called from HLX code
+    /// Native functions receive &mut Vm so they can access VM state (memory, etc.)
+    pub fn register_native(
+        &mut self,
+        name: &str,
+        f: impl Fn(&mut Vm, Vec<Value>) -> Value + Send + Sync + 'static,
+    ) {
+        self.natives.insert(name.to_string(), Box::new(f));
+    }
+
+    /// Store a pattern in memory (for HIL learn) - called from native dispatch
+    pub fn mem_store(&mut self, pattern: String, confidence: f64) -> bool {
+        self.memory.push(MemEntry {
+            pattern,
+            confidence,
+        });
+        true
+    }
+
+    /// Query memory for patterns matching query (for HIL recall) - called from native dispatch
+    pub fn mem_query(&self, query: &str, limit: usize) -> Vec<String> {
+        let mut matches: Vec<(String, f64)> = self
+            .memory
+            .iter()
+            .filter(|entry| entry.pattern.contains(query))
+            .map(|entry| (entry.pattern.clone(), entry.confidence))
+            .collect();
+        // Sort by confidence descending
+        matches.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        matches.into_iter().take(limit).map(|(p, _)| p).collect()
+    }
+
+    /// Get mutable reference to memory (for native function implementations)
+    pub fn memory_mut(&mut self) -> &mut Vec<MemEntry> {
+        &mut self.memory
+    }
+
+    /// Get immutable reference to memory
+    pub fn memory(&self) -> &[MemEntry] {
+        &self.memory
     }
 
     pub fn with_max_steps(mut self, max: usize) -> Self {
@@ -1285,6 +1341,30 @@ impl Vm {
                                 saved_regs,
                             });
                             pc = start_pc;
+                        } else if self.natives.contains_key(func_name) {
+                            // Native function (e.g., bond(), mem_store(), mem_query()) - call with VM access
+                            let arg_base = self.config.arg_base_register;
+                            if arg_base + arg_count > self.registers.len() {
+                                return Err(RuntimeError::new(
+                                    format!(
+                                        "Native call arg_base ({}) + arg_count ({}) exceeds register limit ({})",
+                                        arg_base, arg_count, self.registers.len()
+                                    ),
+                                    pc,
+                                ));
+                            }
+                            // Collect args first
+                            let args: Vec<Value> = (0..arg_count)
+                                .map(|i| self.registers[arg_base + i].clone())
+                                .collect();
+                            // Take ownership of the native function to avoid borrow issues
+                            let func_name_owned = func_name.clone();
+                            if let Some(native) = self.natives.remove(&func_name_owned) {
+                                let result = native(self, args);
+                                self.registers[dst] = result;
+                                // Re-insert the native function for future calls
+                                self.natives.insert(func_name_owned, native);
+                            }
                         } else {
                             let arg_base = self.config.arg_base_register;
                             if arg_base + arg_count > self.registers.len() {

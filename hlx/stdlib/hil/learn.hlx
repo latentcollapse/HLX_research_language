@@ -17,15 +17,15 @@ module hil::learn {
     //   learn_pattern("user prefers concise answers", 0.85);
     //
     export fn learn_pattern(pattern: String, confidence: f64) -> bool {
-        // Will delegate to memory_pool pattern storage
-        return false;
+        // Delegate to mem_store native function
+        return mem_store(pattern, confidence);
     }
 
     // Retrieve patterns matching a query, ordered by relevance.
     //
     export fn recall(query: String, limit: i64) -> list {
-        // Will delegate to memory_pool pattern retrieval
-        return [];
+        // Delegate to mem_query native function
+        return mem_query(query, limit);
     }
 
     // Evaluate whether a modification improved fitness.

@@ -36,7 +36,7 @@ module hil::infer {
     //   let answer: String = reason("What is the entropy of this pattern?", context);
     //
     export fn reason(prompt: String, context: dict) -> String {
-        // Will delegate to bond() builtin once Phase 5 wires it
-        return "";
+        // Delegate to bond() builtin (registered as native function in hlx-run)
+        return bond(prompt, context);
     }
 }

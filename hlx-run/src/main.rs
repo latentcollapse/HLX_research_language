@@ -9,9 +9,13 @@
 use anyhow::{Context, Result};
 use ape::AxiomEngine;
 use clap::Parser;
+use rusqlite::Connection;
+use serde_json::json;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
+
+const DB_PATH: &str = "hlx_memory.db";
 
 #[derive(Parser)]
 #[command(name = "hlx-run")]
@@ -52,6 +56,135 @@ struct Args {
     /// Disable APE governance (skip verification)
     #[arg(long)]
     no_verify: bool,
+
+    /// Path to SQLite memory database (default: hlx_memory.db)
+    #[arg(long, default_value = "hlx_memory.db")]
+    memory_db: String,
+
+    /// Bond endpoint URL for LLM connection (e.g., http://localhost:8765)
+    #[arg(long, env = "HLX_BOND_ENDPOINT")]
+    bond_endpoint: Option<String>,
+}
+
+fn init_memory_db(db_path: &str) -> Result<Connection> {
+    let conn = Connection::open(db_path)?;
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS patterns (
+            hash TEXT PRIMARY KEY,
+            pattern TEXT NOT NULL,
+            confidence REAL NOT NULL,
+            observation_count INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IF NOT EXISTS idx_patterns_confidence ON patterns(confidence DESC);",
+    )?;
+    Ok(conn)
+}
+
+fn load_patterns_from_db(conn: &Connection, limit: usize) -> Result<Vec<(String, f64)>> {
+    let mut stmt =
+        conn.prepare("SELECT pattern, confidence FROM patterns ORDER BY confidence DESC LIMIT ?")?;
+    let rows = stmt.query_map([limit], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+    })?;
+
+    let mut patterns = Vec::new();
+    for row in rows {
+        patterns.push(row?);
+    }
+    Ok(patterns)
+}
+
+fn store_pattern_in_db(conn: &Connection, pattern: &str, confidence: f64) -> Result<()> {
+    // Ensure table exists (for when this is called from a fresh connection)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS patterns (
+            hash TEXT PRIMARY KEY,
+            pattern TEXT NOT NULL,
+            confidence REAL NOT NULL,
+            observation_count INTEGER NOT NULL DEFAULT 1
+        )",
+        [],
+    )?;
+    let hash = blake3::hash(pattern.as_bytes()).to_hex().to_string();
+    conn.execute(
+        "INSERT OR REPLACE INTO patterns (hash, pattern, confidence, observation_count)
+         VALUES (?1, ?2, ?3, 
+            COALESCE((SELECT observation_count FROM patterns WHERE hash=?1), 0) + 1)",
+        (&hash, pattern, confidence),
+    )?;
+    Ok(())
+}
+
+/// Run the full Bond protocol handshake: HELLO -> SYNC -> BOND -> READY
+fn run_bond_handshake(endpoint: &str, prompt: &str, _context: &str) -> String {
+    use hlx_runtime::{BondResponse, SymbioteState};
+
+    let mut state = SymbioteState::new();
+
+    // Step 1: HELLO - Send BondRequest to /bond endpoint
+    let bond_request = state.create_bond_request();
+    let bond_url = format!("{}/bond", endpoint.trim_end_matches('/'));
+
+    let bond_response = match ureq::post(&bond_url)
+        .set("Content-Type", "application/json")
+        .send_json(&bond_request)
+    {
+        Ok(res) => match res.into_json::<BondResponse>() {
+            Ok(r) => r,
+            Err(e) => return format!("[Bond Error: Failed to parse bond response: {}]", e),
+        },
+        Err(e) => return format!("[Bond Error: Failed to connect to {}: {}]", bond_url, e),
+    };
+
+    // Process HELLO phase
+    if let Err(e) = state.process_hello(&bond_response) {
+        return format!("[Bond Error: HELLO failed: {}]", e.message);
+    }
+
+    // Step 2: SYNC
+    if let Err(e) = state.process_sync() {
+        return format!("[Bond Error: SYNC failed: {}]", e.message);
+    }
+
+    // Step 3: BOND
+    if let Err(e) = state.process_bond() {
+        return format!("[Bond Error: BOND failed: {}]", e.message);
+    }
+
+    // Step 4: READY
+    if let Err(e) = state.process_ready() {
+        return format!("[Bond Error: READY failed: {}]", e.message);
+    }
+
+    // Verify state is ready
+    if !state.is_ready() {
+        return "[Bond Error: State did not reach Ready]".to_string();
+    }
+
+    // Step 5: INFER - Send prompt to /infer endpoint
+    let infer_url = format!("{}/infer", endpoint.trim_end_matches('/'));
+    let infer_body = json!({
+        "prompt": prompt,
+        "context": state.to_context_string(),
+        "symbiote_id": state.id,
+    });
+
+    match ureq::post(&infer_url)
+        .set("Content-Type", "application/json")
+        .send_json(&infer_body)
+    {
+        Ok(res) => match res.into_json::<serde_json::Value>() {
+            Ok(json) => {
+                if let Some(response) = json.get("response").and_then(|v| v.as_str()) {
+                    response.to_string()
+                } else {
+                    format!("[Bond Error: No 'response' field in infer response]")
+                }
+            }
+            Err(e) => format!("[Bond Error: Failed to parse infer response: {}]", e),
+        },
+        Err(e) => format!("[Bond Error: Failed to POST to {}: {}]", infer_url, e),
+    }
 }
 
 fn main() -> Result<()> {
@@ -61,6 +194,10 @@ fn main() -> Result<()> {
         run_repl(args.verbose, args.max_steps)?;
         return Ok(());
     }
+
+    // Initialize SQLite memory database
+    let db_conn = init_memory_db(&args.memory_db)
+        .with_context(|| format!("Failed to init memory DB at {}", args.memory_db))?;
 
     let file = args
         .file
@@ -189,6 +326,110 @@ fn main() -> Result<()> {
     std::io::stdout().flush()?;
 
     let mut vm = Vm::new().with_max_steps(args.max_steps);
+
+    // Load existing patterns from DB into VM memory at startup
+    match load_patterns_from_db(&db_conn, 500) {
+        Ok(patterns) => {
+            for (pattern, confidence) in patterns {
+                vm.mem_store(pattern, confidence);
+            }
+            eprintln!(
+                "[Memory] Loaded {} patterns from {}",
+                vm.memory().len(),
+                args.memory_db
+            );
+        }
+        Err(e) => {
+            eprintln!("[Memory] Warning: Could not load patterns from DB: {}", e);
+        }
+    }
+
+    // Register native bond() function for HIL inference
+    let bond_endpoint = args.bond_endpoint.clone();
+    vm.register_native("bond", move |_vm, args| {
+        let prompt = match args.get(0) {
+            Some(hlx_runtime::Value::String(s)) => s.clone(),
+            _ => {
+                return hlx_runtime::Value::String("[Error: bond() requires string prompt]".into())
+            }
+        };
+        let context = match args.get(1) {
+            Some(hlx_runtime::Value::String(s)) => s.clone(),
+            _ => String::new(),
+        };
+
+        // If bond endpoint is configured, run the full handshake
+        if let Some(ref endpoint) = bond_endpoint {
+            let response = run_bond_handshake(endpoint, &prompt, &context);
+            hlx_runtime::Value::String(response)
+        } else {
+            // Stub mode for tests without endpoint
+            hlx_runtime::Value::String(format!("[Bond LLM response to: {}]", prompt))
+        }
+    });
+
+    // Store memory DB path for use in native functions
+    let memory_db_path = args.memory_db.clone();
+
+    // Register native memory functions for HIL learn/recall with persistence
+    vm.register_native("mem_store", move |vm, args| {
+        let pattern = match args.get(0) {
+            Some(hlx_runtime::Value::String(s)) => s.clone(),
+            _ => return hlx_runtime::Value::Bool(false),
+        };
+        let confidence = match args.get(1) {
+            Some(hlx_runtime::Value::F64(f)) => *f,
+            Some(hlx_runtime::Value::I64(i)) => *i as f64,
+            _ => return hlx_runtime::Value::Bool(false),
+        };
+        // Store in VM memory
+        vm.mem_store(pattern.clone(), confidence);
+        // Store in SQLite DB for persistence (open new connection for thread safety)
+        if let Ok(conn) = Connection::open(&memory_db_path) {
+            if let Err(e) = store_pattern_in_db(&conn, &pattern, confidence) {
+                eprintln!("[Memory] Warning: Failed to store pattern in DB: {}", e);
+            }
+        }
+        hlx_runtime::Value::Bool(true)
+    });
+
+    vm.register_native("mem_query", |vm, args| {
+        let query = match args.get(0) {
+            Some(hlx_runtime::Value::String(s)) => s.clone(),
+            _ => return hlx_runtime::Value::Array(Vec::new()),
+        };
+        let limit = match args.get(1) {
+            Some(hlx_runtime::Value::I64(i)) => *i as usize,
+            Some(hlx_runtime::Value::F64(f)) => *f as usize,
+            _ => 10,
+        };
+        // Query VM memory
+        let results = vm.mem_query(&query, limit);
+        let array_values: Vec<hlx_runtime::Value> = results
+            .into_iter()
+            .map(hlx_runtime::Value::String)
+            .collect();
+        hlx_runtime::Value::Array(array_values)
+    });
+
+    vm.register_native("mem_query", |vm, args| {
+        let query = match args.get(0) {
+            Some(hlx_runtime::Value::String(s)) => s.clone(),
+            _ => return hlx_runtime::Value::Array(Vec::new()),
+        };
+        let limit = match args.get(1) {
+            Some(hlx_runtime::Value::I64(i)) => *i as usize,
+            Some(hlx_runtime::Value::F64(f)) => *f as usize,
+            _ => 10,
+        };
+        // Query VM memory
+        let results = vm.mem_query(&query, limit);
+        let array_values: Vec<hlx_runtime::Value> = results
+            .into_iter()
+            .map(hlx_runtime::Value::String)
+            .collect();
+        hlx_runtime::Value::Array(array_values)
+    });
 
     // Register functions with VM
     let bytecode_hex = bytecode
