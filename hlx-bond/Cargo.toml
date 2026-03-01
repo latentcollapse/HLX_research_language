@@ -26,3 +26,6 @@ anyhow = "1"
 # Serialization for state persistence
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+# HTTP server for --serve mode
+tiny_http = "0.12"

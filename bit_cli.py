@@ -41,7 +41,7 @@ ALLOWED_DIRS = [
 
 # Protected paths (NEVER modify)
 PROTECTED_PATHS = [
-    "axiom-hlx-stdlib",
+    "ape",
     "Bitsy",
     "bioforge",
     "bin"

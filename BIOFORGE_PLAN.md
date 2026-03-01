@@ -276,8 +276,8 @@ let m = max(a, b);  // Already works, but could infer return type
 
 These core files CANNOT be modified by BioForge:
 
-- `axiom-hlx-stdlib/src/conscience/` — Conscience predicates (G1-G6 proofs)
-- `axiom-hlx-stdlib/src/trust/` — Trust algebra
+- `ape/src/conscience/` — Conscience predicates (G1-G6 proofs)
+- `ape/src/trust/` — Trust algebra
 - `hlx/hlx_bootstrap/lexer.hlx` core tokens — Token definitions
 - `hlx-runtime/src/vm.rs` — Core VM safety properties
 
@@ -335,7 +335,7 @@ These core files CANNOT be modified by BioForge:
 │
 ├── hlx/                      # HLX compiler (target)
 ├── hlx-runtime/             # Runtime (target)
-├── axiom-hlx-stdlib/        # Governance (fixed)
+├── ape/        # Governance (fixed)
 └── Bitsy/                   # Can participate as advisor
 ```
 

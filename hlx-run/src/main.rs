@@ -94,6 +94,59 @@ fn load_patterns_from_db(conn: &Connection, limit: usize) -> Result<Vec<(String,
     Ok(patterns)
 }
 
+// ── Pattern matching helper functions ────────────────────────────────────────
+
+fn longest_common_substring(s1: &str, s2: &str) -> Option<String> {
+    let s1_chars: Vec<char> = s1.chars().collect();
+    let s2_chars: Vec<char> = s2.chars().collect();
+    let n = s1_chars.len();
+    let m = s2_chars.len();
+
+    if n == 0 || m == 0 {
+        return None;
+    }
+
+    let mut max_len = 0;
+    let mut max_end = 0;
+    let mut dp = vec![vec![0; m + 1]; n + 1];
+
+    for i in 1..=n {
+        for j in 1..=m {
+            if s1_chars[i - 1] == s2_chars[j - 1] {
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+                if dp[i][j] > max_len {
+                    max_len = dp[i][j];
+                    max_end = i;
+                }
+            }
+        }
+    }
+
+    if max_len > 0 {
+        Some(s1_chars[max_end - max_len..max_end].iter().collect())
+    } else {
+        None
+    }
+}
+
+fn compute_similarity(s1: &str, s2: &str) -> f64 {
+    let len1 = s1.len();
+    let len2 = s2.len();
+
+    if len1 == 0 && len2 == 0 {
+        return 1.0;
+    }
+
+    let max_len = std::cmp::max(len1, len2);
+    let matches = s1
+        .chars()
+        .zip(s2.chars())
+        .filter(|(c1, c2)| c1 == c2)
+        .count();
+
+    matches as f64 / max_len as f64
+}
+
 fn store_pattern_in_db(conn: &Connection, pattern: &str, confidence: f64) -> Result<()> {
     // Ensure table exists (for when this is called from a fresh connection)
     conn.execute(
@@ -412,23 +465,175 @@ fn main() -> Result<()> {
         hlx_runtime::Value::Array(array_values)
     });
 
-    vm.register_native("mem_query", |vm, args| {
-        let query = match args.get(0) {
-            Some(hlx_runtime::Value::String(s)) => s.clone(),
+    // Register pattern extraction natives for hil::pattern
+    vm.register_native("pat_extract", |_vm, args| {
+        // arg[0]: List of String observations
+        let observations = match args.get(0) {
+            Some(hlx_runtime::Value::Array(arr)) => arr,
             _ => return hlx_runtime::Value::Array(Vec::new()),
         };
-        let limit = match args.get(1) {
-            Some(hlx_runtime::Value::I64(i)) => *i as usize,
-            Some(hlx_runtime::Value::F64(f)) => *f as usize,
-            _ => 10,
-        };
-        // Query VM memory
-        let results = vm.mem_query(&query, limit);
-        let array_values: Vec<hlx_runtime::Value> = results
-            .into_iter()
-            .map(hlx_runtime::Value::String)
+
+        let obs_strings: Vec<&str> = observations
+            .iter()
+            .filter_map(|v| match v {
+                hlx_runtime::Value::String(s) => Some(s.as_str()),
+                _ => None,
+            })
             .collect();
-        hlx_runtime::Value::Array(array_values)
+
+        if obs_strings.len() < 2 {
+            return hlx_runtime::Value::Array(Vec::new());
+        }
+
+        // Find common substrings (simple pattern extraction)
+        let mut patterns: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+
+        for (i, s1) in obs_strings.iter().enumerate() {
+            for s2 in obs_strings.iter().skip(i + 1) {
+                // Find longest common substring
+                if let Some(lcs) = longest_common_substring(s1, s2) {
+                    if lcs.len() >= 4 {
+                        // Minimum pattern length
+                        *patterns.entry(lcs).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+
+        // Build result list
+        let total_pairs = (obs_strings.len() * (obs_strings.len() - 1)) / 2;
+        let results: Vec<hlx_runtime::Value> = patterns
+            .iter()
+            .map(|(pattern, count)| {
+                let confidence = *count as f64 / total_pairs as f64;
+                let mut map = std::collections::BTreeMap::new();
+                map.insert(
+                    "pattern".to_string(),
+                    hlx_runtime::Value::String(pattern.clone()),
+                );
+                map.insert(
+                    "confidence".to_string(),
+                    hlx_runtime::Value::F64(confidence),
+                );
+                hlx_runtime::Value::Map(map)
+            })
+            .collect();
+
+        hlx_runtime::Value::Array(results)
+    });
+
+    vm.register_native("pat_match", |_vm, args| {
+        // arg[0]: observation String, arg[1]: known_patterns List of String
+        let observation = match args.get(0) {
+            Some(hlx_runtime::Value::String(s)) => s.as_str(),
+            _ => return hlx_runtime::Value::Map(std::collections::BTreeMap::new()),
+        };
+
+        let patterns = match args.get(1) {
+            Some(hlx_runtime::Value::Array(arr)) => arr,
+            _ => return hlx_runtime::Value::Map(std::collections::BTreeMap::new()),
+        };
+
+        let mut best_match = ("", 0.0);
+
+        for pattern_val in patterns.iter() {
+            if let hlx_runtime::Value::String(pattern) = pattern_val {
+                let score = compute_similarity(observation, pattern);
+                if score > best_match.1 {
+                    best_match = (pattern.as_str(), score);
+                }
+            }
+        }
+
+        let mut result = std::collections::BTreeMap::new();
+        if best_match.1 > 0.0 {
+            result.insert(
+                "pattern".to_string(),
+                hlx_runtime::Value::String(best_match.0.to_string()),
+            );
+            result.insert(
+                "confidence".to_string(),
+                hlx_runtime::Value::F64(best_match.1),
+            );
+        }
+
+        hlx_runtime::Value::Map(result)
+    });
+
+    vm.register_native("pat_matches", |_vm, args| {
+        // arg[0]: observation, arg[1]: pattern, arg[2]: min_confidence f64
+        let observation = match args.get(0) {
+            Some(hlx_runtime::Value::String(s)) => s.as_str(),
+            _ => return hlx_runtime::Value::Bool(false),
+        };
+
+        let pattern = match args.get(1) {
+            Some(hlx_runtime::Value::String(s)) => s.as_str(),
+            _ => return hlx_runtime::Value::Bool(false),
+        };
+
+        let min_confidence = match args.get(2) {
+            Some(hlx_runtime::Value::F64(f)) => *f,
+            Some(hlx_runtime::Value::I64(i)) => *i as f64,
+            _ => return hlx_runtime::Value::Bool(false),
+        };
+
+        let score = compute_similarity(observation, pattern);
+        hlx_runtime::Value::Bool(score >= min_confidence)
+    });
+
+    vm.register_native("pat_frequency", |_vm, args| {
+        // arg[0]: pattern String, arg[1]: observations List
+        let pattern = match args.get(0) {
+            Some(hlx_runtime::Value::String(s)) => s.as_str(),
+            _ => return hlx_runtime::Value::I64(0),
+        };
+
+        let observations = match args.get(1) {
+            Some(hlx_runtime::Value::Array(arr)) => arr,
+            _ => return hlx_runtime::Value::I64(0),
+        };
+
+        let count = observations
+            .iter()
+            .filter(|v| {
+                if let hlx_runtime::Value::String(obs) = v {
+                    obs.contains(pattern)
+                } else {
+                    false
+                }
+            })
+            .count();
+
+        hlx_runtime::Value::I64(count as i64)
+    });
+
+    // Register eval_hlx for RSI loop - compiles and executes HLX code
+    vm.register_native("eval_hlx", |_vm, args| {
+        let code = match args.get(0) {
+            Some(hlx_runtime::Value::String(s)) => s.as_str(),
+            _ => return hlx_runtime::Value::String("[eval error: expected string code]".into()),
+        };
+
+        // Compile the HLX code in a fresh compiler
+        let eval_result = hlx_runtime::Compiler::compile(code);
+        let (eval_bytecode, _eval_functions) = match eval_result {
+            Ok((bc, funcs)) => (bc, funcs),
+            Err(e) => {
+                return hlx_runtime::Value::String(format!(
+                    "[eval error: compile failed: {}]",
+                    e.message
+                ))
+            }
+        };
+
+        // Execute in a fresh VM (isolated from caller)
+        let mut eval_vm = hlx_runtime::Vm::new();
+        match eval_vm.run(&eval_bytecode) {
+            Ok(result) => hlx_runtime::Value::String(format!("{}", result)),
+            Err(e) => hlx_runtime::Value::String(format!("[eval error: runtime: {}]", e.message)),
+        }
     });
 
     // Register functions with VM

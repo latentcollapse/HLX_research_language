@@ -49,10 +49,7 @@ pub enum Opcode {
     JumpIf = 41,
     JumpIfNot = 42,
     Call = 50,
-<<<<<<< HEAD
-=======
     CallAddr = 55, // Call by direct PC address (0x37) - for cross-module imports
->>>>>>> origin/experimental
     Return = 51,
     Halt = 52,
     Loop = 60,
@@ -142,10 +139,7 @@ impl Opcode {
             41 => Some(Opcode::JumpIf),
             42 => Some(Opcode::JumpIfNot),
             50 => Some(Opcode::Call),
-<<<<<<< HEAD
-=======
             55 => Some(Opcode::CallAddr), // 0x37
->>>>>>> origin/experimental
             51 => Some(Opcode::Return),
             52 => Some(Opcode::Halt),
             60 => Some(Opcode::Loop),

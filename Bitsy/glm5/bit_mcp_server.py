@@ -14,8 +14,8 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 HLX_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(HLX_ROOT / "axiom-hlx-stdlib" / "axiom_py" / "python"))
-from axiom.bit import BitSeed, BitLevel
+sys.path.insert(0, str(HLX_ROOT / "ape" / "python"))
+from ape.bit import BitSeed, BitLevel
 
 import sqlite3
 

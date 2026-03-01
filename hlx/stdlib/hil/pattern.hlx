@@ -1,11 +1,10 @@
-// HIL — Pattern Module
+// HIL — Pattern Module (Phase 14)
 // "How Bit sees structure in observation"
 //
 // Provides pattern extraction, matching, and recognition over Bit's
-// observation stream. Backed by hlx-runtime memory_pool.
+// observation stream. Backed by hlx-runtime pattern natives.
 //
-// Status: Stub — awaiting Phase 3 module system for import resolution.
-// Once Phase 3 lands, Bit imports this with: use hil::pattern;
+// Usage: import hil::pattern;
 
 module hil::pattern {
 
@@ -13,34 +12,33 @@ module hil::pattern {
     // Returns a list of {pattern: String, confidence: f64} dicts.
     //
     // Example:
-    //   let obs: list = get_recent_observations(100);
+    //   let obs: list = ['user prefers dark mode', 'user prefers dark theme', 'user prefers dark'];
     //   let patterns: list = extract(obs);
-    //   for p in patterns { learn(p["pattern"], p["confidence"]); }
+    //   // Returns [{pattern: "user prefers dark", confidence: 1.0}]
     //
     export fn extract(observations: list) -> list {
-        // Will delegate to Rust pattern extraction in memory_pool
-        return [];
+        return pat_extract(observations);
     }
 
     // Match a single observation against known patterns.
-    // Returns the best matching pattern or nil.
+    // Returns the best matching pattern as {pattern: String, confidence: f64}.
+    // Returns empty dict if no match.
     //
     export fn match_observation(observation: String, known_patterns: list) -> dict {
-        // Will use similarity scoring from tensor ops
-        return {};
+        return pat_match(observation, known_patterns);
     }
 
     // Check if an observation matches a specific pattern with given confidence.
+    // Returns true if similarity >= min_confidence.
     //
     export fn matches(observation: String, pattern: String, min_confidence: f64) -> bool {
-        return false;
+        return pat_matches(observation, pattern, min_confidence);
     }
 
     // Count pattern frequency in an observation window.
+    // Returns count of observations containing the pattern as substring.
     //
     export fn frequency(pattern: String, observations: list) -> i64 {
-        let count: i64 = 0;
-        // Will iterate and score similarity
-        return count;
+        return pat_frequency(pattern, observations);
     }
 }

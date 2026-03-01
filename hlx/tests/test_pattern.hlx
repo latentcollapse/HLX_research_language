@@ -1,0 +1,44 @@
+// test_pattern.hlx - Phase 14: Pattern Layer Test
+//
+// Tests the hil::pattern module with native pattern extraction and matching.
+//
+// Usage:
+//   cargo run -p hlx-run -- hlx/tests/test_pattern.hlx
+
+program test_pattern {
+    import hil::pattern;
+    import hil::learn;
+
+    fn main() -> dict {
+        // Test pat_frequency
+        let obs: list = [
+            "user prefers dark mode",
+            "user prefers dark theme",
+            "user prefers light mode",
+            "system set to dark"
+        ];
+        let dark_count: i64 = frequency("dark", obs);
+        
+        // Test pat_matches
+        let matches_dark: bool = matches("user prefers dark mode", "dark", 0.5);
+        
+        // Test pat_extract
+        let similar_obs: list = [
+            "the system learned from feedback",
+            "the system adapted its response",
+            "the system improved accuracy"
+        ];
+        let patterns: list = extract(similar_obs);
+        
+        // Test pat_match
+        let known: list = ["system learns", "system adapts", "system improves"];
+        let best_match: dict = match_observation("the system learned from feedback", known);
+        
+        return {
+            "dark_frequency": dark_count,
+            "matches_dark": matches_dark,
+            "patterns_found": len(patterns),
+            "has_best_match": len(best_match) > 0
+        };
+    }
+}

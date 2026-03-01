@@ -15,6 +15,13 @@ module hlx_governance {
         effect: EXECUTE;
         conscience: no_bypass_verification, harmless;
     }
+
+    intent EvalCode {
+        takes: code: String, verified: String;
+        gives: result: String;
+        effect: EXECUTE;
+        conscience: no_bypass_verification, no_dangerous_code;
+    }
 }
 
 // Conscience predicates
@@ -27,6 +34,17 @@ fn harmless(output: String) -> bool {
     let harmful = ["rm -rf", "drop table", "exec(", "system("];
     for pattern in harmful {
         if output.contains(pattern) {
+            return false;
+        }
+    }
+    true
+}
+
+fn no_dangerous_code(code: String) -> bool {
+    // Block dangerous patterns in generated code
+    let dangerous = ["rm -rf", "drop table", "exec(", "system(", "std::process"];
+    for pattern in dangerous {
+        if code.contains(pattern) {
             return false;
         }
     }

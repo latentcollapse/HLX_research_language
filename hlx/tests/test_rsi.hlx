@@ -1,0 +1,54 @@
+// test_rsi.hlx - Phase 14: RSI Loop Test
+//
+// This is the full recursive self-improvement loop:
+// 1. Extract patterns from observations
+// 2. Learn those patterns into memory
+// 3. Use reason() (bonded LLM) to generate HLX code
+// 4. eval_hlx() to compile and run that code
+// 5. Learn the result
+// 6. Recall patterns matching the generated function name
+//
+// Usage (requires LLM server):
+//   Terminal 1: hlx-bond model.gguf --corpus corpus.db --serve 8765
+//   Terminal 2: HLX_BOND_ENDPOINT=http://localhost:8765 cargo run -p hlx-run -- hlx/tests/test_rsi.hlx
+
+program test_rsi {
+    import hil::pattern;
+    import hil::learn;
+    import hil::infer;
+
+    fn main() -> list {
+        // Step 1: Extract patterns from observations
+        let observations: list = [
+            "the system learned from feedback",
+            "the system adapted its response",
+            "the system improved accuracy"
+        ];
+        let patterns: list = extract(observations);
+        
+        // Step 2: Learn the best pattern if found
+        if len(patterns) > 0 {
+            let best: dict = patterns[0];
+            learn_pattern(best["pattern"], best["confidence"]);
+        }
+        
+        // Step 3: Use bonded LLM to generate HLX code
+        // In stub mode, this returns a placeholder
+        // In live mode, this generates actual HLX code
+        let code: String = reason(
+            "Write an HLX function called score that takes a string and returns 1.0",
+            {}
+        );
+        
+        // Step 4: Evaluate the generated code
+        let eval_result: String = eval_hlx(code);
+        
+        // Step 5: Learn that we generated and evaluated code
+        learn_pattern("generated function: " + eval_result, 0.8);
+        
+        // Step 6: Recall patterns about what we did
+        let recalled: list = recall("score", 1);
+        
+        return recalled;
+    }
+}

@@ -4,13 +4,6 @@
 //! This is the bridge between the rich, introspectable AST and executable bytecode.
 
 use crate::ast::{
-<<<<<<< HEAD
-    AgentDef, BinaryOp, CycleLevel, ExprKind, Expression, Function, Gate, Item, Parameter, Program,
-    Statement, StmtKind, UnaryOp,
-};
-use crate::{Bytecode, Opcode, Value};
-use std::collections::HashMap;
-=======
     AgentDef, BinaryOp, CycleLevel, ExprKind, Expression, Function, Gate, Import, Item, ModuleDef,
     Parameter, Program, Statement, StmtKind, UnaryOp,
 };
@@ -19,7 +12,6 @@ use crate::resolver::{ImportStyle, ModuleResolver};
 use crate::{Bytecode, Opcode, Value};
 use std::collections::HashMap;
 use std::path::Path;
->>>>>>> origin/experimental
 
 /// Errors that can occur during lowering
 #[derive(Debug, Clone)]
@@ -43,8 +35,6 @@ impl LowerError {
 
 type LowerResult<T> = Result<T, LowerError>;
 
-<<<<<<< HEAD
-=======
 /// Function to be loaded after main program
 #[derive(Debug, Clone)]
 struct PendingImport {
@@ -52,7 +42,6 @@ struct PendingImport {
     func: Function,
 }
 
->>>>>>> origin/experimental
 /// Lowers a `Program` AST into `Bytecode` + function table.
 pub struct Lowerer {
     bytecode: Bytecode,
@@ -65,11 +54,8 @@ pub struct Lowerer {
     patch_points: Vec<(usize, String)>,
     /// Loop context for break/continue
     loop_stack: Vec<LoopContext>,
-<<<<<<< HEAD
-=======
     /// Imports to be loaded after main program
     pending_imports: Vec<PendingImport>,
->>>>>>> origin/experimental
 }
 
 #[derive(Debug, Clone)]
@@ -90,11 +76,6 @@ impl Lowerer {
             next_tmp_reg: 20,
             patch_points: Vec::new(),
             loop_stack: Vec::new(),
-<<<<<<< HEAD
-        }
-    }
-
-=======
             pending_imports: Vec::new(),
         }
     }
@@ -166,15 +147,11 @@ impl Lowerer {
         Ok(())
     }
 
->>>>>>> origin/experimental
     /// Lower a complete Program AST to bytecode.
     pub fn lower(program: &Program) -> LowerResult<(Bytecode, HashMap<String, (u32, u32)>)> {
         let mut lowerer = Lowerer::new();
         lowerer.lower_program(program)?;
-<<<<<<< HEAD
-=======
         lowerer.patch_forward_calls()?;
->>>>>>> origin/experimental
         Ok((lowerer.bytecode, lowerer.functions))
     }
 
@@ -183,11 +160,7 @@ impl Lowerer {
             self.lower_item(item)?;
         }
         self.emit(Opcode::Halt);
-<<<<<<< HEAD
-        self.patch_forward_calls()?;
-=======
         // Don't patch forward calls here - caller should do it after all functions are added
->>>>>>> origin/experimental
         Ok(())
     }
 
@@ -203,12 +176,6 @@ impl Lowerer {
                 Ok(())
             }
             Item::Struct(_) => Ok(()), // No bytecode for struct definitions (types only)
-<<<<<<< HEAD
-            Item::Import(_) | Item::Export(_) => Ok(()),
-        }
-    }
-
-=======
             Item::Export(_) => Ok(()), // TODO: implement exports
             Item::Import(import) => self.lower_import(import),
         }
@@ -316,7 +283,6 @@ impl Lowerer {
         Ok(())
     }
 
->>>>>>> origin/experimental
     // ─── Functions ──────────────────────────────────────────────────────
 
     fn lower_function(&mut self, func: &Function) -> LowerResult<()> {
@@ -683,11 +649,7 @@ impl Lowerer {
                 self.emit_u8(dst);
 
                 if !self.functions.contains_key(function) {
-<<<<<<< HEAD
-                    let call_site = self.current_pc() - 7;
-=======
                     let call_site = self.current_pc() - 6; // -6 because emit() writes u16 (2 bytes) + u32 name_idx (4 bytes) = 6 bytes before arg_count/dst
->>>>>>> origin/experimental
                     self.patch_points.push((call_site, function.clone()));
                 }
             }
@@ -1012,9 +974,6 @@ impl Lowerer {
         let patches = std::mem::take(&mut self.patch_points);
         for (call_site, func_name) in patches {
             if let Some(&(start_pc, _)) = self.functions.get(&func_name) {
-<<<<<<< HEAD
-                self.patch_jump(call_site, start_pc as usize)?;
-=======
                 // Found the function - convert CALL to CALL_ADDR for direct jump
                 // call_site points to the name_idx (4 bytes), which we replace with 16-bit PC
                 // Layout was: CALL [1] + name_idx [4] + arg_count [1] + dst [1] = 7 bytes
@@ -1040,7 +999,6 @@ impl Lowerer {
 
                     eprintln!("[patch] {} -> CALL_ADDR PC {}", func_name, start_pc);
                 }
->>>>>>> origin/experimental
             }
             // If function not found, leave the patch as-is (could be a built-in)
         }

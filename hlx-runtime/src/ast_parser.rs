@@ -434,15 +434,6 @@ impl AstParser {
     }
 
     fn parse_program(&mut self) -> Result<Program, ParseError> {
-<<<<<<< HEAD
-        let mut name = "main".to_string();
-
-        if matches!(self.current(), Token::Program | Token::Module) {
-            self.advance();
-            if let Token::Ident(n) = self.current().clone() {
-                name = n;
-                self.advance();
-=======
         let mut name_parts = vec!["main".to_string()];
 
         if matches!(self.current(), Token::Program | Token::Module) {
@@ -468,15 +459,11 @@ impl AstParser {
                         });
                     }
                 }
->>>>>>> origin/experimental
             }
             self.expect(&Token::LBrace)?;
         }
 
-<<<<<<< HEAD
-=======
         let name = name_parts.join("::");
->>>>>>> origin/experimental
         let mut prog = Program::new(name);
 
         while !matches!(self.current(), Token::Eof | Token::RBrace) {
@@ -981,16 +968,6 @@ impl AstParser {
     fn parse_module(&mut self) -> Result<ModuleDef, ParseError> {
         self.expect(&Token::Module)?;
 
-<<<<<<< HEAD
-        let name = match self.current().clone() {
-            Token::Ident(n) => {
-                self.advance();
-                n
-            }
-            _ => "anonymous".to_string(),
-        };
-
-=======
         // Parse module path: name or name::subname::...
         let mut name_parts = Vec::new();
 
@@ -1023,7 +1000,6 @@ impl AstParser {
 
         let name = name_parts.join("::");
 
->>>>>>> origin/experimental
         self.expect(&Token::LBrace)?;
 
         let mut items = Vec::new();
@@ -1098,12 +1074,6 @@ impl AstParser {
     fn parse_import(&mut self) -> Result<Import, ParseError> {
         self.expect(&Token::Import)?;
 
-<<<<<<< HEAD
-        let module = match self.current().clone() {
-            Token::Ident(n) => {
-                self.advance();
-                n
-=======
         // Check for "from" syntax: import { foo, bar } from "module";
         if matches!(self.current(), Token::LBrace) {
             // import { items } from "module";
@@ -1180,7 +1150,6 @@ impl AstParser {
             Token::Ident(n) => {
                 self.advance();
                 module_parts.push(n);
->>>>>>> origin/experimental
             }
             _ => {
                 return Err(ParseError {
@@ -1191,27 +1160,6 @@ impl AstParser {
             }
         };
 
-<<<<<<< HEAD
-        let mut items = Vec::new();
-
-        if matches!(self.current(), Token::Colon) {
-            self.advance();
-            self.expect(&Token::Colon)?;
-            if matches!(self.current(), Token::Star) {
-                self.advance();
-                items.push(ImportItem::Wildcard);
-            } else {
-                self.expect(&Token::LBrace)?;
-                while !matches!(self.current(), Token::RBrace) {
-                    if let Token::Ident(name) = self.current().clone() {
-                        self.advance();
-                        if let Token::Ident(a) = self.current().clone() {
-                            if a == "as" {
-                                self.advance();
-                                if let Token::Ident(alias) = self.current().clone() {
-                                    self.advance();
-                                    items.push(ImportItem::Aliased { name, alias });
-=======
         // Handle :: separators - need to distinguish between:
         // - module::submodule (part of module path)
         // - module::* or module::{...} (items selection)
@@ -1247,25 +1195,10 @@ impl AstParser {
                                     }
                                 } else {
                                     items.push(ImportItem::Named(name));
->>>>>>> origin/experimental
                                 }
                             } else {
                                 items.push(ImportItem::Named(name));
                             }
-<<<<<<< HEAD
-                        } else {
-                            items.push(ImportItem::Named(name));
-                        }
-                    }
-                    if matches!(self.current(), Token::Comma) {
-                        self.advance();
-                    }
-                }
-                self.expect(&Token::RBrace)?;
-            }
-        }
-
-=======
                         }
                         if matches!(self.current(), Token::Comma) {
                             self.advance();
@@ -1293,7 +1226,6 @@ impl AstParser {
         }
 
         let module = module_parts.join("::");
->>>>>>> origin/experimental
         self.expect(&Token::Semi)?;
 
         Ok(Import {
@@ -1985,10 +1917,7 @@ mod tests {
         };
         if let StmtKind::Let { name, value, .. } = &func.body[0].kind {
             assert_eq!(name, "x");
-<<<<<<< HEAD
-=======
             let value = value.as_ref().expect("Expected value");
->>>>>>> origin/experimental
             assert!(matches!(value.kind, ExprKind::Int(42)));
         } else {
             panic!("Expected let statement");
@@ -2003,10 +1932,7 @@ mod tests {
             _ => panic!("Expected function wrapper"),
         };
         if let StmtKind::Let { value, .. } = &func.body[0].kind {
-<<<<<<< HEAD
-=======
             let value = value.as_ref().expect("Expected value");
->>>>>>> origin/experimental
             if let ExprKind::Float(n) = value.kind {
                 assert!((n - 3.14).abs() < 0.001);
             } else {
@@ -2023,10 +1949,7 @@ mod tests {
             _ => panic!("Expected function wrapper"),
         };
         if let StmtKind::Let { value, .. } = &func.body[0].kind {
-<<<<<<< HEAD
-=======
             let value = value.as_ref().expect("Expected value");
->>>>>>> origin/experimental
             if let ExprKind::String(ref s) = value.kind {
                 assert_eq!(s, "hello world");
             } else {
@@ -2043,10 +1966,7 @@ mod tests {
             _ => panic!("Expected function"),
         };
         if let StmtKind::Let { value, .. } = &func0.body[0].kind {
-<<<<<<< HEAD
-=======
             let value = value.as_ref().expect("Expected value");
->>>>>>> origin/experimental
             assert!(matches!(value.kind, ExprKind::Bool(true)));
         }
     }
@@ -2166,10 +2086,7 @@ mod tests {
             _ => panic!("Expected function"),
         };
         if let StmtKind::Let { value, .. } = &func.body[0].kind {
-<<<<<<< HEAD
-=======
             let value = value.as_ref().expect("Expected value");
->>>>>>> origin/experimental
             if let ExprKind::Array(ref elems) = value.kind {
                 assert_eq!(elems.len(), 3);
             } else {

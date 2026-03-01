@@ -71,6 +71,10 @@ struct Args {
     /// Disable APE governance (skip verification)
     #[arg(long)]
     no_verify: bool,
+
+    /// Serve HTTP API on this port instead of REPL (e.g., --serve 8765)
+    #[arg(long)]
+    serve: Option<u16>,
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -633,12 +637,19 @@ fn handle_command(
         }
         "/save" => {
             if let Some(ref path) = args.save_state {
-                let json = serde_json::json!({
-                    "step_count": state.step_count,
-                    "history": history,
-                });
-                std::fs::write(path, json.to_string())?;
-                println!("State saved to: {}", path);
+                let session = SessionState {
+                    symbiote_id: state.id.clone(),
+                    step_count: state.step_count,
+                    history: history.clone(),
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs_f64(),
+                };
+                session.save(path)?;
+                println!("Session saved to: {}", path);
+                println!("  ID: {}", session.symbiote_id);
+                println!("  Steps: {}", session.step_count);
             } else {
                 println!("No save path specified. Use --save-state <file>");
             }
@@ -659,9 +670,21 @@ fn run_repl(
     corpus: &CorpusContext,
     state: &mut SymbioteState,
     args: &Args,
+    loaded_session: Option<SessionState>,
 ) -> Result<()> {
     let stdin = io::stdin();
     let mut history: Vec<(String, String)> = Vec::new();
+
+    // Restore history from loaded session if present
+    if let Some(session) = loaded_session {
+        history = session.history;
+        if !history.is_empty() {
+            println!(
+                "[session] Restored {} conversation turns from saved state",
+                history.len()
+            );
+        }
+    }
 
     // Initialize APE engine for governance
     let ape_engine = if args.no_verify {
@@ -864,6 +887,31 @@ fn main() -> Result<()> {
     println!("[3/4] Running bond protocol...");
     let mut symbiote_state = run_bond_protocol(&model_name, vocab_size)?;
 
+    // ── Step 3b: Load session state if provided ────────────────────────────
+    let loaded_session: Option<SessionState> = if let Some(ref path) = args.load_state {
+        match SessionState::load(path) {
+            Ok(session) => {
+                println!(
+                    "[session] Resuming session {} at step {}",
+                    session.symbiote_id.chars().take(8).collect::<String>(),
+                    session.step_count
+                );
+                // Update symbiote state with loaded values
+                symbiote_state.step_count = session.step_count;
+                Some(session)
+            }
+            Err(e) => {
+                eprintln!(
+                    "[session] Warning: Could not load state from {}: {}",
+                    path, e
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // ── Step 4: Load model weights ─────────────────────────────────────────
     println!("[4/4] Loading model weights...");
     let mut engine = InferenceEngine::load(&args.model, args.temperature, &tokenizer)?;
@@ -875,14 +923,320 @@ fn main() -> Result<()> {
     println!("Corpus: {}", args.corpus);
     println!();
 
-    // ── REPL ───────────────────────────────────────────────────────────────
-    run_repl(&mut engine, &tokenizer, &corpus, &mut symbiote_state, &args)?;
+    // ── Dispatch: Server mode or REPL ───────────────────────────────────────
+    if let Some(port) = args.serve {
+        // Server mode
+        run_server(port, &mut engine, &tokenizer, &corpus, &args)?;
+    } else {
+        // REPL mode
+        run_repl(
+            &mut engine,
+            &tokenizer,
+            &corpus,
+            &mut symbiote_state,
+            &args,
+            loaded_session,
+        )?;
 
-    println!(
-        "\n[bond] Session ended. Steps taken: {}",
-        symbiote_state.step_count
-    );
+        println!(
+            "\n[bond] Session ended. Steps taken: {}",
+            symbiote_state.step_count
+        );
+    }
+
     Ok(())
 }
 
 use std::io::BufRead;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Session State persistence
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct SessionState {
+    symbiote_id: String,
+    step_count: usize,
+    history: Vec<(String, String)>,
+    timestamp: f64,
+}
+
+impl SessionState {
+    fn save(&self, path: &str) -> Result<()> {
+        let json = serde_json::to_string_pretty(self)?;
+        std::fs::write(path, json)?;
+        Ok(())
+    }
+
+    fn load(path: &str) -> Result<Self> {
+        let json = std::fs::read_to_string(path)?;
+        let state: SessionState = serde_json::from_str(&json)?;
+        Ok(state)
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// HTTP Server mode (for --serve flag)
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn run_server(
+    port: u16,
+    engine: &mut InferenceEngine,
+    tokenizer: &GgufTokenizer,
+    corpus: &CorpusContext,
+    args: &Args,
+) -> Result<()> {
+    use tiny_http::{Request, Response, Server};
+
+    let addr = format!("127.0.0.1:{}", port);
+    let server = Server::http(&addr)
+        .map_err(|e| anyhow::anyhow!("Failed to start server on {}: {:?}", addr, e))?;
+
+    println!("[serve] Listening on http://{}/", addr);
+    println!("[serve] Endpoints: POST /bond, POST /infer");
+    println!("[serve] Press Ctrl+C to stop\n");
+
+    // Initialize APE engine for governance (shared across requests)
+    let ape_engine = if args.no_verify {
+        None
+    } else {
+        match AxiomEngine::from_file(&args.ape_policy) {
+            Ok(engine) => {
+                eprintln!("[APE] Governance loaded: {}", args.ape_policy);
+                Some(engine)
+            }
+            Err(e) => {
+                eprintln!(
+                    "[APE] Warning: Could not load policy '{}': {}",
+                    args.ape_policy, e
+                );
+                None
+            }
+        }
+    };
+
+    for request in server.incoming_requests() {
+        match handle_request(request, engine, tokenizer, corpus, &ape_engine, args) {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!("[serve] Error handling request: {:?}", e);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn handle_request(
+    request: tiny_http::Request,
+    engine: &mut InferenceEngine,
+    tokenizer: &GgufTokenizer,
+    corpus: &CorpusContext,
+    ape_engine: &Option<AxiomEngine>,
+    args: &Args,
+) -> Result<()> {
+    let url = request.url().to_string();
+    let method = request.method().to_string();
+
+    match (method.as_str(), url.as_str()) {
+        ("POST", "/bond") => handle_bond(request),
+        ("POST", "/infer") => handle_infer(request, engine, tokenizer, corpus, ape_engine, args),
+        _ => {
+            let response = serde_json::json!({
+                "error": "Not found",
+                "path": url,
+                "method": method
+            });
+            let resp = tiny_http::Response::from_string(response.to_string())
+                .with_header(
+                    tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..])
+                        .unwrap(),
+                )
+                .with_status_code(404);
+            request.respond(resp)?;
+            Ok(())
+        }
+    }
+}
+
+fn handle_bond(mut request: tiny_http::Request) -> Result<()> {
+    // Read request body
+    let mut body = String::new();
+    request.as_reader().read_to_string(&mut body)?;
+
+    // Parse BondRequest if body present (optional)
+    if !body.is_empty() {
+        if let Err(e) = serde_json::from_str::<hlx_runtime::BondRequest>(&body) {
+            eprintln!("[serve] Warning: Could not parse bond request: {}", e);
+        }
+    }
+
+    // Run bond protocol and return BondResponse
+    let response = hlx_runtime::BondResponse {
+        accepted: true,
+        model_name: "candle-gguf".to_string(),
+        model_version: "candle-gguf".to_string(),
+        context_window: 4096,
+        capabilities: vec![
+            hlx_runtime::Capability {
+                name: "candle_inference".to_string(),
+                version: "1.0".to_string(),
+                description: Some("Native GGUF inference via Candle".to_string()),
+            },
+            hlx_runtime::Capability {
+                name: "klyntar_corpus".to_string(),
+                version: "1.0".to_string(),
+                description: Some("Klyntar symbolic corpus integration".to_string()),
+            },
+            hlx_runtime::Capability {
+                name: "ape_governance".to_string(),
+                version: "1.0".to_string(),
+                description: Some("APE effect governance on all outputs".to_string()),
+            },
+        ],
+        rejection_reason: None,
+    };
+
+    let json = serde_json::to_string(&response)?;
+    let resp = tiny_http::Response::from_string(json)
+        .with_header(
+            tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
+        )
+        .with_status_code(200);
+
+    request.respond(resp)?;
+    eprintln!("[serve] POST /bond -> accepted");
+    Ok(())
+}
+
+fn handle_infer(
+    mut request: tiny_http::Request,
+    engine: &mut InferenceEngine,
+    tokenizer: &GgufTokenizer,
+    corpus: &CorpusContext,
+    ape_engine: &Option<AxiomEngine>,
+    args: &Args,
+) -> Result<()> {
+    // Read and parse request body
+    let mut body = String::new();
+    request.as_reader().read_to_string(&mut body)?;
+
+    let req: serde_json::Value = match serde_json::from_str(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            let response = serde_json::json!({"error": format!("Invalid JSON: {}", e)});
+            let resp = tiny_http::Response::from_string(response.to_string())
+                .with_header(
+                    tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..])
+                        .unwrap(),
+                )
+                .with_status_code(400);
+            request.respond(resp)?;
+            return Ok(());
+        }
+    };
+
+    let prompt = req.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
+    let context = req.get("context").and_then(|v| v.as_str()).unwrap_or("");
+    let symbiote_id = req
+        .get("symbiote_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+
+    eprintln!(
+        "[serve] Request from symbiote: {}...",
+        &symbiote_id[..symbiote_id.len().min(8)]
+    );
+
+    if prompt.is_empty() {
+        let response = serde_json::json!({"error": "Missing 'prompt' field"});
+        let resp = tiny_http::Response::from_string(response.to_string())
+            .with_header(
+                tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..])
+                    .unwrap(),
+            )
+            .with_status_code(400);
+        request.respond(resp)?;
+        return Ok(());
+    }
+
+    // Store user prompt in corpus memory
+    corpus.store_memory("user", prompt).ok();
+
+    // Build system prompt from corpus
+    let mut system = corpus
+        .build_system_prompt(args.max_rules, args.max_memory)
+        .unwrap_or_default();
+
+    // Append context if provided
+    if !context.is_empty() {
+        system.push_str("\n\n## Context\n");
+        system.push_str(context);
+    }
+
+    // Run inference
+    let history: Vec<(String, String)> = Vec::new();
+    let prompt_tokens = tokenizer.encode_chat(&system, &history, prompt);
+
+    let generated = match engine.generate(&prompt_tokens, args.max_tokens) {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            let response = serde_json::json!({"error": format!("Generation failed: {}", e)});
+            let resp = tiny_http::Response::from_string(response.to_string())
+                .with_header(
+                    tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..])
+                        .unwrap(),
+                )
+                .with_status_code(500);
+            request.respond(resp)?;
+            return Ok(());
+        }
+    };
+
+    let response_text = tokenizer.decode(&generated);
+    let response_text = response_text.trim_end_matches("|im_end|").trim();
+    let (_thinking, visible) = strip_thinking(&response_text);
+    let final_response = visible.to_string();
+
+    // APE Governance: Verify LLM output
+    let mut approved_response = final_response.clone();
+    if let Some(ref ape) = ape_engine {
+        let verdict = ape.verify(
+            "GenerateResponse",
+            &[("output", &final_response), ("verified", "true")],
+        );
+
+        match verdict {
+            Ok(v) if v.allowed() => {
+                eprintln!("[APE] ✓ Response verified");
+            }
+            Ok(v) => {
+                let reason = v.reason().unwrap_or("policy violation");
+                eprintln!("[APE] ✗ Response denied: {}", reason);
+                approved_response = format!("[Governance blocked: {}]", reason);
+            }
+            Err(e) => {
+                eprintln!("[APE] ⚠ Verification error: {}", e);
+            }
+        }
+    }
+
+    // Store response in corpus memory
+    corpus.store_memory("assistant", &approved_response).ok();
+
+    let response = serde_json::json!({
+        "response": approved_response,
+        "model": "candle-gguf",
+        "tokens_generated": generated.len()
+    });
+
+    let resp = tiny_http::Response::from_string(response.to_string())
+        .with_header(
+            tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap(),
+        )
+        .with_status_code(200);
+
+    request.respond(resp)?;
+    eprintln!("[serve] POST /infer -> {} tokens", generated.len());
+    Ok(())
+}
