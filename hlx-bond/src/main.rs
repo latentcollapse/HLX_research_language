@@ -124,17 +124,43 @@ fn build_unicode_to_byte() -> HashMap<char, u8> {
     map
 }
 
-/// Strip <think>…</think> block from generated text.
+/// Strip thinking blocks from generated text.
 /// Returns (thinking_content, visible_response).
-fn strip_thinking(text: &str) -> (&str, &str) {
+fn strip_thinking(text: &str) -> (String, String) {
     if let Some(start) = text.find("<think>") {
         if let Some(end) = text.find("</think>") {
-            let think = &text[start + 7..end];
-            let response = text[end + 8..].trim();
+            let think = text[start + 7..end].to_string();
+            let response = text[end + 8..].trim().to_string();
             return (think, response);
+        } else {
+            // Unclosed think block - discard everything from <think> onward
+            let before = text[..start].trim().to_string();
+            return (String::new(), before);
         }
     }
-    ("", text.trim())
+    (String::new(), text.trim().to_string())
+}
+
+/// Clean ChatML special tokens from decoded output.
+fn clean_response(text: &str) -> String {
+    let text = text.trim_end_matches("|im_end|").trim();
+
+    // Strip leading special token artifacts
+    // Qwen3 sometimes emits user/system/assistant turn tokens before the real response
+    let markers = ["|im_start|", "|im_end|", "assistant", "user", "system"];
+    let mut result = text;
+
+    for marker in &markers {
+        if let Some(pos) = result.find(marker) {
+            let after = &result[pos + marker.len()..];
+            let after_trimmed = after.trim();
+            if !after_trimmed.is_empty() && after_trimmed.len() < result.len() {
+                result = after_trimmed;
+            }
+        }
+    }
+
+    result.to_string()
 }
 
 impl GgufTokenizer {
@@ -287,8 +313,15 @@ impl GgufTokenizer {
                 }
                 // GPT-2 unicode → byte mapping
                 for ch in tok.chars() {
-                    if let Some(&b) = u2b.get(&ch) {
-                        bytes.push(b);
+                    // Explicit GPT-2 special byte chars (before general lookup)
+                    let b = match ch {
+                        '\u{0120}' => Some(32u8), // Ġ → space
+                        '\u{010a}' => Some(10u8), // Ċ → newline
+                        '\u{0109}' => Some(9u8),  // ĉ → tab
+                        _ => u2b.get(&ch).copied(),
+                    };
+                    if let Some(byte) = b {
+                        bytes.push(byte);
                     } else {
                         // True unicode character, encode as UTF-8
                         let mut buf = [0u8; 4];
@@ -392,7 +425,7 @@ impl CorpusContext {
         // Recent memory (conversation history stored in corpus)
         let mut stmt = self
             .conn
-            .prepare("SELECT role, content FROM memory ORDER BY created_at DESC LIMIT ?1")?;
+            .prepare("SELECT source, content FROM memory ORDER BY created_at DESC LIMIT ?1")?;
         let memories: Vec<(String, String)> = stmt
             .query_map([max_memory], |r| Ok((r.get(0)?, r.get(1)?)))
             .into_iter()
@@ -404,8 +437,8 @@ impl CorpusContext {
 
         if !memories.is_empty() {
             prompt.push_str("## Recent Memory\n");
-            for (role, content) in &memories {
-                prompt.push_str(&format!("[{}]: {}\n", role, content));
+            for (source, content) in &memories {
+                prompt.push_str(&format!("[{}]: {}\n", source, content));
             }
         }
 
@@ -438,7 +471,18 @@ struct InferenceEngine {
 
 impl InferenceEngine {
     fn load(model_path: &str, temperature: f64, tokenizer: &GgufTokenizer) -> Result<Self> {
-        let device = Device::Cpu;
+        // Try CUDA first, fall back to CPU
+        let device = Device::new_cuda(0).unwrap_or_else(|e| {
+            eprintln!("[engine] CUDA unavailable ({}), falling back to CPU", e);
+            Device::Cpu
+        });
+
+        // Log which device we're using
+        match &device {
+            Device::Cuda(d) => eprintln!("[engine] CUDA device: {:?}", d),
+            Device::Cpu => eprintln!("[engine] Running on CPU"),
+            _ => {}
+        }
 
         let mut file = std::fs::File::open(model_path)
             .with_context(|| format!("Cannot open model file: {}", model_path))?;
@@ -770,7 +814,8 @@ fn run_repl(
             if !thinking.is_empty() && args.h_cycles > 1 {
                 eprintln!("[think] {}", thinking.trim());
             }
-            let response = visible.to_string();
+            let visible = clean_response(&visible);
+            let response = visible;
 
             if h == args.h_cycles - 1 {
                 final_response = response.clone();
@@ -1196,6 +1241,7 @@ fn handle_infer(
     let response_text = tokenizer.decode(&generated);
     let response_text = response_text.trim_end_matches("|im_end|").trim();
     let (_thinking, visible) = strip_thinking(&response_text);
+    let visible = clean_response(&visible);
     let final_response = visible.to_string();
 
     // APE Governance: Verify LLM output

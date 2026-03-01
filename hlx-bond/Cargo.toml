@@ -13,8 +13,9 @@ hlx-runtime = { path = "../hlx-runtime" }
 ape = { path = "../ape" }
 
 # Native GGUF inference (pure Rust, no Python, no external services)
-candle-core = "0.9"
-candle-transformers = "0.9"
+# CUDA enabled for GPU acceleration - falls back to CPU if unavailable
+candle-core = { version = "0.9", features = ["cuda"] }
+candle-transformers = { version = "0.9", features = ["cuda"] }
 
 # Klyntar corpus SQLite
 rusqlite = { version = "0.31", features = ["bundled"] }
