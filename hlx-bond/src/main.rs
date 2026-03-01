@@ -145,18 +145,14 @@ fn strip_thinking(text: &str) -> (String, String) {
 fn clean_response(text: &str) -> String {
     let text = text.trim_end_matches("|im_end|").trim();
 
-    // Strip leading special token artifacts
-    // Qwen3 sometimes emits user/system/assistant turn tokens before the real response
-    let markers = ["|im_start|", "|im_end|", "assistant", "user", "system"];
+    // Strip ChatML turn-boundary artifacts that appear at the START only
+    // These are token decode artifacts, not words that appear mid-response
+    let markers = ["|im_start|", "|im_end|"];
     let mut result = text;
 
     for marker in &markers {
-        if let Some(pos) = result.find(marker) {
-            let after = &result[pos + marker.len()..];
-            let after_trimmed = after.trim();
-            if !after_trimmed.is_empty() && after_trimmed.len() < result.len() {
-                result = after_trimmed;
-            }
+        if result.starts_with(marker) {
+            result = result[marker.len()..].trim();
         }
     }
 
@@ -371,9 +367,15 @@ impl GgufTokenizer {
         ids.push(self.im_end_id);
         ids.extend(self.encode("\n"));
 
-        // Open assistant turn (model continues from here)
+        // Open assistant turn — inject empty <think></think> to disable thinking mode
+        // Qwen3 treats <think>\n\n</think> as "skip thinking, respond directly"
+        // Token IDs: <think>=151648, </think>=151649
         ids.push(self.im_start_id);
         ids.extend(self.encode("assistant\n"));
+        ids.push(151648u32); // <think>
+        ids.extend(self.encode("\n\n"));
+        ids.push(151649u32); // </think>
+        ids.extend(self.encode("\n"));
 
         ids
     }
@@ -1219,11 +1221,8 @@ fn handle_infer(
         system.push_str(context);
     }
 
-    // Run inference
+    // Run inference — thinking disabled via empty <think></think> block in encode_chat
     let history: Vec<(String, String)> = Vec::new();
-    // Disable Qwen3 thinking mode for serve calls (saves tokens for answer)
-    system.push_str("\n/no_think");
-    
     let prompt_tokens = tokenizer.encode_chat(&system, &history, prompt);
 
     let generated = match engine.generate(&prompt_tokens, args.max_tokens) {
