@@ -157,6 +157,20 @@ pub enum ModificationKind {
     },
     /// Modify weight matrix
     WeightUpdate { layer: usize, deltas: Vec<f64> },
+    /// Add a new rule
+    RuleAdd {
+        name: String,
+        description: String,
+        confidence: f64,
+    },
+    /// Remove a rule
+    RuleRemove { name: String },
+    /// Update an existing rule
+    RuleUpdate {
+        name: String,
+        description: String,
+        confidence: f64,
+    },
     /// AST transformation (for RSI)
     AstTransform { description: String, diff: AstDiff },
 }

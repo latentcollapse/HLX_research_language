@@ -7,6 +7,7 @@ mod bytecode;
 mod communication;
 mod compiler;
 mod dd_protocol;
+mod debugger;
 mod forgetting_guard;
 mod governance;
 mod homeostasis;
@@ -45,6 +46,7 @@ pub use compiler::Compiler;
 pub use dd_protocol::{
     DdError, DdOperation, DdProtocol, DdSnapshot, DdState, DdTarget, DdTargetType,
 };
+pub use debugger::{DapServer, DebugEvent, Debugger, StepMode, StopReason};
 pub use forgetting_guard::{
     ForgettingError, ForgettingEvent, ForgettingGuard, HealthStatus, RetentionResult,
     RetentionTest, WeightImportance,

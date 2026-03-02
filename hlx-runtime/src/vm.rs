@@ -1714,6 +1714,12 @@ impl Vm {
             "promotion_level" => builtins::builtin_promotion_level(args),
             "can_modify_self" => builtins::builtin_can_modify_self(args),
             "rsi_history" => builtins::builtin_rsi_history(args),
+            // Phase 4.5: Fitness evaluation hooks
+            "evaluate_fitness" => builtins::builtin_evaluate_fitness(args),
+            "fitness_snapshot" => builtins::builtin_fitness_snapshot(args),
+            "fitness_compare" => builtins::builtin_fitness_compare(args),
+            // Phase 5.3: Bond builtin
+            "bond" => builtins::builtin_bond(args),
             _ => Err(RuntimeError::new(format!("Unknown function: {}", name), 0)),
         }
     }

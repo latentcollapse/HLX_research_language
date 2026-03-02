@@ -990,6 +990,163 @@ pub fn builtin_rsi_history(_args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Array(vec![]))
 }
 
+// ============================================================================
+// Phase 4.5: Fitness evaluation hooks
+// Called after RSIApply to evaluate if a modification improved fitness
+// ============================================================================
+
+/// Evaluates current fitness score (0.0-1.0)
+/// Combines: confidence, pattern utilization, modification success rate
+pub fn builtin_evaluate_fitness(_args: &[Value]) -> RuntimeResult<Value> {
+    // Returns a composite fitness score
+    // In full implementation, this queries AgentMemory and RSI pipeline
+    // For now, return a placeholder based on time
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    // Return a semi-deterministic fitness between 0.5 and 1.0
+    let fitness = 0.5 + ((now % 50) as f64) / 100.0;
+    Ok(Value::F64(fitness))
+}
+
+/// Records a fitness snapshot before/after modification
+/// Returns snapshot ID for comparison
+pub fn builtin_fitness_snapshot(args: &[Value]) -> RuntimeResult<Value> {
+    let label = if args.is_empty() {
+        "snapshot"
+    } else {
+        args[0].as_string().unwrap_or("snapshot")
+    };
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    // Return dict with snapshot info
+    let mut map = std::collections::BTreeMap::new();
+    map.insert("id".to_string(), Value::I64(now));
+    map.insert("label".to_string(), Value::String(label.to_string()));
+    map.insert("timestamp".to_string(), Value::I64(now));
+    map.insert(
+        "fitness".to_string(),
+        builtin_evaluate_fitness(&[])?.clone(),
+    );
+    Ok(Value::Map(map))
+}
+
+/// Compares two fitness snapshots
+/// Returns dict with before, after, delta
+pub fn builtin_fitness_compare(args: &[Value]) -> RuntimeResult<Value> {
+    let before = args.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let after = args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let delta = after - before;
+
+    let mut map = std::collections::BTreeMap::new();
+    map.insert("before".to_string(), Value::F64(before));
+    map.insert("after".to_string(), Value::F64(after));
+    map.insert("delta".to_string(), Value::F64(delta));
+    map.insert("improved".to_string(), Value::Bool(delta > 0.0));
+    Ok(Value::Map(map))
+}
+
+// ============================================================================
+// Phase 5.3: Bond builtin - call to LLM from HLX
+// Implements bond(prompt, context) -> response
+// ============================================================================
+
+/// bond(prompt, context) - Call the bonded LLM (Qwen3)
+/// Returns the LLM response as a string
+pub fn builtin_bond(args: &[Value]) -> RuntimeResult<Value> {
+    let prompt = args
+        .get(0)
+        .and_then(|v| v.as_string())
+        .ok_or_else(|| RuntimeError::new("bond requires prompt string", 0))?;
+
+    let context = args
+        .get(1)
+        .cloned()
+        .unwrap_or(Value::Map(std::collections::BTreeMap::new()));
+
+    // Check for BOND_ENDPOINT environment variable
+    let endpoint =
+        std::env::var("HLX_BOND_ENDPOINT").unwrap_or_else(|_| "http://localhost:8765".to_string());
+
+    // Try HTTP request to hlx-bond server
+    match bond_http_request(&endpoint, prompt, &context) {
+        Ok(response) => Ok(Value::String(response)),
+        Err(e) => {
+            // Fallback: return error message
+            eprintln!("Bond request failed: {}", e);
+            Ok(Value::String(format!("Error: {}", e)))
+        }
+    }
+}
+
+/// HTTP request to hlx-bond server
+fn bond_http_request(
+    endpoint: &str,
+    prompt: &str,
+    context: &Value,
+) -> Result<String, Box<dyn std::error::Error>> {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+
+    // Serialize context to JSON
+    let context_json = serde_json::to_string(context)?;
+    let body = format!(
+        r#"{{"prompt":"{}","context":{}}}"#,
+        prompt.replace('"', "\\\""),
+        context_json
+    );
+
+    // Simple HTTP POST request
+    let request = format!(
+        "POST /bond HTTP/1.1\r\n\
+         Host: {}\r\n\
+         Content-Type: application/json\r\n\
+         Content-Length: {}\r\n\
+         Connection: close\r\n\r\n\
+         {}",
+        endpoint
+            .trim_start_matches("http://")
+            .trim_start_matches("https://"),
+        body.len(),
+        body
+    );
+
+    // Connect and send
+    let host_port: Vec<&str> = endpoint
+        .trim_start_matches("http://")
+        .trim_start_matches("https://")
+        .split(':')
+        .collect();
+    let host = host_port[0];
+    let port = host_port.get(1).unwrap_or(&"8765");
+
+    let mut stream = TcpStream::connect(format!("{}:{}", host, port))?;
+    stream.write_all(request.as_bytes())?;
+
+    // Read response
+    let mut response = String::new();
+    stream.read_to_string(&mut response)?;
+
+    // Extract body from HTTP response
+    if let Some(body_start) = response.find("\r\n\r\n") {
+        let body = &response[body_start + 4..];
+        // Try to parse JSON response
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(body) {
+            if let Some(text) = json.get("response").and_then(|v| v.as_str()) {
+                return Ok(text.to_string());
+            }
+        }
+        return Ok(body.to_string());
+    }
+
+    Ok(response)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

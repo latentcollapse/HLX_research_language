@@ -1,0 +1,9 @@
+[workspace]
+members = [
+    "hlx-runtime",
+    "hlx-lsp",
+    "hlx-bond",
+    "hlx-run",
+    "ape",
+]
+resolver = "2"

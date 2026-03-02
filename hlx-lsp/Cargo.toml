@@ -1,0 +1,16 @@
+[package]
+name = "hlx-lsp"
+version = "0.1.0"
+edition = "2021"
+description = "HLX Language Server Protocol implementation"
+
+[dependencies]
+tower-lsp = "0.20"
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+hlx-runtime = { path = "../hlx-runtime" }
+
+[[bin]]
+name = "hlx-lsp"
+path = "src/main.rs"
