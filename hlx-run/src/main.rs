@@ -652,9 +652,36 @@ fn main() -> Result<()> {
         vm.register_function(name, *start_pc as usize, *params as usize);
     }
 
-    let result = vm
-        .run(&bytecode)
-        .map_err(|e| anyhow::anyhow!("Runtime error: {}", e.message))?;
+    // Execute: either call specific function or run from start
+    let result = if let Some(func_name) = args.func {
+        // Call specific exported function with arguments
+        let func_args: Vec<hlx_runtime::Value> = args
+            .args
+            .iter()
+            .map(|arg| {
+                // Try to parse as number, fallback to string
+                if let Ok(n) = arg.parse::<i64>() {
+                    hlx_runtime::Value::I64(n)
+                } else if let Ok(f) = arg.parse::<f64>() {
+                    hlx_runtime::Value::F64(f)
+                } else {
+                    hlx_runtime::Value::String(arg.clone())
+                }
+            })
+            .collect();
+
+        eprintln!(
+            "Calling function: {} with {} args",
+            func_name,
+            func_args.len()
+        );
+        vm.call_function(&bytecode, &func_name, &func_args)
+            .map_err(|e| anyhow::anyhow!("Runtime error: {}", e.message))?
+    } else {
+        // Run from beginning (default behavior)
+        vm.run(&bytecode)
+            .map_err(|e| anyhow::anyhow!("Runtime error: {}", e.message))?
+    };
 
     println!("✓");
     println!();

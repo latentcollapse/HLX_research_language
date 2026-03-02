@@ -706,4 +706,36 @@ export fn init() -> i64 {
     return 1;  // Initialized
 }
 
+// ============================================================================
+// TUI ENTRY POINTS: Direct bridge from Python TUI
+// ============================================================================
+
+export fn repl_step(input: String) -> String {
+    // Route to observe() or ask() based on input prefix
+    if str_starts_with(input, "/observe ") {
+        let text_len: i64 = strlen(input);
+        let text: String = str_substring(input, 9, text_len - 9);
+        let result: dict = observe("tui", text, 1.0);
+        return "Observed.";
+    }
+    
+    // Default: ask Bit
+    return ask(input);
+}
+
+export fn get_status() -> String {
+    // Return simple status string (not JSON - HLX doesn't have escapes)
+    let status: String = "level=";
+    status = concat(status, level);
+    status = concat(status, " patterns=");
+    status = concat(status, i64_to_str(pattern_count));
+    status = concat(status, " confidence=");
+    status = concat(status, f64_to_str(confidence, 3));
+    status = concat(status, " generation=");
+    status = concat(status, i64_to_str(generation));
+    status = concat(status, " fitness=");
+    status = concat(status, f64_to_str(fitness, 3));
+    return status;
+}
+
 } // module bit

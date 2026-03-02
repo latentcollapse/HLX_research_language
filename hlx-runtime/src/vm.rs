@@ -1635,6 +1635,419 @@ impl Vm {
         self.functions.insert(name.to_string(), (start_pc, params));
     }
 
+    /// Call an exported function by name with arguments
+    pub fn call_function(
+        &mut self,
+        bytecode: &Bytecode,
+        func_name: &str,
+        args: &[Value],
+    ) -> RuntimeResult<Value> {
+        if let Some(&(start_pc, param_count)) = self.functions.get(func_name) {
+            // Reset state for fresh function call
+            self.halted = false;
+            self.steps = 0;
+            
+            // Clear registers
+            for reg in &mut self.registers {
+                *reg = Value::Nil;
+            }
+            
+            // Set up arguments in registers (starting at register 1, reserve 0 for return)
+            for (i, arg) in args.iter().enumerate().take(param_count as usize) {
+                self.set_register(i + 1, arg.clone());
+            }
+
+            // Execute from function start PC using the main execution loop
+            let mut pc = start_pc as usize;
+
+            while pc < bytecode.code.len() && !self.halted {
+                self.steps += 1;
+                if self.steps > self.max_steps {
+                    return Err(RuntimeError::new("Max steps exceeded", pc));
+                }
+
+                let op_byte = bytecode.read_u16(&mut pc)?;
+                let op = Opcode::from_u16(op_byte)
+                    .ok_or_else(|| RuntimeError::new(format!("Unknown opcode: {}", op_byte), pc))?;
+
+                match op {
+                    Opcode::Nop => {}
+                    Opcode::Halt => {
+                        self.halted = true;
+                        return Ok(self.get_register_cloned(0));
+                    }
+                    Opcode::Return => {
+                        // Return from function - value is in register 0
+                        return Ok(self.get_register_cloned(0));
+                    }
+                    Opcode::Const => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let idx = bytecode.read_u32(&mut pc)? as usize;
+                        let val = bytecode.constants.get(idx).cloned().unwrap_or(Value::Nil);
+                        self.set_register(dst, val);
+                    }
+                    Opcode::Move => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let src = bytecode.read_u8(&mut pc)? as usize;
+                        let val = self.get_register(src).clone();
+                        self.set_register(dst, val);
+                    }
+                    Opcode::Add => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_add(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Sub => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_sub(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Mul => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_mul(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Div => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_div(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Mod => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_mod(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Neg => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let src = bytecode.read_u8(&mut pc)? as usize;
+                        let result = match self.get_register(src) {
+                            Value::I64(n) => Value::I64(-n),
+                            Value::F64(n) => Value::F64(-n),
+                            _ => return Err(RuntimeError::new("Cannot negate non-numeric", pc)),
+                        };
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Eq => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = Value::Bool(self.get_register(a) == self.get_register(b));
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Ne => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = Value::Bool(self.get_register(a) != self.get_register(b));
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Lt => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_lt(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Le => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_le(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Gt => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_gt(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Ge => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_ge(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::And => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = match (self.get_register(a), self.get_register(b)) {
+                            (Value::Bool(x), Value::Bool(y)) => Value::Bool(*x && *y),
+                            _ => return Err(RuntimeError::new("Cannot && non-booleans", pc)),
+                        };
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Or => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = match (self.get_register(a), self.get_register(b)) {
+                            (Value::Bool(x), Value::Bool(y)) => Value::Bool(*x || *y),
+                            _ => return Err(RuntimeError::new("Cannot || non-booleans", pc)),
+                        };
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Not => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let src = bytecode.read_u8(&mut pc)? as usize;
+                        let result = match self.get_register(src) {
+                            Value::Bool(b) => Value::Bool(!b),
+                            _ => return Err(RuntimeError::new("Cannot ! non-boolean", pc)),
+                        };
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Jump => {
+                        let target = bytecode.read_u32(&mut pc)? as usize;
+                        pc = target;
+                    }
+                    Opcode::JumpIf => {
+                        let cond_reg = bytecode.read_u8(&mut pc)? as usize;
+                        let target = bytecode.read_u32(&mut pc)? as usize;
+                        if self.get_register(cond_reg).is_truthy() {
+                            pc = target;
+                        }
+                    }
+                    Opcode::JumpIfNot => {
+                        let cond_reg = bytecode.read_u8(&mut pc)? as usize;
+                        let target = bytecode.read_u32(&mut pc)? as usize;
+                        if !self.get_register(cond_reg).is_truthy() {
+                            pc = target;
+                        }
+                    }
+                    Opcode::Call => {
+                        // For simplicity in call_function, just run the full VM
+                        return self.run(bytecode);
+                    }
+                    Opcode::CallAddr => {
+                        // For simplicity in call_function, just run the full VM
+                        return self.run(bytecode);
+                    }
+                    _ => {
+                        // For other opcodes, delegate to the main run loop
+                        return self.run(bytecode);
+                    }
+                }
+            }
+
+            Ok(self.get_register_cloned(0))
+        } else {
+            Err(RuntimeError::new(
+                format!("Function '{}' not found", func_name),
+                0,
+            ))
+        }
+    }
+
+            // Set up arguments in registers (starting at register 1, reserve 0 for return)
+            for (i, arg) in args.iter().enumerate().take(param_count as usize) {
+                self.set_register(i + 1, arg.clone());
+            }
+
+            // Execute from function start PC using the main execution loop
+            let mut pc = start_pc as usize;
+
+            while pc < bytecode.code.len() && !self.halted {
+                self.steps += 1;
+                if self.steps > self.max_steps {
+                    return Err(RuntimeError::new("Max steps exceeded", pc));
+                }
+
+                let op_byte = bytecode.read_u16(&mut pc)?;
+                let op = Opcode::from_u16(op_byte)
+                    .ok_or_else(|| RuntimeError::new(format!("Unknown opcode: {}", op_byte), pc))?;
+
+                match op {
+                    Opcode::Nop => {}
+                    Opcode::Halt => {
+                        self.halted = true;
+                        return Ok(self.get_register_cloned(0));
+                    }
+                    Opcode::Return => {
+                        // Return from function - value is in register 0
+                        return Ok(self.get_register_cloned(0));
+                    }
+                    Opcode::Const => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let idx = bytecode.read_u32(&mut pc)? as usize;
+                        let val = bytecode.constants.get(idx).cloned().unwrap_or(Value::Nil);
+                        self.set_register(dst, val);
+                    }
+                    Opcode::Move => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let src = bytecode.read_u8(&mut pc)? as usize;
+                        let val = self.get_register(src).clone();
+                        self.set_register(dst, val);
+                    }
+                    Opcode::Add => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_add(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Sub => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_sub(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Mul => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_mul(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Div => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_div(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Mod => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_mod(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Neg => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let src = bytecode.read_u8(&mut pc)? as usize;
+                        let result = match self.get_register(src) {
+                            Value::I64(n) => Value::I64(-n),
+                            Value::F64(n) => Value::F64(-n),
+                            _ => return Err(RuntimeError::new("Cannot negate non-numeric", pc)),
+                        };
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Eq => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = Value::Bool(self.get_register(a) == self.get_register(b));
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Ne => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = Value::Bool(self.get_register(a) != self.get_register(b));
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Lt => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_lt(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Le => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_le(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Gt => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_gt(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Ge => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = self.binary_ge(self.get_register(a), self.get_register(b))?;
+                        self.set_register(dst, result);
+                    }
+                    Opcode::And => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = match (self.get_register(a), self.get_register(b)) {
+                            (Value::Bool(x), Value::Bool(y)) => Value::Bool(*x && *y),
+                            _ => return Err(RuntimeError::new("Cannot && non-booleans", pc)),
+                        };
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Or => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let a = bytecode.read_u8(&mut pc)? as usize;
+                        let b = bytecode.read_u8(&mut pc)? as usize;
+                        let result = match (self.get_register(a), self.get_register(b)) {
+                            (Value::Bool(x), Value::Bool(y)) => Value::Bool(*x || *y),
+                            _ => return Err(RuntimeError::new("Cannot || non-booleans", pc)),
+                        };
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Not => {
+                        let dst = bytecode.read_u8(&mut pc)? as usize;
+                        let src = bytecode.read_u8(&mut pc)? as usize;
+                        let result = match self.get_register(src) {
+                            Value::Bool(b) => Value::Bool(!b),
+                            _ => return Err(RuntimeError::new("Cannot ! non-boolean", pc)),
+                        };
+                        self.set_register(dst, result);
+                    }
+                    Opcode::Jump => {
+                        let target = bytecode.read_u32(&mut pc)? as usize;
+                        pc = target;
+                    }
+                    Opcode::JumpIf => {
+                        let cond_reg = bytecode.read_u8(&mut pc)? as usize;
+                        let target = bytecode.read_u32(&mut pc)? as usize;
+                        if self.get_register(cond_reg).is_truthy() {
+                            pc = target;
+                        }
+                    }
+                    Opcode::JumpIfNot => {
+                        let cond_reg = bytecode.read_u8(&mut pc)? as usize;
+                        let target = bytecode.read_u32(&mut pc)? as usize;
+                        if !self.get_register(cond_reg).is_truthy() {
+                            pc = target;
+                        }
+                    }
+                    Opcode::Call => {
+                        // For simplicity in call_function, just run the full VM
+                        return self.run(bytecode);
+                    }
+                    Opcode::CallAddr => {
+                        // For simplicity in call_function, just run the full VM
+                        return self.run(bytecode);
+                    }
+                    _ => {
+                        // For other opcodes, delegate to the main run loop
+                        return self.run(bytecode);
+                    }
+                }
+            }
+
+            Ok(self.get_register_cloned(0))
+        } else {
+            Err(RuntimeError::new(
+                format!("Function '{}' not found", func_name),
+                0,
+            ))
+        }
+    }
+
     fn call_builtin_by_name(&mut self, name: &str, args: &[Value]) -> RuntimeResult<Value> {
         match name {
             "strlen" => builtins::builtin_strlen(args),

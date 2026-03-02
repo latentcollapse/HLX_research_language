@@ -176,7 +176,10 @@ impl Lowerer {
                 Ok(())
             }
             Item::Struct(_) => Ok(()), // No bytecode for struct definitions (types only)
-            Item::Export(_) => Ok(()), // TODO: implement exports
+            Item::Export(export) => {
+                // Lower the exported item (typically a function)
+                self.lower_item(&export.item)
+            }
             Item::Import(import) => self.lower_import(import),
         }
     }
@@ -333,6 +336,8 @@ impl Lowerer {
     fn lower_body(&mut self, stmts: &[Statement]) -> LowerResult<()> {
         for stmt in stmts {
             self.lower_statement(stmt)?;
+            // Reset temp registers after each statement to prevent overflow
+            self.next_tmp_reg = 200;
         }
         Ok(())
     }
