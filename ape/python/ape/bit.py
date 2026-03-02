@@ -183,6 +183,7 @@ class BitSeed:
         self._idle_cycles = 0
         self._gate_transitions = 0
         self._init_gate_schema()
+        self._init_beliefs_schema()
         self._load_gates()
         self._load_level()
 
@@ -343,8 +344,7 @@ class BitSeed:
         patterns = [m for m in matches[:5] if m['type'] == 'pattern'][:2]
         if patterns:
             if rules:
-                answer_parts.append("
-And from learned patterns:")
+                answer_parts.append("\nAnd from learned patterns:")
             else:
                 answer_parts.append("From my learned patterns:")
             for pat in patterns:
@@ -353,11 +353,9 @@ And from learned patterns:")
         # Add memory context if relevant (up to 1)
         memory = next((m for m in matches if m['type'] == 'memory'), None)
         if memory:
-            answer_parts.append(f"
-Context from {memory['source']}: {memory['content']}")
+            answer_parts.append(f"\nContext from {memory['source']}: {memory['content']}")
         
-        answer = "
-".join(answer_parts) if answer_parts else ""
+        answer = "\n".join(answer_parts) if answer_parts else ""
         return (answer, confidence)
 
     def ask(self, question: str) -> str:
@@ -370,6 +368,17 @@ Context from {memory['source']}: {memory['content']}")
         Returns:
             Bit's answer, or "I don't know yet" if she doesn't have an answer
         """
+        # Phase 19B: Try belief system first for self-referential questions
+        belief_answer, belief_conf = self.answer_from_beliefs(question)
+        if belief_answer and belief_conf >= 0.5:
+            return f"[Symbolic] {belief_answer} (confidence: {belief_conf:.2f})"
+        
+        # Fall back to symbolic reasoning
+        symbolic_answer, symbolic_conf = self.reason_symbolically(question)
+        if symbolic_answer and symbolic_conf >= 0.4:
+            return f"[Symbolic] {symbolic_answer} (confidence: {symbolic_conf:.2f})"
+        
+        # General response with observations and patterns
         answer_parts = [f"[Bit - Level {self.level.value}] thinking about: {question}"]
 
         if self.observations:
@@ -492,6 +501,242 @@ Context from {memory['source']}: {memory['content']}")
             "learned_at": time.time(),
         })
         self._update_communication_score()
+
+    # ------------------------------------------------------------------ #
+    # Belief system - Phase 19B                                          #
+    # ------------------------------------------------------------------ #
+
+    def add_belief(
+        self,
+        subject: str,
+        predicate: str,
+        obj: str,
+        raw_source: str = "",
+        source_type: str = "training",
+        confidence: float = 0.5
+    ) -> dict:
+        """
+        Add a belief to Bitsy's self-model.
+        
+        Beliefs with subject="I" form her self-identity. Duplicate beliefs
+        reinforce existing entries (confidence increases).
+        
+        Args:
+            subject: The subject ("I", "Matt", etc.)
+            predicate: The relationship ("am", "name is", "built", etc.)
+            obj: The object/value ("Bitsy", "an AI", etc.)
+            raw_source: Original text before transformation
+            source_type: "training", "observation", "inference", or "bond"
+            confidence: Initial confidence (0.0-1.0)
+        
+        Returns:
+            Dict with belief status and handle
+        """
+        import hashlib
+        
+        # Create content hash for deduplication
+        content = f"{subject}:{predicate}:{obj}"
+        content_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
+        
+        try:
+            conn = sqlite3.connect(self.corpus_path)
+            cursor = conn.cursor()
+            
+            # Check if belief already exists
+            cursor.execute(
+                "SELECT id, confidence, reinforcement_count FROM beliefs WHERE content_hash = ?",
+                (content_hash,)
+            )
+            row = cursor.fetchone()
+            
+            if row:
+                # Reinforce existing belief
+                belief_id, old_conf, old_count = row
+                new_conf = min(old_conf + 0.05, 1.0)
+                new_count = old_count + 1
+                
+                cursor.execute(
+                    """UPDATE beliefs 
+                       SET confidence = ?, reinforcement_count = ?, created_at = CURRENT_TIMESTAMP
+                       WHERE id = ?""",
+                    (new_conf, new_count, belief_id)
+                )
+                conn.commit()
+                conn.close()
+                
+                return {
+                    "status": "reinforced",
+                    "belief_id": belief_id,
+                    "confidence": new_conf,
+                    "reinforcement_count": new_count,
+                }
+            else:
+                # Insert new belief
+                cursor.execute(
+                    """INSERT INTO beliefs 
+                       (subject, predicate, object, raw_source, source_type, confidence, content_hash)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (subject, predicate, obj, raw_source, source_type, confidence, content_hash)
+                )
+                belief_id = cursor.lastrowid
+                conn.commit()
+                conn.close()
+                
+                return {
+                    "status": "created",
+                    "belief_id": belief_id,
+                    "confidence": confidence,
+                    "reinforcement_count": 1,
+                }
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
+    def query_beliefs(
+        self,
+        subject: str = None,
+        predicate: str = None,
+        min_confidence: float = 0.0,
+        limit: int = 10
+    ) -> list:
+        """
+        Query Bitsy's beliefs.
+        
+        Args:
+            subject: Filter by subject (e.g., "I" for self-model)
+            predicate: Filter by predicate (e.g., "am", "name is")
+            min_confidence: Minimum confidence threshold
+            limit: Max results to return
+        
+        Returns:
+            List of belief dicts with subject, predicate, object, confidence
+        """
+        try:
+            conn = sqlite3.connect(self.corpus_path)
+            cursor = conn.cursor()
+            
+            query = "SELECT subject, predicate, object, confidence, source_type, reinforcement_count FROM beliefs WHERE confidence >= ?"
+            params = [min_confidence]
+            
+            if subject:
+                query += " AND subject = ?"
+                params.append(subject)
+            if predicate:
+                query += " AND predicate LIKE ?"
+                params.append(f"%{predicate}%")
+            
+            query += " ORDER BY confidence DESC, reinforcement_count DESC LIMIT ?"
+            params.append(limit)
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            conn.close()
+            
+            return [
+                {
+                    "subject": row[0],
+                    "predicate": row[1],
+                    "object": row[2],
+                    "confidence": row[3],
+                    "source_type": row[4],
+                    "reinforcement_count": row[5],
+                }
+                for row in rows
+            ]
+        except Exception as e:
+            return []
+
+    def get_self_model(self) -> dict:
+        """
+        Get Bitsy's self-model - all beliefs where subject="I".
+        
+        Returns:
+            Dict with beliefs grouped by predicate type
+        """
+        beliefs = self.query_beliefs(subject="I", min_confidence=0.3)
+        
+        # Group by predicate type for easier consumption
+        identity = {
+            "name": [],
+            "nature": [],  # "am", "was"
+            "capabilities": [],  # "can"
+            "possessions": [],  # "have", "name is"
+            "relationships": [],  # "was built by", etc.
+            "all": beliefs,
+        }
+        
+        for b in beliefs:
+            pred = b["predicate"].lower()
+            if "name" in pred:
+                identity["name"].append(b)
+            elif pred in ("am", "was"):
+                identity["nature"].append(b)
+            elif pred == "can":
+                identity["capabilities"].append(b)
+            elif pred in ("have", "has"):
+                identity["possessions"].append(b)
+            elif "built" in pred or "created" in pred or "by" in pred:
+                identity["relationships"].append(b)
+            else:
+                identity["nature"].append(b)
+        
+        return identity
+
+    def answer_from_beliefs(self, question: str) -> tuple[str, float]:
+        """
+        Attempt to answer a question using the belief system.
+        
+        Returns (answer, confidence). If no good match, returns ("", 0.0).
+        """
+        import re
+        
+        question_lower = question.lower()
+        
+        # Pattern matching for common question types
+        if re.search(r'what is your name|who are you', question_lower):
+            beliefs = self.query_beliefs(subject="I", predicate="name", limit=1)
+            if beliefs:
+                b = beliefs[0]
+                return (f"My name is {b['object']}", b['confidence'])
+            # Try "am" predicate
+            beliefs = self.query_beliefs(subject="I", predicate="am", limit=1)
+            if beliefs:
+                b = beliefs[0]
+                return (f"I am {b['object']}", b['confidence'])
+        
+        if re.search(r'who (built|made|created) you', question_lower):
+            beliefs = self.query_beliefs(subject="I", limit=5)
+            for b in beliefs:
+                if 'built' in b['object'] or 'created' in b['object'] or 'by' in b['object']:
+                    return (f"I am {b['object']}", b['confidence'])
+        
+        if re.search(r'what can you do|what are your capabilities', question_lower):
+            beliefs = self.query_beliefs(subject="I", predicate="can", min_confidence=0.4)
+            if beliefs:
+                caps = [b['object'] for b in beliefs[:3]]
+                conf = sum(b['confidence'] for b in beliefs[:3]) / len(beliefs[:3])
+                return (f"I can {', and I can '.join(caps)}", conf)
+        
+        # Generic: look for keyword matches in beliefs
+        words = set(re.sub(r'[^\w\s]', '', question_lower).split())
+        all_beliefs = self.query_beliefs(subject="I", limit=20)
+        
+        best_match = None
+        best_score = 0
+        
+        for b in all_beliefs:
+            belief_text = f"{b['subject']} {b['predicate']} {b['object']}".lower()
+            belief_words = set(re.sub(r'[^\w\s]', '', belief_text).split())
+            overlap = len(words & belief_words)
+            score = overlap * b['confidence']
+            if score > best_score:
+                best_score = score
+                best_match = b
+        
+        if best_match and best_score > 0.5:
+            return (f"{best_match['subject']} {best_match['predicate']} {best_match['object']}", 
+                    best_match['confidence'])
+        
+        return ("", 0.0)
 
     def on_homeostasis(self) -> None:
         """Called when homeostasis is achieved."""
@@ -658,6 +903,31 @@ Context from {memory['source']}: {memory['content']}")
             conn.close()
         except Exception:
             pass  # Non-fatal — gates work in-memory without persistence
+
+    def _init_beliefs_schema(self) -> None:
+        """Create beliefs table if it doesn't exist (Phase 19B)."""
+        try:
+            conn = sqlite3.connect(self.corpus_path)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS beliefs (
+                    id INTEGER PRIMARY KEY,
+                    subject TEXT NOT NULL,
+                    predicate TEXT NOT NULL,
+                    object TEXT NOT NULL,
+                    raw_source TEXT,
+                    source_type TEXT DEFAULT 'training',
+                    confidence REAL DEFAULT 0.5,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    reinforcement_count INTEGER DEFAULT 1,
+                    content_hash TEXT UNIQUE
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_beliefs_subject ON beliefs(subject)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_beliefs_predicate ON beliefs(predicate)")
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass  # Non-fatal — beliefs work without persistence
 
     def _load_gates(self) -> None:
         """Load gate state from corpus metadata on startup."""

@@ -71,6 +71,13 @@ impl Value {
         }
     }
 
+    pub fn as_map(&self) -> Option<&BTreeMap<String, Value>> {
+        match self {
+            Value::Map(map) => Some(map),
+            _ => None,
+        }
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
             Value::Bytes(b) => b.clone(),

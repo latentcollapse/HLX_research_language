@@ -15,6 +15,7 @@ mod integrity;
 mod lora_adapter;
 mod lowerer;
 mod memory_pool;
+mod module_cache;
 mod promotion;
 mod resolver;
 mod rsi;
@@ -70,6 +71,7 @@ pub use memory_pool::{
     Exchange, ExchangeRole, MemoryPool, MemoryPoolConfig, MemoryStats, Observation, Pattern,
     Question,
 };
+pub use module_cache::{CompiledModule, ImportStyle, ModuleCache};
 pub use promotion::{
     CriteriaProgress, ModificationTypeClass, PromotionCriteria, PromotionGate, PromotionLevel,
 };

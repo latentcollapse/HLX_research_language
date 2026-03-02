@@ -783,6 +783,12 @@ impl RSIPipeline {
     pub fn history(&self) -> &[(u64, ModificationType, bool)] {
         &self.modification_history
     }
+
+    /// Phase 4.4: Check if promotion criteria are met after a successful modification
+    /// Returns the new promotion level if promoted, None otherwise
+    pub fn check_promotion(&mut self) -> Option<crate::promotion::PromotionLevel> {
+        self.promotion_gate.evaluate_promotion()
+    }
 }
 
 impl Default for RSIPipeline {

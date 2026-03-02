@@ -1,0 +1,67 @@
+// Standard Math Library for HLX
+// Provides mathematical constants and utility functions
+
+// Mathematical constants
+export const PI: f64 = 3.14159265358979323846;
+export const E: f64 = 2.71828182845904523536;
+export const TAU: f64 = 6.28318530717958647692;  // 2 * PI
+
+// Utility functions
+
+/// Convert degrees to radians
+export fn deg_to_rad(deg: f64) -> f64 {
+    return deg * PI / 180.0;
+}
+
+/// Convert radians to degrees
+export fn rad_to_deg(rad: f64) -> f64 {
+    return rad * 180.0 / PI;
+}
+
+/// Clamp value between min and max
+export fn clamp(val: f64, min: f64, max: f64) -> f64 {
+    if val < min {
+        return min;
+    }
+    if val > max {
+        return max;
+    }
+    return val;
+}
+
+/// Linear interpolation between a and b by factor t (0.0 to 1.0)
+export fn lerp(a: f64, b: f64, t: f64) -> f64 {
+    return a + (b - a) * clamp(t, 0.0, 1.0);
+}
+
+/// Square of a number
+export fn sq(x: f64) -> f64 {
+    return x * x;
+}
+
+/// Cube of a number
+export fn cube(x: f64) -> f64 {
+    return x * x * x;
+}
+
+/// Sign of a number: -1, 0, or 1
+export fn sign(x: f64) -> i64 {
+    if x < 0.0 {
+        return -1;
+    }
+    if x > 0.0 {
+        return 1;
+    }
+    return 0;
+}
+
+/// Check if value is approximately equal to target within epsilon
+export fn approx_eq(a: f64, b: f64, epsilon: f64) -> bool {
+    return abs(a - b) < epsilon;
+}
+
+/// Map value from one range to another
+export fn map_range(x: f64, in_min: f64, in_max: f64, out_min: f64, out_max: f64) -> f64 {
+    let t = (x - in_min) / (in_max - in_min);
+    return out_min + t * (out_max - out_min);
+}

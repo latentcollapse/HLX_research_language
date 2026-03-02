@@ -14,14 +14,19 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 HLX_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(HLX_ROOT / "ape" / "python"))
-from ape.bit import BitSeed, BitLevel
+sys.path.insert(0, str(HLX_ROOT / "axiom-hlx-stdlib" / "axiom_py" / "python"))
+from axiom.bit import BitSeed, BitLevel
 
 import sqlite3
 
 BIT_DIR = Path(__file__).parent
 CORPUS_PATH = os.environ.get("BIT_CORPUS_PATH", str(BIT_DIR / "corpus.db"))
 bit = BitSeed(corpus_path=CORPUS_PATH)
+
+# Phase 19C/D: Knowledge extraction integration
+sys.path.insert(0, str(BIT_DIR.parent))
+from knowledge_extractor import KnowledgeExtractor
+knowledge_extractor = KnowledgeExtractor(bit)
 
 mcp = FastMCP("bit")
 
@@ -84,6 +89,47 @@ def bit_homeostasis() -> dict:
         "homeostasis_count": bit.homeostasis_count,
         "current_level": bit.level.value,
     }
+
+@mcp.tool()
+def bit_bond(response: str, source: str = "llm") -> dict:
+    """
+    Feed Bit an LLM bond response to extract and learn from.
+    
+    Phase 19D: Bond responses are processed through the knowledge extractor,
+    extracting beliefs (with lower initial confidence) and patterns.
+    """
+    result = knowledge_extractor.ingest_bond_response(response, confidence=0.4)
+    return {
+        "beliefs_extracted": len(result["beliefs_added"]),
+        "patterns_extracted": len(result["patterns_added"]),
+        "beliefs": result["beliefs_added"],
+        "patterns": result["patterns_added"],
+    }
+
+@mcp.tool()
+def bit_get_self_model() -> dict:
+    """
+    Get Bit's self-model - all beliefs where subject='I'.
+    
+    Returns her identity, capabilities, and self-knowledge.
+    """
+    return bit.get_self_model()
+
+@mcp.tool()
+def bit_ingest_identity(content: str) -> dict:
+    """
+    Ingest identity document content (K-12 Level 0).
+    
+    Transforms second-person statements to first-person beliefs.
+    """
+    result = knowledge_extractor.ingest_k12_level0(content)
+    return {
+        "statements_processed": result["total_statements"],
+        "beliefs_added": len(result["beliefs_added"]),
+        "patterns_added": len(result["patterns_added"]),
+        "errors": len(result["errors"]),
+    }
+
 @mcp.resource("bit://identity")
 def bit_identity() -> str:
     """Bit's identity document"""

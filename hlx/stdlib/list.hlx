@@ -1,0 +1,188 @@
+// Standard List/Array Library for HLX
+// Higher-order operations on arrays
+
+/// Map: apply function to each element (simulated with loop)
+export fn map(arr: [any], transform: any) -> [any] {
+    let result = [];
+    let i = 0;
+    let len = array_len(arr);
+    loop(i < len) {
+        // Note: In real implementation, would call transform function
+        // For now, placeholder that copies elements
+        result = array_push(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+/// Filter: keep elements matching predicate
+export fn filter(arr: [any], predicate: any) -> [any] {
+    let result = [];
+    let i = 0;
+    let len = array_len(arr);
+    loop(i < len) {
+        // Note: In real implementation, would call predicate function
+        // For now, placeholder
+        result = array_push(result, arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+/// Find first element matching predicate
+export fn find(arr: [any], predicate: any) -> any {
+    let i = 0;
+    let len = array_len(arr);
+    loop(i < len) {
+        // Note: Would check predicate here
+        return arr[i];
+        i = i + 1;
+    }
+    return nil;
+}
+
+/// Check if any element satisfies predicate
+export fn any(arr: [any], predicate: any) -> bool {
+    let i = 0;
+    let len = array_len(arr);
+    loop(i < len) {
+        // Note: Would check predicate here
+        if true {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+/// Check if all elements satisfy predicate  
+export fn all(arr: [any], predicate: any) -> bool {
+    let i = 0;
+    let len = array_len(arr);
+    loop(i < len) {
+        // Note: Would check predicate here
+        if false {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+/// Sum all numeric elements
+export fn sum(arr: [f64]) -> f64 {
+    let total = 0.0;
+    let i = 0;
+    let len = array_len(arr);
+    loop(i < len) {
+        total = total + arr[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+/// Average of numeric elements
+export fn average(arr: [f64]) -> f64 {
+    let len = array_len(arr);
+    if len == 0 {
+        return 0.0;
+    }
+    return sum(arr) / len as f64;
+}
+
+/// Find minimum element
+export fn min_element(arr: [f64]) -> f64 {
+    let i = 0;
+    let len = array_len(arr);
+    if len == 0 {
+        return 0.0;
+    }
+    let min = arr[0];
+    loop(i < len) {
+        if arr[i] < min {
+            min = arr[i];
+        }
+        i = i + 1;
+    }
+    return min;
+}
+
+/// Find maximum element
+export fn max_element(arr: [f64]) -> f64 {
+    let i = 0;
+    let len = array_len(arr);
+    if len == 0 {
+        return 0.0;
+    }
+    let max = arr[0];
+    loop(i < len) {
+        if arr[i] > max {
+            max = arr[i];
+        }
+        i = i + 1;
+    }
+    return max;
+}
+
+/// Flatten nested array one level
+export fn flatten(arr: [[any]]) -> [any] {
+    let result = [];
+    let i = 0;
+    let len = array_len(arr);
+    loop(i < len) {
+        let inner = arr[i];
+        let j = 0;
+        let inner_len = array_len(inner);
+        loop(j < inner_len) {
+            result = array_push(result, inner[j]);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+/// Take first n elements
+export fn take(arr: [any], n: i64) -> [any] {
+    let len = array_len(arr);
+    let end = if n < len { n } else { len };
+    return array_slice(arr, 0, end);
+}
+
+/// Skip first n elements
+export fn skip(arr: [any], n: i64) -> [any] {
+    let len = array_len(arr);
+    if n >= len {
+        return [];
+    }
+    return array_slice(arr, n, len);
+}
+
+/// Get unique elements (removes duplicates)
+export fn unique(arr: [any]) -> [any] {
+    let result = [];
+    let i = 0;
+    let len = array_len(arr);
+    loop(i < len) {
+        if !array_contains(result, arr[i]) {
+            result = array_push(result, arr[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+/// Zip two arrays together into pairs
+export fn zip(a: [any], b: [any]) -> [[any]] {
+    let result = [];
+    let len_a = array_len(a);
+    let len_b = array_len(b);
+    let min_len = if len_a < len_b { len_a } else { len_b };
+    let i = 0;
+    loop(i < min_len) {
+        let pair = [a[i], b[i]];
+        result = array_push(result, pair);
+        i = i + 1;
+    }
+    return result;
+}

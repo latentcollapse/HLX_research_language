@@ -110,6 +110,24 @@ pub enum Token {
     Eof,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TokenSpan {
+    pub line: usize,
+    pub col: usize,
+}
+
+impl TokenSpan {
+    pub fn new(line: usize, col: usize) -> Self {
+        TokenSpan { line, col }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TokenWithSpan {
+    pub token: Token,
+    pub span: TokenSpan,
+}
+
 #[derive(Debug, Clone)]
 pub struct LexError {
     pub message: String,
@@ -135,7 +153,7 @@ impl From<LexError> for ParseError {
 }
 
 pub struct AstParser {
-    tokens: Vec<Token>,
+    tokens: Vec<TokenWithSpan>,
     pos: usize,
     source_lines: Vec<String>,
 }
@@ -160,11 +178,21 @@ impl AstParser {
         let source = self.source_lines.join("\n");
         let chars: Vec<char> = source.chars().collect();
         let mut pos = 0;
+        let mut line = 1;
+        let mut col = 1;
 
         while pos < chars.len() {
             let c = chars[pos];
 
+            if c == '\n' {
+                line += 1;
+                col = 1;
+                pos += 1;
+                continue;
+            }
+
             if c.is_whitespace() {
+                col += 1;
                 pos += 1;
                 continue;
             }
@@ -177,41 +205,64 @@ impl AstParser {
             }
 
             if c == '"' {
+                let start_line = line;
+                let start_col = col;
                 pos += 1;
+                col += 1;
                 let start = pos;
                 while pos < chars.len() && chars[pos] != '"' {
+                    if chars[pos] == '\n' {
+                        line += 1;
+                        col = 1;
+                    } else {
+                        col += 1;
+                    }
                     pos += 1;
                 }
                 let s: String = chars[start..pos].iter().collect();
-                self.tokens.push(Token::String(s));
+                self.tokens.push(TokenWithSpan {
+                    token: Token::String(s),
+                    span: TokenSpan::new(start_line, start_col),
+                });
                 pos += 1;
+                col += 1;
                 continue;
             }
 
             if c.is_ascii_digit()
                 || (c == '-' && pos + 1 < chars.len() && chars[pos + 1].is_ascii_digit())
             {
+                let start_line = line;
+                let start_col = col;
                 let start = pos;
                 if c == '-' {
                     pos += 1;
+                    col += 1;
                 }
                 while pos < chars.len() && (chars[pos].is_ascii_digit() || chars[pos] == '.') {
                     pos += 1;
+                    col += 1;
                 }
                 let num_str: String = chars[start..pos].iter().collect();
-                if num_str.contains('.') {
-                    self.tokens
-                        .push(Token::Float(num_str.parse().unwrap_or(0.0)));
+                let tok = if num_str.contains('.') {
+                    Token::Float(num_str.parse().unwrap_or(0.0))
                 } else {
-                    self.tokens.push(Token::Int(num_str.parse().unwrap_or(0)));
-                }
+                    Token::Int(num_str.parse().unwrap_or(0))
+                };
+                self.tokens.push(TokenWithSpan {
+                    token: tok,
+                    span: TokenSpan::new(start_line, start_col),
+                });
                 continue;
             }
 
             if c.is_alphabetic() || c == '_' {
+                let start_line = line;
+                let start_col = col;
                 let start = pos;
                 while pos < chars.len() && (chars[pos].is_alphanumeric() || chars[pos] == '_') {
                     pos += 1;
+                    col += 1;
                 }
                 let word: String = chars[start..pos].iter().collect();
                 let tok = match word.as_str() {
@@ -272,10 +323,15 @@ impl AstParser {
                     "false" => Token::Bool(false),
                     _ => Token::Ident(word),
                 };
-                self.tokens.push(tok);
+                self.tokens.push(TokenWithSpan {
+                    token: tok,
+                    span: TokenSpan::new(start_line, start_col),
+                });
                 continue;
             }
 
+            let start_line = line;
+            let start_col = col;
             let tok = match c {
                 '(' => Token::LParen,
                 ')' => Token::RParen,
@@ -291,6 +347,7 @@ impl AstParser {
                 '-' => {
                     if pos + 1 < chars.len() && chars[pos + 1] == '>' {
                         pos += 1;
+                        col += 1;
                         Token::Arrow
                     } else {
                         Token::Minus
@@ -302,9 +359,11 @@ impl AstParser {
                 '=' => {
                     if pos + 1 < chars.len() && chars[pos + 1] == '=' {
                         pos += 1;
+                        col += 1;
                         Token::EqEq
                     } else if pos + 1 < chars.len() && chars[pos + 1] == '>' {
                         pos += 1;
+                        col += 1;
                         Token::FatArrow
                     } else {
                         Token::Eq
@@ -313,6 +372,7 @@ impl AstParser {
                 '!' => {
                     if pos + 1 < chars.len() && chars[pos + 1] == '=' {
                         pos += 1;
+                        col += 1;
                         Token::Ne
                     } else {
                         Token::Bang
@@ -321,6 +381,7 @@ impl AstParser {
                 '<' => {
                     if pos + 1 < chars.len() && chars[pos + 1] == '=' {
                         pos += 1;
+                        col += 1;
                         Token::Le
                     } else {
                         Token::Lt
@@ -329,6 +390,7 @@ impl AstParser {
                 '>' => {
                     if pos + 1 < chars.len() && chars[pos + 1] == '=' {
                         pos += 1;
+                        col += 1;
                         Token::Ge
                     } else {
                         Token::Gt
@@ -337,6 +399,7 @@ impl AstParser {
                 '&' => {
                     if pos + 1 < chars.len() && chars[pos + 1] == '&' {
                         pos += 1;
+                        col += 1;
                         Token::And
                     } else {
                         Token::Amp
@@ -345,6 +408,7 @@ impl AstParser {
                 '|' => {
                     if pos + 1 < chars.len() && chars[pos + 1] == '|' {
                         pos += 1;
+                        col += 1;
                         Token::Or
                     } else {
                         Token::Pipe
@@ -353,21 +417,38 @@ impl AstParser {
                 _ => {
                     return Err(LexError {
                         message: format!("Unexpected character: {}", c),
-                        line: 0,
-                        col: pos,
+                        line,
+                        col,
                     });
                 }
             };
-            self.tokens.push(tok);
+            self.tokens.push(TokenWithSpan {
+                token: tok,
+                span: TokenSpan::new(start_line, start_col),
+            });
             pos += 1;
+            col += 1;
         }
 
-        self.tokens.push(Token::Eof);
+        self.tokens.push(TokenWithSpan {
+            token: Token::Eof,
+            span: TokenSpan::new(line, col),
+        });
         Ok(())
     }
 
     fn current(&self) -> &Token {
-        self.tokens.get(self.pos).unwrap_or(&Token::Eof)
+        self.tokens
+            .get(self.pos)
+            .map(|t| &t.token)
+            .unwrap_or(&Token::Eof)
+    }
+
+    fn current_span(&self) -> TokenSpan {
+        self.tokens
+            .get(self.pos)
+            .map(|t| t.span)
+            .unwrap_or(TokenSpan::new(0, 0))
     }
 
     fn advance(&mut self) -> Token {
@@ -421,14 +502,15 @@ impl AstParser {
 
     fn expect(&mut self, expected: &Token) -> Result<Token, ParseError> {
         let tok = self.current().clone();
+        let span = self.current_span();
         if std::mem::discriminant(&tok) == std::mem::discriminant(expected) {
             self.advance();
             Ok(tok)
         } else {
             Err(ParseError {
                 message: format!("Expected {:?}, got {:?}", expected, tok),
-                line: 0,
-                col: 0,
+                line: span.line,
+                col: span.col,
             })
         }
     }

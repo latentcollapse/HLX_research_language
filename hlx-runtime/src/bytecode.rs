@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 const BYTECODE_MAGIC: &[u8; 4] = b"LC-B";
 const BYTECODE_VERSION: u16 = 1;
 const HEADER_SIZE: usize = 50;
@@ -212,6 +214,8 @@ pub struct Bytecode {
     pub code: Vec<u8>,
     pub constants: Vec<crate::Value>,
     pub strings: Vec<String>,
+    /// Export table: function name -> start PC (Phase 3.3)
+    pub exports: HashMap<String, u32>,
 }
 
 impl Bytecode {
@@ -220,6 +224,7 @@ impl Bytecode {
             code: Vec::new(),
             constants: Vec::new(),
             strings: Vec::new(),
+            exports: HashMap::new(),
         }
     }
 
@@ -292,6 +297,17 @@ impl Bytecode {
             .map_err(|_| crate::RuntimeError::new("Bytecode read: invalid i64 byte slice", *pc))?;
         *pc += 8;
         Ok(i64::from_le_bytes(bytes))
+    }
+
+    pub fn read_f64(&self, pc: &mut usize) -> crate::RuntimeResult<f64> {
+        if *pc + 8 > self.code.len() {
+            return Err(crate::RuntimeError::new("Unexpected end of bytecode", *pc));
+        }
+        let bytes: [u8; 8] = self.code[*pc..*pc + 8]
+            .try_into()
+            .map_err(|_| crate::RuntimeError::new("Bytecode read: invalid f64 byte slice", *pc))?;
+        *pc += 8;
+        Ok(f64::from_le_bytes(bytes))
     }
 }
 
@@ -380,6 +396,7 @@ impl Bytecode {
             code: data[payload_start..payload_start + code_size].to_vec(),
             constants,
             strings,
+            exports: HashMap::new(), // TODO: Phase 3.3 - serialize/deserialize exports
         })
     }
 

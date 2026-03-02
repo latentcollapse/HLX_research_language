@@ -5,7 +5,7 @@
 
 use crate::ast::{
     AgentDef, BinaryOp, CycleLevel, ExprKind, Expression, Function, Gate, Import, Item, ModuleDef,
-    Parameter, Program, Statement, StmtKind, UnaryOp,
+    Parameter, Pattern, Program, Statement, StmtKind, UnaryOp,
 };
 use crate::ast_parser::AstParser;
 use crate::resolver::{ImportStyle, ModuleResolver};
@@ -73,7 +73,7 @@ impl Lowerer {
             functions: HashMap::new(),
             variables: HashMap::new(),
             next_var_reg: 0,
-            next_tmp_reg: 20,
+            next_tmp_reg: 200,
             patch_points: Vec::new(),
             loop_stack: Vec::new(),
             pending_imports: Vec::new(),
@@ -545,9 +545,91 @@ impl Lowerer {
                     self.patch_jump(ep, end_pc)?;
                 }
             }
-            StmtKind::For { .. } => {
-                // For loops require iterator protocol — emit a Nop placeholder
-                self.emit(Opcode::Nop);
+            StmtKind::For {
+                pattern,
+                iterable,
+                body,
+            } => {
+                // Lower: for item in collection { body }
+                // As:
+                //   i = 0
+                //   len = collection.len()
+                // loop_start:
+                //   if i >= len goto loop_end
+                //   item = collection[i]
+                //   [body]
+                //   i = i + 1
+                //   goto loop_start
+                // loop_end:
+
+                // Allocate registers for loop state
+                let i_reg = self.alloc_tmp()?;
+                let len_reg = self.alloc_tmp()?;
+                let item_reg = self.alloc_tmp()?;
+
+                // Initialize i = 0
+                let zero_idx = self.bytecode.add_constant(Value::I64(0));
+                self.emit(Opcode::Const);
+                self.emit_u8(i_reg);
+                self.emit_u32(zero_idx);
+
+                // Get collection and its length
+                let coll_reg = self.alloc_tmp()?;
+                self.lower_expr(iterable, coll_reg)?;
+
+                // len = collection.len()
+                self.emit(Opcode::Len);
+                self.emit_u8(len_reg);
+                self.emit_u8(coll_reg);
+
+                // loop_start label
+                let loop_start = self.current_pc();
+
+                // cmp = i >= len
+                self.emit(Opcode::Ge);
+                self.emit_u8(item_reg); // reuse item_reg for cmp result
+                self.emit_u8(i_reg);
+                self.emit_u8(len_reg);
+
+                // if cmp goto loop_end
+                self.emit(Opcode::JumpIf);
+                self.emit_u8(item_reg);
+                let exit_jump = self.current_pc();
+                self.emit_u32(0); // placeholder
+
+                // item = collection[i]
+                self.emit(Opcode::Get);
+                self.emit_u8(item_reg);
+                self.emit_u8(coll_reg);
+                self.emit_u8(i_reg);
+
+                // Bind pattern to item_reg - for simple ident pattern, store in variable
+                if let Pattern::Identifier(name) = pattern {
+                    self.variables.insert(name.clone(), item_reg);
+                }
+
+                // Lower body
+                self.lower_body(body)?;
+
+                // i = i + 1
+                let one_idx = self.bytecode.add_constant(Value::I64(1));
+                let tmp_reg = self.alloc_tmp()?;
+                self.emit(Opcode::Const);
+                self.emit_u8(tmp_reg);
+                self.emit_u32(one_idx);
+
+                self.emit(Opcode::Add);
+                self.emit_u8(i_reg);
+                self.emit_u8(i_reg);
+                self.emit_u8(tmp_reg);
+
+                // goto loop_start
+                self.emit(Opcode::Jump);
+                self.emit_u32(loop_start as u32);
+
+                // loop_end - patch exit jump
+                let loop_end = self.current_pc();
+                self.patch_jump(exit_jump, loop_end)?;
             }
             StmtKind::Module(_) | StmtKind::Import(_) | StmtKind::Export(_) => {}
         }
@@ -731,12 +813,91 @@ impl Lowerer {
                     self.emit_u8(val_reg);
                 }
             }
+            // Lower match expression as chain of comparisons with jumps
+            ExprKind::Match { value, cases } => {
+                // Evaluate value first
+                let val_reg = self.alloc_tmp()?;
+                self.lower_expr(value, val_reg)?;
+
+                // Track patches for end jumps
+                let mut end_patches = Vec::new();
+
+                for case in cases {
+                    // Skip wildcard - will be handled at end
+                    if matches!(case.pattern, Pattern::Wildcard) {
+                        // Lower wildcard body directly
+                        self.lower_expr(&case.body, dst)?;
+                        break;
+                    }
+
+                    // Load pattern value into temp register
+                    let pat_reg = self.alloc_tmp()?;
+                    match &case.pattern {
+                        Pattern::Int(n) => {
+                            let idx = self.bytecode.add_constant(Value::I64(*n));
+                            self.emit(Opcode::Const);
+                            self.emit_u8(pat_reg);
+                            self.emit_u32(idx);
+                        }
+                        Pattern::String(s) => {
+                            let idx = self.bytecode.add_constant(Value::String(s.clone()));
+                            self.emit(Opcode::Const);
+                            self.emit_u8(pat_reg);
+                            self.emit_u32(idx);
+                        }
+                        Pattern::Identifier(_) => {
+                            // Binding pattern - treat as wildcard for comparison
+                            // (always matches, binds value to name)
+                            let idx = self.bytecode.add_constant(Value::Bool(true));
+                            self.emit(Opcode::Const);
+                            self.emit_u8(pat_reg);
+                            self.emit_u32(idx);
+                        }
+                        _ => {
+                            // Unsupported pattern - emit nop for now
+                            self.emit(Opcode::Nop);
+                            continue;
+                        }
+                    }
+
+                    // Compare value == pattern
+                    let cmp_reg = self.alloc_tmp()?;
+                    self.emit(Opcode::Eq);
+                    self.emit_u8(cmp_reg);
+                    self.emit_u8(val_reg);
+                    self.emit_u8(pat_reg);
+
+                    // If not equal, jump to next case
+                    self.emit(Opcode::JumpIfNot);
+                    self.emit_u8(cmp_reg);
+                    let next_case_jump = self.current_pc();
+                    self.emit_u32(0); // placeholder
+
+                    // Lower case body
+                    self.lower_expr(&case.body, dst)?;
+
+                    // Jump to end
+                    self.emit(Opcode::Jump);
+                    let end_jump = self.current_pc();
+                    self.emit_u32(0); // placeholder
+                    end_patches.push(end_jump);
+
+                    // Patch next case jump
+                    let next_case_pc = self.current_pc();
+                    self.patch_jump(next_case_jump, next_case_pc)?;
+                }
+
+                // Patch all end jumps
+                let end_pc = self.current_pc();
+                for ep in end_patches {
+                    self.patch_jump(ep, end_pc)?;
+                }
+            }
             // Unsupported in bytecode — emit Nop placeholders
             ExprKind::Range { .. }
             | ExprKind::Contract { .. }
             | ExprKind::Lambda { .. }
-            | ExprKind::Conditional { .. }
-            | ExprKind::Match { .. } => {
+            | ExprKind::Conditional { .. } => {
                 self.emit(Opcode::Nop);
             }
         }
@@ -814,8 +975,13 @@ impl Lowerer {
             self.emit_u8(0);
 
             // Emit governance check
+            // VM expects: dst (u8), effect_type (u8), desc_idx (u32)
+            let effect_type: u8 = 0; // Modify effect type
+            let desc_idx = self.get_or_add_string("governance check");
             self.emit(Opcode::GovernCheck);
             self.emit_u8(0); // result reg
+            self.emit_u8(effect_type);
+            self.emit_u32(desc_idx);
         }
 
         // Lower cycles
@@ -921,9 +1087,9 @@ impl Lowerer {
 
     fn alloc_var(&mut self, name: &str) -> LowerResult<u8> {
         let reg = self.next_var_reg;
-        if reg >= 19 {
-            // Reserve regs 0-19 for variables, 20+ for temps
-            return Err(LowerError::new("Too many variables (max 19)"));
+        if reg >= 200 {
+            // Reserve regs 0-199 for variables, 200+ for temps
+            return Err(LowerError::new("Too many variables (max 200)"));
         }
         self.next_var_reg += 1;
         self.variables.insert(name.to_string(), reg);
@@ -940,7 +1106,7 @@ impl Lowerer {
 
     fn alloc_tmp(&mut self) -> LowerResult<u8> {
         let reg = self.next_tmp_reg;
-        if reg >= 149 {
+        if reg >= 230 {
             return Err(LowerError::new(
                 "Expression too complex (temp register overflow)",
             ));
@@ -959,7 +1125,7 @@ impl Lowerer {
 
         self.variables.clear();
         self.next_var_reg = 0;
-        self.next_tmp_reg = 20;
+        self.next_tmp_reg = 200;
 
         let result = f(self);
 
@@ -991,7 +1157,7 @@ impl Lowerer {
                     self.bytecode.code[call_opcode_pos] = Opcode::CallAddr as u8;
 
                     // Write 32-bit PC into the name_idx slot (same 4 bytes, no size change)
-                    self.bytecode.code[call_site]     = (start_pc & 0xFF) as u8;
+                    self.bytecode.code[call_site] = (start_pc & 0xFF) as u8;
                     self.bytecode.code[call_site + 1] = ((start_pc >> 8) & 0xFF) as u8;
                     self.bytecode.code[call_site + 2] = ((start_pc >> 16) & 0xFF) as u8;
                     self.bytecode.code[call_site + 3] = ((start_pc >> 24) & 0xFF) as u8;

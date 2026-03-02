@@ -1,0 +1,124 @@
+// Standard String Library for HLX
+// Higher-order string operations
+
+/// Join array of strings with delimiter
+export fn join(parts: [string], delim: string) -> string {
+    let result = "";
+    let i = 0;
+    let len = array_len(parts);
+    loop(i < len) {
+        result = concat(result, parts[i]);
+        i = i + 1;
+        if i < len {
+            result = concat(result, delim);
+        }
+    }
+    return result;
+}
+
+/// Check if string contains any of the substrings
+export fn contains_any(s: string, subs: [string]) -> bool {
+    let i = 0;
+    let len = array_len(subs);
+    loop(i < len) {
+        if str_contains(s, subs[i]) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+/// Check if string contains all of the substrings
+export fn contains_all(s: string, subs: [string]) -> bool {
+    let i = 0;
+    let len = array_len(subs);
+    loop(i < len) {
+        if !str_contains(s, subs[i]) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+/// Count occurrences of substring
+export fn count(s: string, sub: string) -> i64 {
+    let count = 0;
+    let idx = str_index_of(s, sub);
+    loop(idx >= 0) {
+        count = count + 1;
+        // Search from after this occurrence
+        let remaining = str_substring(s, idx + 1, strlen(s));
+        idx = str_index_of(remaining, sub);
+    }
+    return count;
+}
+
+/// Check if string is empty or whitespace only
+export fn is_blank(s: string) -> bool {
+    return str_equals(str_trim(s), "");
+}
+
+/// Repeat string n times
+export fn repeat(s: string, n: i64) -> string {
+    let result = "";
+    let i = 0;
+    loop(i < n) {
+        result = concat(result, s);
+        i = i + 1;
+    }
+    return result;
+}
+
+/// Pad string to minimum length with character on left
+export fn pad_left(s: string, min_len: i64, pad_char: string) -> string {
+    let s_len = strlen(s);
+    if s_len >= min_len {
+        return s;
+    }
+    let needed = min_len - s_len;
+    let padding = repeat(pad_char, needed);
+    return concat(padding, s);
+}
+
+/// Pad string to minimum length with character on right
+export fn pad_right(s: string, min_len: i64, pad_char: string) -> string {
+    let s_len = strlen(s);
+    if s_len >= min_len {
+        return s;
+    }
+    let needed = min_len - s_len;
+    let padding = repeat(pad_char, needed);
+    return concat(s, padding);
+}
+
+/// Extract substring between start and end markers
+export fn between(s: string, start: string, end: string) -> string {
+    let start_idx = str_index_of(s, start);
+    if start_idx < 0 {
+        return "";
+    }
+    let after_start = start_idx + strlen(start);
+    let end_idx = str_index_of(str_substring(s, after_start, strlen(s)), end);
+    if end_idx < 0 {
+        return "";
+    }
+    return str_substring(s, after_start, after_start + end_idx);
+}
+
+/// Remove prefix if present
+export fn remove_prefix(s: string, prefix: string) -> string {
+    if str_starts_with(s, prefix) {
+        return str_substring(s, strlen(prefix), strlen(s));
+    }
+    return s;
+}
+
+/// Remove suffix if present
+export fn remove_suffix(s: string, suffix: string) -> string {
+    if str_ends_with(s, suffix) {
+        return str_substring(s, 0, strlen(s) - strlen(suffix));
+    }
+    return s;
+}

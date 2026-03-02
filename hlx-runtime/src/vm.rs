@@ -1143,6 +1143,84 @@ impl Vm {
                                 l_cycles: l,
                             }
                         }
+                        2 => {
+                            // BehaviorAdd: pattern_len (u8), pattern data, response_len (u8), response data
+                            let pattern_len = bytecode.read_u8(&mut pc)? as usize;
+                            let mut pattern = Vec::with_capacity(pattern_len);
+                            for _ in 0..pattern_len {
+                                let val = bytecode.read_f64(&mut pc)?;
+                                pattern.push(val);
+                            }
+                            let response_len = bytecode.read_u8(&mut pc)? as usize;
+                            let mut response = Vec::with_capacity(response_len);
+                            for _ in 0..response_len {
+                                let val = bytecode.read_f64(&mut pc)?;
+                                response.push(val);
+                            }
+                            ModificationType::BehaviorAdd { pattern, response }
+                        }
+                        3 => {
+                            // BehaviorRemove: index (u32)
+                            let idx = bytecode.read_u32(&mut pc)? as usize;
+                            ModificationType::BehaviorRemove { index: idx }
+                        }
+                        4 => {
+                            // ThresholdChange: name_idx (u32), old_val (u8), new_val (u8)
+                            let name_idx = bytecode.read_u32(&mut pc)? as usize;
+                            let name = bytecode.strings.get(name_idx).cloned().unwrap_or_default();
+                            let old_val = bytecode.read_u8(&mut pc)? as f64 / 100.0;
+                            let new_val = bytecode.read_u8(&mut pc)? as f64 / 100.0;
+                            ModificationType::ThresholdChange {
+                                name,
+                                old_value: old_val,
+                                new_value: new_val,
+                            }
+                        }
+                        5 => {
+                            // WeightMatrixUpdate: layer (u32), delta_len (u8), delta data
+                            let layer = bytecode.read_u32(&mut pc)? as usize;
+                            let delta_len = bytecode.read_u8(&mut pc)? as usize;
+                            let mut delta = Vec::with_capacity(delta_len);
+                            for _ in 0..delta_len {
+                                let val = bytecode.read_f64(&mut pc)?;
+                                delta.push(val);
+                            }
+                            ModificationType::WeightMatrixUpdate { layer, delta }
+                        }
+                        6 => {
+                            // RuleAdd: name_idx (u32), desc_idx (u32), confidence (u8)
+                            let name_idx = bytecode.read_u32(&mut pc)? as usize;
+                            let name = bytecode.strings.get(name_idx).cloned().unwrap_or_default();
+                            let desc_idx = bytecode.read_u32(&mut pc)? as usize;
+                            let description =
+                                bytecode.strings.get(desc_idx).cloned().unwrap_or_default();
+                            let conf = bytecode.read_u8(&mut pc)? as f64 / 100.0;
+                            ModificationType::RuleAdd {
+                                name,
+                                description,
+                                confidence: conf,
+                            }
+                        }
+                        7 => {
+                            // RuleRemove: name_idx (u32)
+                            let name_idx = bytecode.read_u32(&mut pc)? as usize;
+                            let name = bytecode.strings.get(name_idx).cloned().unwrap_or_default();
+                            ModificationType::RuleRemove { name }
+                        }
+                        8 => {
+                            // RuleUpdate: name_idx (u32), desc_idx (u32), confidence (u8)
+                            let name_idx = bytecode.read_u32(&mut pc)? as usize;
+                            let name = bytecode.strings.get(name_idx).cloned().unwrap_or_default();
+                            let desc_idx = bytecode.read_u32(&mut pc)? as usize;
+                            let description =
+                                bytecode.strings.get(desc_idx).cloned().unwrap_or_default();
+                            let conf = bytecode.read_u8(&mut pc)? as f64 / 100.0;
+                            ModificationType::RuleUpdate {
+                                name,
+                                description,
+                                confidence: conf,
+                            }
+                        }
                         _ => return Err(RuntimeError::new("Unknown modification type", pc)),
                     };
 
@@ -1185,6 +1263,13 @@ impl Vm {
                         .entry(agent_id)
                         .or_insert_with(AgentMemory::new);
                     self.rsi_pipeline.apply_proposal(proposal_id, memory)?;
+
+                    // Phase 4.4: Auto-promotion after successful RSIApply
+                    // Check if promotion criteria are met
+                    if let Some(new_level) = self.rsi_pipeline.check_promotion() {
+                        // Promotion occurred - log it (could emit an event in the future)
+                        let _ = new_level; // Use the promotion level if needed
+                    }
                 }
 
                 Opcode::RSIRollback => {
@@ -1581,6 +1666,54 @@ impl Vm {
             "str_equals" => builtins::builtin_str_equals(args),
             "sqrt" => builtins::builtin_sqrt(args),
             "hash" => builtins::builtin_hash(args),
+            // Phase 1.4: Math builtins
+            "abs" => builtins::builtin_abs(args),
+            "floor" => builtins::builtin_floor(args),
+            "ceil" => builtins::builtin_ceil(args),
+            "round" => builtins::builtin_round(args),
+            "min" => builtins::builtin_min(args),
+            "max" => builtins::builtin_max(args),
+            "pow" => builtins::builtin_pow(args),
+            "rand" => builtins::builtin_rand(args),
+            "rand_range" => builtins::builtin_rand_range(args),
+            // Phase 1.4: Type conversion builtins
+            "f64_to_i64" => builtins::builtin_f64_to_i64(args),
+            "i64_to_f64" => builtins::builtin_i64_to_f64(args),
+            "parse_i64" => builtins::builtin_parse_i64(args),
+            "parse_f64" => builtins::builtin_parse_f64(args),
+            "type_of" => builtins::builtin_type_of(args),
+            // Phase 1.4: String builtins
+            "str_split" => builtins::builtin_str_split(args),
+            "str_trim" => builtins::builtin_str_trim(args),
+            "str_replace" => builtins::builtin_str_replace(args),
+            "str_to_upper" => builtins::builtin_str_to_upper(args),
+            "str_to_lower" => builtins::builtin_str_to_lower(args),
+            "str_starts_with" => builtins::builtin_str_starts_with(args),
+            "str_ends_with" => builtins::builtin_str_ends_with(args),
+            "str_index_of" => builtins::builtin_str_index_of(args),
+            // Phase 1.4: Array builtins
+            "array_slice" => builtins::builtin_array_slice(args),
+            "array_concat" => builtins::builtin_array_concat(args),
+            "array_contains" => builtins::builtin_array_contains(args),
+            "array_pop" => builtins::builtin_array_pop(args),
+            "array_reverse" => builtins::builtin_array_reverse(args),
+            "array_sort" => builtins::builtin_array_sort(args),
+            // Phase 1.4: Map builtins
+            "map_get" => builtins::builtin_map_get(args),
+            "map_set" => builtins::builtin_map_set(args),
+            "map_keys" => builtins::builtin_map_keys(args),
+            "map_values" => builtins::builtin_map_values(args),
+            "map_contains" => builtins::builtin_map_contains(args),
+            "map_remove" => builtins::builtin_map_remove(args),
+            // Phase 1.4: I/O builtins
+            "read_file" => builtins::builtin_read_file(args),
+            "write_file" => builtins::builtin_write_file(args),
+            "clock_ms" => builtins::builtin_clock_ms(args),
+            // Phase 4.3: Homeostasis and promotion builtins
+            "homeostasis_pressure" => builtins::builtin_homeostasis_pressure(args),
+            "promotion_level" => builtins::builtin_promotion_level(args),
+            "can_modify_self" => builtins::builtin_can_modify_self(args),
+            "rsi_history" => builtins::builtin_rsi_history(args),
             _ => Err(RuntimeError::new(format!("Unknown function: {}", name), 0)),
         }
     }
