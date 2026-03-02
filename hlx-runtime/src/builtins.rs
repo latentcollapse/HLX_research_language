@@ -495,8 +495,7 @@ pub fn builtin_zeros(args: &[Value]) -> RuntimeResult<Value> {
     if size <= 0 || size > 10000 {
         return Err(RuntimeError::new("zeros: invalid size", 0));
     }
-    let arr: Vec<Value> = (0..size as usize).map(|_| Value::F64(0.0)).collect();
-    Ok(Value::Array(arr))
+    Ok(Value::Tensor(Tensor::zeros(vec![size as usize])))
 }
 
 pub fn builtin_i64_to_str(args: &[Value]) -> RuntimeResult<Value> {
@@ -1145,6 +1144,66 @@ fn bond_http_request(
     }
 
     Ok(response)
+}
+
+// ============================================================================
+// Tensor builtins for Bit
+// ============================================================================
+
+/// set_tensor(tensor, index, value) - Set tensor element at index
+pub fn builtin_set_tensor(args: &[Value]) -> RuntimeResult<Value> {
+    if args.len() != 3 {
+        return Err(RuntimeError::new(
+            "set_tensor requires 3 args: tensor, index, value",
+            0,
+        ));
+    }
+
+    let index = match &args[1] {
+        Value::I64(n) => *n as usize,
+        _ => return Err(RuntimeError::new("set_tensor: index must be i64", 0)),
+    };
+
+    let value = match &args[2] {
+        Value::F64(f) => *f,
+        Value::I64(n) => *n as f64,
+        _ => return Err(RuntimeError::new("set_tensor: value must be numeric", 0)),
+    };
+
+    // Clone the tensor, modify it, return it
+    match &args[0] {
+        Value::Tensor(t) => {
+            let mut new_tensor = t.clone();
+            match new_tensor.set(&[index], value) {
+                Ok(()) => Ok(Value::Tensor(new_tensor)),
+                Err(e) => Err(RuntimeError::new(format!("set_tensor: {:?}", e), 0)),
+            }
+        }
+        _ => Err(RuntimeError::new("set_tensor: first arg must be tensor", 0)),
+    }
+}
+
+/// get_tensor(tensor, index) - Get tensor element at index
+pub fn builtin_get_tensor(args: &[Value]) -> RuntimeResult<Value> {
+    if args.len() != 2 {
+        return Err(RuntimeError::new(
+            "get_tensor requires 2 args: tensor, index",
+            0,
+        ));
+    }
+
+    let index = match &args[1] {
+        Value::I64(n) => *n as usize,
+        _ => return Err(RuntimeError::new("get_tensor: index must be i64", 0)),
+    };
+
+    match &args[0] {
+        Value::Tensor(t) => match t.get(&[index]) {
+            Ok(val) => Ok(Value::F64(val)),
+            Err(e) => Err(RuntimeError::new(format!("get_tensor: {:?}", e), 0)),
+        },
+        _ => Err(RuntimeError::new("get_tensor: first arg must be tensor", 0)),
+    }
 }
 
 #[cfg(test)]

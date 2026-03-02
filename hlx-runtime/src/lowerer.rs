@@ -9,6 +9,7 @@ use crate::ast::{
 };
 use crate::ast_parser::AstParser;
 use crate::resolver::{ImportStyle, ModuleResolver};
+use crate::tensor::Tensor;
 use crate::{Bytecode, Opcode, Value};
 use std::collections::HashMap;
 use std::path::Path;
@@ -350,12 +351,25 @@ impl Lowerer {
                 name, value, ty, ..
             } => {
                 let reg = self.alloc_var(name)?;
-                // Handle optional value - initialize to 0 if not provided
                 if let Some(val) = value {
                     self.lower_expr(val, reg)?;
                 } else {
-                    // Initialize to 0 (default for primitives)
-                    let idx = self.bytecode.add_constant(Value::I64(0));
+                    // Check for Tensor[N] type annotation and auto-initialize to zero tensor
+                    let default_val = if let Some(ann) = ty {
+                        if ann.name.starts_with("Tensor[") {
+                            let size: usize = ann.name
+                                .trim_start_matches("Tensor[")
+                                .trim_end_matches(']')
+                                .parse()
+                                .unwrap_or(64);
+                            Value::Tensor(Tensor::zeros(vec![size]))
+                        } else {
+                            Value::I64(0)
+                        }
+                    } else {
+                        Value::I64(0)
+                    };
+                    let idx = self.bytecode.add_constant(default_val);
                     self.emit(Opcode::Const);
                     self.emit_u8(reg);
                     self.emit_u32(idx);

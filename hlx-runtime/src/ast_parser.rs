@@ -557,6 +557,9 @@ impl AstParser {
             self.advance();
         }
 
+        // Merge all __top_level__ functions into one
+        Self::merge_top_level_items(&mut prog.items);
+
         prog.rebuild_index();
         Ok(prog)
     }
@@ -603,6 +606,54 @@ impl AstParser {
                     attributes: Vec::new(),
                     is_exported: false,
                 }))
+            }
+        }
+    }
+
+    /// Merge all __top_level__ functions into a single one.
+    /// Each module-level `let` creates a separate __top_level__ function.
+    /// This consolidates them so all initialization happens in one function.
+    fn merge_top_level_items(items: &mut Vec<Item>) {
+        let mut top_level_stmts: Vec<crate::ast::Statement> = Vec::new();
+        let mut first_top_level_idx: Option<usize> = None;
+        let mut indices_to_remove: Vec<usize> = Vec::new();
+
+        for (i, item) in items.iter().enumerate() {
+            let is_top_level = match item {
+                Item::Function(f) if f.name == "__top_level__" => true,
+                _ => false,
+            };
+            if is_top_level {
+                if let Item::Function(f) = item {
+                    top_level_stmts.extend(f.body.clone());
+                    if first_top_level_idx.is_none() {
+                        first_top_level_idx = Some(i);
+                    } else {
+                        indices_to_remove.push(i);
+                    }
+                }
+            }
+        }
+
+        // If we found multiple __top_level__ functions, merge them
+        if let Some(first_idx) = first_top_level_idx {
+            if !indices_to_remove.is_empty() {
+                // Replace the first __top_level__ with the merged version
+                items[first_idx] = Item::Function(crate::ast::Function {
+                    id: NodeId::new(),
+                    span: SourceSpan::unknown(),
+                    name: "__top_level__".to_string(),
+                    parameters: Vec::new(),
+                    return_type: None,
+                    body: top_level_stmts,
+                    attributes: Vec::new(),
+                    is_exported: false,
+                });
+
+                // Remove duplicates in reverse order to preserve indices
+                for idx in indices_to_remove.into_iter().rev() {
+                    items.remove(idx);
+                }
             }
         }
     }
@@ -1089,6 +1140,9 @@ impl AstParser {
             items.push(self.parse_item()?);
         }
         self.expect(&Token::RBrace)?;
+
+        // Merge all __top_level__ functions into one
+        Self::merge_top_level_items(&mut items);
 
         Ok(ModuleDef {
             id: NodeId::new(),
