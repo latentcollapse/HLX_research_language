@@ -14,6 +14,8 @@ use serde_json::json;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 const DB_PATH: &str = "hlx_memory.db";
 
@@ -257,6 +259,10 @@ fn run_bond_handshake(endpoint: &str, prompt: &str, _context: &str) -> String {
 }
 
 fn format_runtime_error(e: &hlx_runtime::RuntimeError) -> anyhow::Error {
+    if e.message.starts_with("Shutdown requested") {
+        eprintln!("Interrupted.");
+        std::process::exit(130);
+    }
     let line_info = if e.line > 0 {
         format!(" at line {}", e.line)
     } else {
@@ -270,7 +276,32 @@ fn format_runtime_error(e: &hlx_runtime::RuntimeError) -> anyhow::Error {
 }
 
 fn main() -> Result<()> {
+    // Initialize logging: WARN by default, override with RUST_LOG or --debug/--verbose
     let args = Args::parse();
+
+    let log_level = if args.debug {
+        log::LevelFilter::Trace
+    } else if args.verbose {
+        log::LevelFilter::Info
+    } else {
+        log::LevelFilter::Warn
+    };
+    env_logger::Builder::from_env(env_logger::Env::default())
+        .filter_level(log_level)
+        .format_timestamp(None)
+        .init();
+
+    // Ctrl+C shutdown flag — set by signal handler, polled by VM every 1000 steps
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+    let shutdown_flag_clone = Arc::clone(&shutdown_flag);
+    ctrlc::set_handler(move || {
+        if shutdown_flag_clone.swap(true, Ordering::Relaxed) {
+            // Second Ctrl+C — force exit immediately
+            std::process::exit(130);
+        }
+        eprintln!("\nInterrupted — finishing current step...");
+    })
+    .ok(); // Non-fatal if signal registration fails (e.g. in tests)
 
     if args.repl {
         run_repl(args.verbose, args.max_steps)?;
@@ -323,17 +354,15 @@ fn main() -> Result<()> {
 
         match AxiomEngine::from_file(&resolved_path) {
             Ok(engine) => {
-                eprintln!("[APE] Governance loaded: {}", resolved_path.display());
+                log::info!(target: "ape", "Governance loaded: {}", resolved_path.display());
                 Some(engine)
             }
             Err(e) => {
-                eprintln!(
-                    "[APE] Warning: Could not load policy '{}': {}",
+                log::warn!(
+                    target: "ape",
+                    "Could not load policy '{}': {}. Running without governance.",
                     resolved_path.display(),
                     e
-                );
-                eprintln!(
-                    "[APE] Running without governance. Use --no-verify to suppress this warning."
                 );
                 None
             }
@@ -358,7 +387,7 @@ fn main() -> Result<()> {
                 ));
             }
             _ => {
-                eprintln!("[APE] ✓ Compile verified");
+                log::info!(target: "ape", "Compile verified");
             }
         }
     }
@@ -410,7 +439,8 @@ fn main() -> Result<()> {
     let mut vm = Vm::new()
         .with_max_steps(args.max_steps)
         .with_debug(args.debug)
-        .with_memory_limits(args.max_array_size, args.max_string_size);
+        .with_memory_limits(args.max_array_size, args.max_string_size)
+        .with_shutdown_flag(Arc::clone(&shutdown_flag));
 
     if let Some(timeout) = args.timeout_ms {
         vm = vm.with_timeout(timeout);
@@ -422,14 +452,15 @@ fn main() -> Result<()> {
             for (pattern, confidence) in patterns {
                 vm.mem_store(pattern, confidence);
             }
-            eprintln!(
-                "[Memory] Loaded {} patterns from {}",
+            log::info!(
+                target: "memory",
+                "Loaded {} patterns from {}",
                 vm.memory().len(),
                 args.memory_db
             );
         }
         Err(e) => {
-            eprintln!("[Memory] Warning: Could not load patterns from DB: {}", e);
+            log::warn!(target: "memory", "Could not load patterns from DB: {}", e);
         }
     }
 
@@ -476,7 +507,7 @@ fn main() -> Result<()> {
         // Store in SQLite DB for persistence (open new connection for thread safety)
         if let Ok(conn) = Connection::open(&memory_db_path) {
             if let Err(e) = store_pattern_in_db(&conn, &pattern, confidence) {
-                eprintln!("[Memory] Warning: Failed to store pattern in DB: {}", e);
+                log::warn!(target: "memory", "Failed to store pattern in DB: {}", e);
             }
         }
         hlx_runtime::Value::Bool(true)
@@ -679,9 +710,10 @@ fn main() -> Result<()> {
         .map(|b| format!("{:02x}", b))
         .collect::<Vec<_>>()
         .join(" ");
-    eprintln!("Bytecode: {}", bytecode_hex);
+    log::debug!(target: "hlx_run", "Bytecode: {}", bytecode_hex);
     for (name, (start_pc, params)) in &functions {
-        eprintln!(
+        log::debug!(
+            target: "hlx_run",
             "Registering function: {} at PC {} with {} params",
             name, start_pc, params
         );
@@ -692,7 +724,7 @@ fn main() -> Result<()> {
     let result = if let Some(func_name) = args.func {
         // First, run __top_level__ to initialize module-level latent variables
         if functions.contains_key("__top_level__") {
-            eprintln!("Running __top_level__ initialization...");
+            log::debug!(target: "hlx_run", "Running __top_level__ initialization...");
             vm.call_function(&bytecode, "__top_level__", &[])
                 .map_err(|e| {
                     anyhow::anyhow!("__top_level__ initialization error: {}", e.message)
@@ -715,11 +747,7 @@ fn main() -> Result<()> {
             })
             .collect();
 
-        eprintln!(
-            "Calling function: {} with {} args",
-            func_name,
-            func_args.len()
-        );
+        log::debug!(target: "hlx_run", "Calling function: {} with {} args", func_name, func_args.len());
         vm.call_function(&bytecode, &func_name, &func_args)
             .map_err(|e| format_runtime_error(&e))?
     } else {
@@ -752,7 +780,7 @@ fn main() -> Result<()> {
                 ));
             }
             _ => {
-                eprintln!("[APE] ✓ Output verified");
+                log::info!(target: "ape", "Output verified");
             }
         }
     }
@@ -828,13 +856,10 @@ fn run_repl(verbose: bool, max_steps: usize) -> Result<()> {
                             let mut vm = Vm::new().with_max_steps(max_steps);
 
                             // Register functions with VM
-                            eprintln!("Bytecode len: {}", bytecode.code.len());
-                            eprintln!(
-                                "Bytecode: {:?}",
-                                &bytecode.code[..bytecode.code.len().min(100)]
-                            );
+                            log::debug!(target: "hlx_run", "Bytecode len: {}", bytecode.code.len());
                             for (name, (start_pc, params)) in &functions {
-                                eprintln!(
+                                log::debug!(
+                                    target: "hlx_run",
                                     "Registering function: {} at PC {} with {} params",
                                     name, start_pc, params
                                 );

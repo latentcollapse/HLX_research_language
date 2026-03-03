@@ -23,6 +23,8 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 # CLI
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
+env_logger = "0.11"
+log = "0.4"
 
 # Serialization for state persistence
 serde = { version = "1", features = ["derive"] }

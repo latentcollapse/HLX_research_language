@@ -396,6 +396,7 @@ pub fn walk_expression(visitor: &mut impl Visitor, expr: &Expression) -> VisitRe
             VisitResult::Continue
         }
         ExprKind::Collapse(inner) | ExprKind::Resolve(inner) => walk_expression(visitor, inner),
+        ExprKind::Cast { expr, .. } => walk_expression(visitor, expr),
     };
 
     if result == VisitResult::Stop {

@@ -94,13 +94,13 @@ pub enum Token {
     Bang,
     Amp,
     Pipe,
-    Question, // ?
-    FatArrow, // =>
-    Arrow,    // ->
-    PlusEq,   // +=
-    MinusEq,  // -=
-    StarEq,   // *=
-    SlashEq,  // /=
+    Question,  // ?
+    FatArrow,  // =>
+    Arrow,     // ->
+    PlusEq,    // +=
+    MinusEq,   // -=
+    StarEq,    // *=
+    SlashEq,   // /=
     PercentEq, // %=
 
     // Delimiters
@@ -1616,7 +1616,11 @@ impl AstParser {
                     Ok(Statement::assign(expr, value))
                 } else if matches!(
                     self.current(),
-                    Token::PlusEq | Token::MinusEq | Token::StarEq | Token::SlashEq | Token::PercentEq
+                    Token::PlusEq
+                        | Token::MinusEq
+                        | Token::StarEq
+                        | Token::SlashEq
+                        | Token::PercentEq
                 ) {
                     let op = match self.current() {
                         Token::PlusEq => BinaryOp::Add,
@@ -2139,9 +2143,10 @@ impl AstParser {
                     }
                 }
                 Token::As => {
-                    // Type cast: expr as Type — consume and discard (VM is dynamically typed)
+                    // Type cast: expr as Type — create Cast expression
                     self.advance();
-                    self.parse_type()?;
+                    let target_type = self.parse_type()?;
+                    expr = Expression::cast(expr, target_type.name);
                 }
                 _ => break,
             }

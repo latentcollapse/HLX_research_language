@@ -6,6 +6,8 @@ use crate::scale::ScalePool;
 use crate::tensor::Tensor;
 use crate::{Bytecode, Opcode, RuntimeError, RuntimeResult, Value};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 const DEFAULT_SPAWN_RATE_LIMIT: usize = 10;
@@ -148,6 +150,10 @@ pub struct Vm {
     /// Wall-clock timeout
     start_time: Option<std::time::Instant>,
     max_duration: Option<std::time::Duration>,
+    /// Max in-memory patterns before evicting oldest (GC for memory pool)
+    max_memory_entries: usize,
+    /// Shutdown flag: set by Ctrl+C handler to halt VM cleanly
+    shutdown_flag: Option<Arc<AtomicBool>>,
 }
 
 impl Vm {
@@ -187,6 +193,8 @@ impl Vm {
             max_string_size: 10_000_000, // 10 MB
             start_time: None,
             max_duration: None,
+            max_memory_entries: 50_000,
+            shutdown_flag: None,
         }
     }
 
@@ -200,12 +208,27 @@ impl Vm {
         self.natives.insert(name.to_string(), Box::new(f));
     }
 
-    /// Store a pattern in memory (for HIL learn) - called from native dispatch
+    pub fn with_max_memory_entries(mut self, max: usize) -> Self {
+        self.max_memory_entries = max;
+        self
+    }
+
+    pub fn with_shutdown_flag(mut self, flag: Arc<AtomicBool>) -> Self {
+        self.shutdown_flag = Some(flag);
+        self
+    }
+
+    /// Store a pattern in memory (for HIL learn) - called from native dispatch.
+    /// Evicts oldest entry when over max_memory_entries to keep memory bounded.
     pub fn mem_store(&mut self, pattern: String, confidence: f64) -> bool {
         self.memory.push(MemEntry {
             pattern,
             confidence,
         });
+        if self.memory.len() > self.max_memory_entries {
+            self.memory.remove(0);
+            log::debug!(target: "vm", "Memory pool evicted oldest entry (size={})", self.memory.len());
+        }
         true
     }
 
@@ -286,8 +309,9 @@ impl Vm {
 
     fn debug_trace(&self, pc: usize, opcode: &str, regs: &[Value]) {
         if self.debug_mode {
-            eprintln!(
-                "[DEBUG] PC={:04} | {:<12} | R0={:?} R1={:?} R2={:?} ...",
+            log::trace!(
+                target: "vm",
+                "PC={:04} | {:<12} | R0={:?} R1={:?} R2={:?} ...",
                 pc,
                 opcode,
                 regs.get(0),
@@ -363,9 +387,14 @@ impl Vm {
         let mut pc: usize = start_pc;
 
         while pc < bytecode.code.len() && !self.halted {
-            // Check timeout every 1000 steps
+            // Check timeout and shutdown every 1000 steps
             if self.steps % 1000 == 0 {
                 self.check_timeout()?;
+                if let Some(ref flag) = self.shutdown_flag {
+                    if flag.load(Ordering::Relaxed) {
+                        return Err(RuntimeError::new("Shutdown requested", pc));
+                    }
+                }
             }
 
             self.steps += 1;
@@ -560,6 +589,14 @@ impl Vm {
                         }
                         self.registers[frame.base_reg] = return_val;
                         pc = frame.return_pc;
+                        // GC: release arg-passing zone (150-199) and temp zone (200-249)
+                        // Only when returning to native (call_stack empty) — intermediate
+                        // returns must not clear registers that the caller still needs.
+                        if self.call_stack.is_empty() {
+                            for i in 150..250 {
+                                self.registers[i] = Value::Nil;
+                            }
+                        }
                     } else {
                         self.halted = true;
                         return Ok(return_val);

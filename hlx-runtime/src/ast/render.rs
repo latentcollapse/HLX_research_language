@@ -568,6 +568,9 @@ impl Render for super::Expression {
             }
             ExprKind::Collapse(inner) => format!("collapse {}", inner.render(0)),
             ExprKind::Resolve(inner) => format!("resolve {}", inner.render(0)),
+            ExprKind::Cast { expr, target_type } => {
+                format!("{} as {}", expr.render(0), target_type)
+            }
         }
     }
 }

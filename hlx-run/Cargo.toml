@@ -13,9 +13,17 @@ anyhow = "1.0"
 ape = { path = "../ape" }
 blake3 = "1.5"
 clap = { version = "4", features = ["derive", "env"] }
+ctrlc = "3.4"
+env_logger = "0.11"
+log = "0.4"
 rusqlite = { version = "0.31", features = ["bundled"] }
 serde_json = "1.0"
 ureq = { version = "2", features = ["json"] }
 
 [dependencies.hlx-runtime]
 path = "../hlx-runtime"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.0"
+tempfile = "3"

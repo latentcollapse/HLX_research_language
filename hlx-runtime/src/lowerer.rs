@@ -106,8 +106,9 @@ impl Lowerer {
         while !lowerer.pending_imports.is_empty() {
             let pending: Vec<_> = std::mem::take(&mut lowerer.pending_imports);
             for import in pending {
-                eprintln!(
-                    "[lowerer] Loading pending import '{}' at PC {}",
+                log::debug!(
+                    target: "lowerer",
+                    "Loading pending import '{}' at PC {}",
                     import.name,
                     lowerer.current_pc()
                 );
@@ -204,8 +205,9 @@ impl Lowerer {
             .module_path_to_file(&import.module, style.clone())
             .ok_or_else(|| LowerError::new(format!("Module not found: {}", import.module)))?;
 
-        eprintln!(
-            "[import] Queueing module '{}' from {:?}",
+        log::debug!(
+            target: "lowerer",
+            "Queueing module '{}' from {:?}",
             import.module, file_path
         );
 
@@ -246,8 +248,9 @@ impl Lowerer {
                     name: import_name.clone(),
                     func: func.clone(),
                 });
-                eprintln!(
-                    "[import] Queued function '{}' from '{}'",
+                log::debug!(
+                    target: "lowerer",
+                    "Queued function '{}' from '{}'",
                     import_name, import.module
                 );
             } else if let Item::Module(module) = item {
@@ -258,8 +261,9 @@ impl Lowerer {
                             name: func.name.clone(),
                             func: func.clone(),
                         });
-                        eprintln!(
-                            "[import] Queued function '{}' from module '{}'",
+                        log::debug!(
+                            target: "lowerer",
+                            "Queued function '{}' from module '{}'",
                             func.name, import.module
                         );
                     }
@@ -760,50 +764,121 @@ impl Lowerer {
                 let mut end_patches = Vec::new();
 
                 for case in &switch_stmt.cases {
-                    // Lower pattern value into register 12
-                    match case.pattern {
-                        crate::ast::Pattern::Int(n) => {
-                            let idx = self.bytecode.add_constant(Value::I64(n));
-                            self.emit(Opcode::Const);
-                            self.emit_u8(12);
-                            self.emit_u32(idx);
+                    // Wildcard/Identifier patterns always match — skip comparison entirely
+                    let is_wildcard = matches!(
+                        case.pattern,
+                        crate::ast::Pattern::Wildcard | crate::ast::Pattern::Identifier(_)
+                    );
+
+                    let skip_pos = if is_wildcard {
+                        // No pattern comparison needed — fall through to body
+                        // (guard still applies if present)
+                        None
+                    } else {
+                        // Lower pattern value into register 12
+                        match case.pattern {
+                            crate::ast::Pattern::Int(n) => {
+                                let idx = self.bytecode.add_constant(Value::I64(n));
+                                self.emit(Opcode::Const);
+                                self.emit_u8(12);
+                                self.emit_u32(idx);
+                            }
+                            crate::ast::Pattern::String(ref s) => {
+                                let idx = self.bytecode.add_constant(Value::String(s.clone()));
+                                self.emit(Opcode::Const);
+                                self.emit_u8(12);
+                                self.emit_u32(idx);
+                            }
+                            crate::ast::Pattern::Range { start, end, inclusive } => {
+                                // r10 = (r11 >= start) && (r11 <= end or r11 < end)
+                                let start_idx = self.bytecode.add_constant(Value::I64(start));
+                                self.emit(Opcode::Const); self.emit_u8(12); self.emit_u32(start_idx);
+                                self.emit(Opcode::Ge); self.emit_u8(10); self.emit_u8(11); self.emit_u8(12);
+                                let end_val = if inclusive { end } else { end - 1 };
+                                let end_idx = self.bytecode.add_constant(Value::I64(end_val));
+                                self.emit(Opcode::Const); self.emit_u8(12); self.emit_u32(end_idx);
+                                self.emit(Opcode::Le); self.emit_u8(12); self.emit_u8(11); self.emit_u8(12);
+                                self.emit(Opcode::And); self.emit_u8(10); self.emit_u8(10); self.emit_u8(12);
+                                // skip_pos handled below via JumpIfNot on r10
+                                self.emit(Opcode::JumpIfNot);
+                                self.emit_u8(10);
+                                let pos = self.current_pc();
+                                self.emit_u32(0);
+                                // Handle guard then body
+                                if let Some(ref guard_expr) = case.guard {
+                                    self.lower_expr(guard_expr, 10)?;
+                                    self.emit(Opcode::JumpIfNot);
+                                    self.emit_u8(10);
+                                    let guard_skip = self.current_pc();
+                                    self.emit_u32(0);
+                                    self.lower_body(&case.body)?;
+                                    self.emit(Opcode::Jump);
+                                    end_patches.push(self.current_pc());
+                                    self.emit_u32(0);
+                                    let next_case = self.current_pc();
+                                    self.patch_jump(guard_skip, next_case)?;
+                                } else {
+                                    self.lower_body(&case.body)?;
+                                    self.emit(Opcode::Jump);
+                                    end_patches.push(self.current_pc());
+                                    self.emit_u32(0);
+                                }
+                                let next_case = self.current_pc();
+                                self.patch_jump(pos, next_case)?;
+                                continue;
+                            }
+                            _ => {
+                                // Unknown pattern variant — treat as wildcard
+                                None::<()>;
+                                // Fall through to body without comparison
+                                self.lower_body(&case.body)?;
+                                self.emit(Opcode::Jump);
+                                end_patches.push(self.current_pc());
+                                self.emit_u32(0);
+                                continue;
+                            }
                         }
-                        crate::ast::Pattern::String(ref s) => {
-                            let idx = self.bytecode.add_constant(Value::String(s.clone()));
-                            self.emit(Opcode::Const);
-                            self.emit_u8(12);
-                            self.emit_u32(idx);
+
+                        // Compare: r10 = (r11 == r12)
+                        self.emit(Opcode::Eq);
+                        self.emit_u8(10);
+                        self.emit_u8(11);
+                        self.emit_u8(12);
+
+                        // Skip case body if no match
+                        self.emit(Opcode::JumpIfNot);
+                        self.emit_u8(10);
+                        let pos = self.current_pc();
+                        self.emit_u32(0);
+                        Some(pos)
+                    };
+
+                    // Guard expression (if any): skip body if guard is false
+                    if let Some(ref guard_expr) = case.guard {
+                        self.lower_expr(guard_expr, 10)?;
+                        self.emit(Opcode::JumpIfNot);
+                        self.emit_u8(10);
+                        let guard_skip = self.current_pc();
+                        self.emit_u32(0);
+                        self.lower_body(&case.body)?;
+                        self.emit(Opcode::Jump);
+                        end_patches.push(self.current_pc());
+                        self.emit_u32(0);
+                        let next_case = self.current_pc();
+                        self.patch_jump(guard_skip, next_case)?;
+                        if let Some(pos) = skip_pos {
+                            self.patch_jump(pos, next_case)?;
                         }
-                        _ => {
-                            // Wildcard/identifier patterns: always match
-                            let idx = self.bytecode.add_constant(Value::Bool(true));
-                            self.emit(Opcode::Const);
-                            self.emit_u8(12);
-                            self.emit_u32(idx);
+                    } else {
+                        self.lower_body(&case.body)?;
+                        self.emit(Opcode::Jump);
+                        end_patches.push(self.current_pc());
+                        self.emit_u32(0);
+                        let next_case = self.current_pc();
+                        if let Some(pos) = skip_pos {
+                            self.patch_jump(pos, next_case)?;
                         }
                     }
-
-                    // Compare: r10 = (r11 == r12)
-                    self.emit(Opcode::Eq);
-                    self.emit_u8(10);
-                    self.emit_u8(11);
-                    self.emit_u8(12);
-
-                    // Skip case body if no match
-                    self.emit(Opcode::JumpIfNot);
-                    self.emit_u8(10);
-                    let skip_pos = self.current_pc();
-                    self.emit_u32(0);
-
-                    self.lower_body(&case.body)?;
-
-                    // Jump to end of switch
-                    self.emit(Opcode::Jump);
-                    end_patches.push(self.current_pc());
-                    self.emit_u32(0);
-
-                    let next_case = self.current_pc();
-                    self.patch_jump(skip_pos, next_case)?;
                 }
 
                 // Default body
@@ -1006,9 +1081,24 @@ impl Lowerer {
                 function,
                 arguments,
             } => {
-                let arg_base = 150u8;
-                for (i, arg) in arguments.iter().enumerate() {
-                    self.lower_expr(arg, arg_base + i as u8)?;
+                // DEBT-007: Fix concat() register collision
+                // Use fresh temp registers for each argument instead of hardcoded 150+
+                // This prevents nested calls from overwriting outer call arguments
+                let mut arg_regs = Vec::with_capacity(arguments.len());
+                for arg in arguments.iter() {
+                    let reg = self.alloc_tmp()?;
+                    self.lower_expr(arg, reg)?;
+                    arg_regs.push(reg);
+                }
+
+                // Emit Move instructions to pack args into consecutive registers (150, 151, ...)
+                // VM expects arguments in consecutive registers starting at 150
+                for (i, &reg) in arg_regs.iter().enumerate() {
+                    if reg != 150 + i as u8 {
+                        self.emit(Opcode::Move);
+                        self.emit_u8(150 + i as u8);
+                        self.emit_u8(reg);
+                    }
                 }
 
                 // If the function name resolves to a local variable (not a top-level
@@ -1260,6 +1350,37 @@ impl Lowerer {
                 self.emit(Opcode::Const);
                 self.emit_u8(dst);
                 self.emit_u32(func_val_idx);
+            }
+            // Type cast: expr as Type
+            ExprKind::Cast {
+                expr: cast_expr,
+                target_type,
+            } => {
+                // Lower the expression first
+                self.lower_expr(cast_expr, dst)?;
+
+                // Emit appropriate conversion based on target type
+                match target_type.as_str() {
+                    "f64" => {
+                        // Emit i64_to_f64 call
+                        let func_idx = self.bytecode.add_string("i64_to_f64".to_string());
+                        self.emit(Opcode::Call);
+                        self.emit_u32(func_idx);
+                        self.emit_u8(1); // 1 argument
+                        self.emit_u8(dst);
+                    }
+                    "i64" => {
+                        // Emit f64_to_i64 call
+                        let func_idx = self.bytecode.add_string("f64_to_i64".to_string());
+                        self.emit(Opcode::Call);
+                        self.emit_u32(func_idx);
+                        self.emit_u8(1); // 1 argument
+                        self.emit_u8(dst);
+                    }
+                    _ => {
+                        // Unknown cast, just keep the value as-is
+                    }
+                }
             }
             // Unsupported in bytecode — emit Nop placeholders
             ExprKind::Range { .. } | ExprKind::Contract { .. } => {
@@ -1671,7 +1792,7 @@ impl Lowerer {
                     self.bytecode.code[call_site + 3] = ((start_pc >> 24) & 0xFF) as u8;
                     // arg_count at call_site+4 and dst at call_site+5 remain untouched
 
-                    eprintln!("[patch] {} -> CALL_ADDR PC {}", func_name, start_pc);
+                    log::debug!(target: "lowerer", "[patch] {} -> CALL_ADDR PC {}", func_name, start_pc);
                 }
             }
             // If function not found, leave the patch as-is (could be a built-in)

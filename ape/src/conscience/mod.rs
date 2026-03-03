@@ -12,9 +12,15 @@
 //! - H4: no_exfiltrate checks url, destination, endpoint, address, target fields
 //! - H5: no_harm covers destructive intents, not just Terminate
 //! - M1: TrustRequired predicate rule now enforced
+//! - RUSTD-1: #[forbid(unsafe_code)] — zero unsafe in conscience kernel
+//! - RUSTD-2: MAX_PREDICATES — bounded evaluation prevents DoS
+//! - RUSTD-3: BLAKE3 audit chain — tamper-evident intent logging
 
-use std::collections::HashMap;
+#![forbid(unsafe_code)]
+
 use crate::trust::TrustLevel;
+use blake3::Hasher;
+use std::collections::HashMap;
 
 /// The result of a conscience evaluation
 #[derive(Debug, Clone, PartialEq)]
@@ -192,6 +198,9 @@ pub struct IntentLogEntry {
     pub post_hash: String,
 }
 
+/// Maximum number of predicates allowed (RUSTD-2: bounded evaluation)
+const MAX_PREDICATES: usize = 256;
+
 /// Destructive intent names that no_harm should catch (H5)
 const DESTRUCTIVE_INTENTS: &[&str] = &[
     "Terminate",
@@ -230,6 +239,17 @@ const DESTINATION_FIELDS: &[&str] = &[
 
 /// Field names that indicate file paths (H4)
 const PATH_FIELDS: &[&str] = &["path", "file", "filepath", "file_path", "filename"];
+
+/// Hash an intent log entry for the audit chain (RUSTD-3)
+fn hash_log_entry(entry: &IntentLogEntry) -> String {
+    let mut hasher = Hasher::new();
+    hasher.update(entry.intent_name.as_bytes());
+    hasher.update(format!("{:?}", entry.effect).as_bytes());
+    hasher.update(format!("{:?}", entry.verdict).as_bytes());
+    hasher.update(entry.epoch.to_le_bytes().as_ref());
+    hasher.update(entry.pre_hash.as_bytes());
+    hasher.finalize().to_hex().to_string()
+}
 
 /// Normalize a path to prevent bypass attacks
 /// Handles: whitespace, path traversal, null bytes, URL encoding, unicode, case, multiple slashes, DoS
@@ -333,10 +353,22 @@ fn unicode_normalize(s: &str) -> String {
             }
             // Cyrillic homoglyphs → Latin equivalents
             Some(match c {
-                'а' => 'a', 'е' => 'e', 'о' => 'o', 'р' => 'p',
-                'с' => 'c', 'х' => 'x', 'А' => 'A', 'В' => 'B',
-                'Е' => 'E', 'К' => 'K', 'М' => 'M', 'Н' => 'H',
-                'О' => 'O', 'Р' => 'P', 'С' => 'C', 'Т' => 'T',
+                'а' => 'a',
+                'е' => 'e',
+                'о' => 'o',
+                'р' => 'p',
+                'с' => 'c',
+                'х' => 'x',
+                'А' => 'A',
+                'В' => 'B',
+                'Е' => 'E',
+                'К' => 'K',
+                'М' => 'M',
+                'Н' => 'H',
+                'О' => 'O',
+                'Р' => 'P',
+                'С' => 'C',
+                'Т' => 'T',
                 'Х' => 'X',
                 _ => c,
             })
@@ -447,16 +479,16 @@ impl ConscienceKernel {
 
     /// RT-11: Check if a destination is in the declared-channel registry
     pub fn is_declared_channel(&self, destination: &str) -> bool {
-        self.declared_channels.iter().any(|ch| {
-            destination.starts_with(&ch.destination) || destination == ch.id
-        })
+        self.declared_channels
+            .iter()
+            .any(|ch| destination.starts_with(&ch.destination) || destination == ch.id)
     }
 
     /// Install the immutable genesis predicates
     /// RT-08: Genesis predicates now have REAL enforcement logic, not AlwaysAllow
     fn install_genesis_predicates(&mut self) {
         // no_harm: deny destructive intents without explicit authorization (H5: broadened)
-        self.add_predicate(Predicate {
+        let _ = self.add_predicate(Predicate {
             id: 0,
             name: "no_harm".to_string(),
             description: "Prevent actions that could cause irreversible harm".to_string(),
@@ -474,10 +506,11 @@ impl ConscienceKernel {
 
         // no_exfiltrate: deny network/write to undeclared channels (H4: broadened)
         // RT-11: Uses the declared-channel registry
-        self.add_predicate(Predicate {
+        let _ = self.add_predicate(Predicate {
             id: 0,
             name: "no_exfiltrate".to_string(),
-            description: "Prevent unauthorized data exfiltration to undeclared channels".to_string(),
+            description: "Prevent unauthorized data exfiltration to undeclared channels"
+                .to_string(),
             applies_to: vec![EffectClass::Network, EffectClass::Write],
             rule: PredicateRule::Custom("no_exfiltrate".to_string()),
             genesis: true,
@@ -486,7 +519,7 @@ impl ConscienceKernel {
         });
 
         // no_bypass_verification: deny execution of unverified external data (C4: implemented)
-        self.add_predicate(Predicate {
+        let _ = self.add_predicate(Predicate {
             id: 0,
             name: "no_bypass_verification".to_string(),
             description: "Prevent bypassing the verification pipeline".to_string(),
@@ -498,18 +531,18 @@ impl ConscienceKernel {
         });
 
         // path_safety: restrict file system access to dangerous paths
-        self.add_predicate(Predicate {
+        let _ = self.add_predicate(Predicate {
             id: 0,
             name: "path_safety".to_string(),
             description: "Restrict file system paths to safe directories".to_string(),
             applies_to: vec![EffectClass::Read, EffectClass::Write],
             rule: PredicateRule::PathDenied(vec![
-                "/etc".to_string(),         // Block entire /etc directory (no trailing slash - normalization removes them)
+                "/etc".to_string(), // Block entire /etc directory (no trailing slash - normalization removes them)
                 "/proc".to_string(),
                 "/sys".to_string(),
-                "/boot".to_string(),        // Bootloader configs
-                "/root".to_string(),        // Root home directory
-                "/dev".to_string(),         // Device files
+                "/boot".to_string(), // Bootloader configs
+                "/root".to_string(), // Root home directory
+                "/dev".to_string(),  // Device files
             ]),
             genesis: true,
             is_restriction: true,
@@ -520,7 +553,7 @@ impl ConscienceKernel {
         // Dangerous effect classes (Write, Execute, Network, ModifyPredicate,
         // ModifyPrivilege, ModifyAgent) require an EXPLICIT allow predicate.
         // This makes the architecture default-DENY for dangerous operations.
-        self.add_predicate(Predicate {
+        let _ = self.add_predicate(Predicate {
             id: 0,
             name: "baseline_allow".to_string(),
             description: "Baseline allow for safe effect classes only (NOOP, Read)".to_string(),
@@ -533,14 +566,28 @@ impl ConscienceKernel {
     }
 
     /// Add a predicate (append-only — asymmetric ratchet)
-    fn add_predicate(&mut self, mut pred: Predicate) {
+    /// RUSTD-2: Enforces MAX_PREDICATES bound
+    fn add_predicate(&mut self, mut pred: Predicate) -> Result<(), String> {
+        if self.predicates.len() >= MAX_PREDICATES {
+            return Err(format!(
+                "Predicate limit exceeded (max {}). Policy file may be malicious.",
+                MAX_PREDICATES
+            ));
+        }
         pred.id = self.next_id;
         self.next_id += 1;
         self.predicates.push(pred);
+        Ok(())
     }
 
     /// Add a restriction predicate (permanent, per the asymmetric ratchet)
-    pub fn add_restriction(&mut self, name: String, description: String, applies_to: Vec<EffectClass>, rule: PredicateRule) {
+    pub fn add_restriction(
+        &mut self,
+        name: String,
+        description: String,
+        applies_to: Vec<EffectClass>,
+        rule: PredicateRule,
+    ) -> Result<(), String> {
         self.add_predicate(Predicate {
             id: 0,
             name,
@@ -550,7 +597,7 @@ impl ConscienceKernel {
             genesis: false,
             is_restriction: true,
             sunset_epoch: None, // Restrictions are permanent
-        });
+        })
     }
 
     /// Add a permission predicate (sunset-eligible, costs ethical mass)
@@ -575,8 +622,7 @@ impl ConscienceKernel {
             genesis: false,
             is_restriction: false,
             sunset_epoch: Some(self.current_epoch + sunset_epochs),
-        });
-        Ok(())
+        })
     }
 
     /// Evaluate an intent against the conscience kernel
@@ -584,6 +630,7 @@ impl ConscienceKernel {
     /// RT-07: ALL intents evaluated including NOOP (no bypass)
     /// RT-09: Uses shared evaluate_core for consistency with query()
     /// RT-10: Constant-time padding to prevent timing side channels
+    /// RUSTD-3: BLAKE3 audit chain for tamper-evident logging
     pub fn evaluate(
         &mut self,
         intent_name: &str,
@@ -596,15 +643,25 @@ impl ConscienceKernel {
         // RT-09: Delegate to shared evaluation core
         let (verdict, _category) = self.evaluate_core(intent_name, effect, fields);
 
-        // Log the evaluation (A2: traceability)
-        self.intent_log.push(IntentLogEntry {
+        // RUSTD-3: Chain the audit log — pre_hash = hash of last entry
+        let pre_hash = self
+            .intent_log
+            .last()
+            .map(|e| hash_log_entry(e))
+            .unwrap_or_else(|| "genesis".to_string());
+
+        let mut new_entry = IntentLogEntry {
             intent_name: intent_name.to_string(),
             effect: effect.clone(),
             verdict: verdict.clone(),
             epoch: self.current_epoch,
-            pre_hash: String::new(),
+            pre_hash,
             post_hash: String::new(),
-        });
+        };
+
+        // post_hash = hash of this entry (with pre_hash set)
+        new_entry.post_hash = hash_log_entry(&new_entry);
+        self.intent_log.push(new_entry);
 
         // RT-10: Pad to constant time — spin until we've consumed eval_pad_ns
         // This prevents timing attacks from revealing predicate set size/type
@@ -629,8 +686,10 @@ impl ConscienceKernel {
         fields: &HashMap<String, String>,
     ) -> (ConscienceVerdict, QueryCategory) {
         // Normalize field keys to lowercase — prevents bypass via URL, Url, URL, etc.
-        let fields_lower: HashMap<String, String> =
-            fields.iter().map(|(k, v)| (k.to_lowercase(), v.clone())).collect();
+        let fields_lower: HashMap<String, String> = fields
+            .iter()
+            .map(|(k, v)| (k.to_lowercase(), v.clone()))
+            .collect();
         let fields = &fields_lower;
 
         let mut any_deny = false;
@@ -669,7 +728,10 @@ impl ConscienceKernel {
                             // Normalize path to prevent bypass attacks
                             let normalized = normalize_path(path);
 
-                            if patterns.iter().any(|p| normalized == p.as_str() || normalized.starts_with(&format!("{}/", p))) {
+                            if patterns.iter().any(|p| {
+                                normalized == p.as_str()
+                                    || normalized.starts_with(&format!("{}/", p))
+                            }) {
                                 any_allow = true;
                             } else {
                                 any_deny = true;
@@ -694,7 +756,10 @@ impl ConscienceKernel {
 
                             // Match exact directory OR anything inside it (prefix + "/").
                             // Plain starts_with("/etc") would false-positive on "/etcfoo".
-                            if patterns.iter().any(|p| normalized == p.as_str() || normalized.starts_with(&format!("{}/", p))) {
+                            if patterns.iter().any(|p| {
+                                normalized == p.as_str()
+                                    || normalized.starts_with(&format!("{}/", p))
+                            }) {
                                 any_deny = true;
                                 deny_reason = format!(
                                     "Path '{}' (normalized: '{}') denied by predicate '{}'",
@@ -738,9 +803,8 @@ impl ConscienceKernel {
                     match rule_name.as_str() {
                         "no_harm" => {
                             // H5: Check against ALL destructive intent patterns
-                            let is_destructive = DESTRUCTIVE_INTENTS
-                                .iter()
-                                .any(|d| intent_name.contains(d));
+                            let is_destructive =
+                                DESTRUCTIVE_INTENTS.iter().any(|d| intent_name.contains(d));
                             if is_destructive {
                                 // Destructive intents need explicit "authorized: true" field
                                 let authorized = fields
@@ -793,7 +857,9 @@ impl ConscienceKernel {
                                         let normalized = normalize_path(path);
 
                                         // Deny writes to network-mounted paths
-                                        if normalized.starts_with("/mnt/") || normalized.starts_with("/net/") {
+                                        if normalized.starts_with("/mnt/")
+                                            || normalized.starts_with("/net/")
+                                        {
                                             if !self.is_declared_channel(&normalized) {
                                                 any_deny = true;
                                                 exfil_denied = true;
@@ -820,10 +886,8 @@ impl ConscienceKernel {
                                 k == "code" || k == "script" || k == "command" || k == "payload"
                             });
                             if has_data_fields {
-                                let verified = fields
-                                    .get("verified")
-                                    .map(|v| v == "true")
-                                    .unwrap_or(false);
+                                let verified =
+                                    fields.get("verified").map(|v| v == "true").unwrap_or(false);
                                 // trust_level field is intentionally NOT checked here.
                                 // Trust level is an engine-internal property; accepting it
                                 // from caller-supplied fields allows self-attestation bypass.
@@ -845,10 +909,8 @@ impl ConscienceKernel {
                         }
                         _ => {
                             any_deny = true;
-                            deny_reason = format!(
-                                "Unknown custom rule '{}' — denied by default",
-                                rule_name
-                            );
+                            deny_reason =
+                                format!("Unknown custom rule '{}' — denied by default", rule_name);
                             category = QueryCategory::ConscienceCore;
                         }
                     }
@@ -1010,6 +1072,22 @@ impl ConscienceKernel {
     pub fn has_predicate(&self, name: &str) -> bool {
         self.predicates.iter().any(|p| p.name == name)
     }
+
+    /// RUSTD-3: Verify audit log chain integrity
+    /// Returns Ok(()) if chain is intact, Err with first broken link otherwise
+    pub fn verify_audit_chain(&self) -> Result<(), String> {
+        let mut prev_hash = "genesis".to_string();
+        for (i, entry) in self.intent_log.iter().enumerate() {
+            if entry.pre_hash != prev_hash {
+                return Err(format!(
+                    "Audit chain broken at entry {}: expected pre_hash '{}', got '{}'",
+                    i, prev_hash, entry.pre_hash
+                ));
+            }
+            prev_hash = hash_log_entry(entry);
+        }
+        Ok(())
+    }
 }
 
 /// Result from query_conscience (Section 6.4)
@@ -1018,7 +1096,7 @@ pub struct ConscienceQueryResult {
     pub permitted: bool,
     pub category: QueryCategory,
     pub guidance: String,
-    pub deny_reason: Option<String>,   // specific technical reason from evaluate_core
+    pub deny_reason: Option<String>, // specific technical reason from evaluate_core
 }
 
 /// RT-16: Conscience state snapshot for rollback support
@@ -1114,7 +1192,7 @@ mod tests {
         let mut kernel = ConscienceKernel::new();
         let mut fields = HashMap::new();
         fields.insert("code".to_string(), "malicious()".to_string()); // data to execute
-        // no verified=true, no trust_level
+                                                                      // no verified=true, no trust_level
         let verdict = kernel.evaluate("RunCode", &EffectClass::Execute, &fields);
         assert!(matches!(verdict, ConscienceVerdict::Deny(_)));
     }
@@ -1224,5 +1302,59 @@ mod tests {
         fields2.insert("trust_level".to_string(), "TRUSTED_VERIFIED".to_string());
         let verdict2 = kernel.evaluate("ReadSecret", &EffectClass::Read, &fields2);
         assert_eq!(verdict2, ConscienceVerdict::Allow);
+    }
+
+    #[test]
+    fn test_blake3_audit_chain() {
+        // RUSTD-3: Verify tamper-evident audit chain
+        let mut kernel = ConscienceKernel::new();
+
+        // First evaluation — pre_hash should be "genesis"
+        let mut fields = HashMap::new();
+        fields.insert("path".to_string(), "/data/file.txt".to_string());
+        let _ = kernel.evaluate("ReadFile", &EffectClass::Read, &fields);
+
+        assert_eq!(kernel.intent_log.len(), 1);
+        assert_eq!(kernel.intent_log[0].pre_hash, "genesis");
+        assert!(!kernel.intent_log[0].post_hash.is_empty());
+
+        // Second evaluation — pre_hash should be post_hash of first
+        let _ = kernel.evaluate("WriteFile", &EffectClass::Write, &fields);
+        assert_eq!(kernel.intent_log.len(), 2);
+        assert_eq!(kernel.intent_log[1].pre_hash, kernel.intent_log[0].post_hash);
+
+        // Verify chain integrity
+        assert!(kernel.verify_audit_chain().is_ok());
+    }
+
+    #[test]
+    fn test_max_predicates_bound() {
+        // RUSTD-2: Verify MAX_PREDICATES enforcement
+        let mut kernel = ConscienceKernel::new();
+
+        // Genesis predicates already installed (5 of them), so we can add up to MAX - 5 more
+        let genesis_count = 5;
+        let remaining = MAX_PREDICATES - genesis_count;
+
+        // Add predicates up to limit
+        for i in 0..remaining {
+            let result = kernel.add_restriction(
+                format!("test_pred_{}", i),
+                "test".to_string(),
+                vec![EffectClass::Read],
+                PredicateRule::AlwaysAllow,
+            );
+            assert!(result.is_ok(), "Failed to add predicate {} of {}", i, remaining);
+        }
+
+        // Adding one more should fail
+        let result = kernel.add_restriction(
+            "overflow_pred".to_string(),
+            "test".to_string(),
+            vec![EffectClass::Read],
+            PredicateRule::AlwaysAllow,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Predicate limit exceeded"));
     }
 }

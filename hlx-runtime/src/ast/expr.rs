@@ -106,6 +106,11 @@ pub enum ExprKind {
         then_expr: Box<Expression>,
         else_expr: Box<Expression>,
     },
+    /// Type cast: expr as Type
+    Cast {
+        expr: Box<Expression>,
+        target_type: String,
+    },
     /// Match expression: match val { pattern => body, ... }
     Match {
         value: Box<Expression>,
@@ -310,6 +315,13 @@ impl Expression {
             condition: Box::new(condition),
             then_expr: Box::new(then_expr),
             else_expr: Box::new(else_expr),
+        })
+    }
+
+    pub fn cast(expr: Expression, target_type: impl Into<String>) -> Self {
+        Expression::new(ExprKind::Cast {
+            expr: Box::new(expr),
+            target_type: target_type.into(),
         })
     }
 }

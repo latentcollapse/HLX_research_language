@@ -16,15 +16,30 @@ pub fn builtin_strlen(args: &[Value]) -> RuntimeResult<Value> {
 }
 
 pub fn builtin_substring(args: &[Value]) -> RuntimeResult<Value> {
-    let s = args[0]
-        .as_string()
-        .ok_or_else(|| RuntimeError::new("substring requires String", 0))?;
-    let start_i = args[1]
-        .as_i64()
-        .ok_or_else(|| RuntimeError::new("substring start must be i64", 0))?;
-    let len_i = args[2]
-        .as_i64()
-        .ok_or_else(|| RuntimeError::new("substring len must be i64", 0))?;
+    let s = args[0].as_string().ok_or_else(|| {
+        RuntimeError::new(
+            format!("substring: expected String, got {}", args[0].type_name()),
+            0,
+        )
+    })?;
+    let start_i = args[1].as_i64().ok_or_else(|| {
+        RuntimeError::new(
+            format!(
+                "substring: expected i64 for start, got {}",
+                args[1].type_name()
+            ),
+            0,
+        )
+    })?;
+    let len_i = args[2].as_i64().ok_or_else(|| {
+        RuntimeError::new(
+            format!(
+                "substring: expected i64 for len, got {}",
+                args[2].type_name()
+            ),
+            0,
+        )
+    })?;
 
     if start_i < 0 || len_i < 0 {
         return Err(RuntimeError::new(
@@ -39,22 +54,34 @@ pub fn builtin_substring(args: &[Value]) -> RuntimeResult<Value> {
 }
 
 pub fn builtin_concat(args: &[Value]) -> RuntimeResult<Value> {
-    let a = args[0]
-        .as_string()
-        .ok_or_else(|| RuntimeError::new("concat requires String", 0))?;
-    let b = args[1]
-        .as_string()
-        .ok_or_else(|| RuntimeError::new("concat requires String", 0))?;
+    let a = args[0].as_string().ok_or_else(|| {
+        RuntimeError::new(
+            format!("concat: expected String, got {}", args[0].type_name()),
+            0,
+        )
+    })?;
+    let b = args[1].as_string().ok_or_else(|| {
+        RuntimeError::new(
+            format!("concat: expected String, got {}", args[1].type_name()),
+            0,
+        )
+    })?;
     Ok(Value::String(format!("{}{}", a, b)))
 }
 
 pub fn builtin_strcmp(args: &[Value]) -> RuntimeResult<Value> {
-    let a = args[0]
-        .as_string()
-        .ok_or_else(|| RuntimeError::new("strcmp requires String", 0))?;
-    let b = args[1]
-        .as_string()
-        .ok_or_else(|| RuntimeError::new("strcmp requires String", 0))?;
+    let a = args[0].as_string().ok_or_else(|| {
+        RuntimeError::new(
+            format!("strcmp: expected String, got {}", args[0].type_name()),
+            0,
+        )
+    })?;
+    let b = args[1].as_string().ok_or_else(|| {
+        RuntimeError::new(
+            format!("strcmp: expected String, got {}", args[1].type_name()),
+            0,
+        )
+    })?;
     Ok(Value::I64(match a.cmp(b) {
         std::cmp::Ordering::Less => -1,
         std::cmp::Ordering::Equal => 0,
@@ -520,10 +547,25 @@ pub fn builtin_i64_to_str(args: &[Value]) -> RuntimeResult<Value> {
 }
 
 pub fn builtin_f64_to_str(args: &[Value]) -> RuntimeResult<Value> {
-    let n = args[0]
-        .as_f64()
-        .ok_or_else(|| RuntimeError::new("f64_to_str requires f64", 0))?;
-    Ok(Value::String(format!("{:.6}", n)))
+    let n = args[0].as_f64().ok_or_else(|| {
+        RuntimeError::new(
+            format!("f64_to_str requires f64, got {}", args[0].type_name()),
+            0,
+        )
+    })?;
+    // Optional second argument: decimal places (default 6)
+    let places = if args.len() > 1 {
+        args[1].as_i64().ok_or_else(|| {
+            RuntimeError::new(
+                format!("f64_to_str places must be i64, got {}", args[1].type_name()),
+                0,
+            )
+        })? as usize
+    } else {
+        6
+    };
+    let places = places.min(20); // Cap at 20 decimal places
+    Ok(Value::String(format!("{:.1$}", n, places)))
 }
 
 pub fn builtin_str_contains(args: &[Value]) -> RuntimeResult<Value> {
