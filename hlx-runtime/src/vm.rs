@@ -103,7 +103,9 @@ struct CallFrame {
     base_reg: usize,
     #[allow(dead_code)]
     arg_count: usize,
-    saved_regs: Vec<Value>,
+    /// Sparse save: only (index, value) pairs for non-Nil registers.
+    /// On restore, the saved range is zeroed first, then non-nil values written back.
+    saved_regs: Vec<(usize, Value)>,
     /// Name of the callee function this frame represents
     func_name: String,
 }
@@ -323,6 +325,26 @@ impl Vm {
     pub fn set_register(&mut self, idx: usize, val: Value) {
         if idx < self.registers.len() {
             self.registers[idx] = val;
+        }
+    }
+
+    /// Build a sparse snapshot of registers[0..count], skipping Nil entries.
+    fn sparse_save(&self, count: usize) -> Vec<(usize, Value)> {
+        self.registers[..count]
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| !matches!(v, Value::Nil))
+            .map(|(i, v)| (i, v.clone()))
+            .collect()
+    }
+
+    /// Restore a sparse snapshot: zero [0..count], then write non-nil values back.
+    fn sparse_restore(&mut self, count: usize, saved: &[(usize, Value)]) {
+        for reg in &mut self.registers[..count] {
+            *reg = Value::Nil;
+        }
+        for (i, v) in saved {
+            self.registers[*i] = v.clone();
         }
     }
 
@@ -611,9 +633,7 @@ impl Vm {
                 Opcode::Return => {
                     let return_val = self.registers[0].clone();
                     if let Some(frame) = self.call_stack.pop() {
-                        for (i, val) in frame.saved_regs.iter().enumerate() {
-                            self.registers[i] = val.clone();
-                        }
+                        self.sparse_restore(self.config.saved_register_count, &frame.saved_regs);
                         self.registers[frame.base_reg] = return_val.clone();
                         pc = frame.return_pc;
                         if pc == usize::MAX {  return Ok(return_val.clone()); }
@@ -1617,8 +1637,7 @@ impl Vm {
 
                     if let Some(func_name) = bytecode.strings.get(func_idx) {
                         if let Some(&(start_pc, param_count)) = self.functions.get(func_name) {
-                            let saved_regs: Vec<Value> =
-                                self.registers[..self.config.saved_register_count].to_vec();
+                            let saved_regs = self.sparse_save(self.config.saved_register_count);
 
                             let arg_base = self.config.arg_base_register;
                             let max_args = arg_count.min(param_count);
@@ -1705,8 +1724,7 @@ impl Vm {
                         }
                     }
 
-                    let saved_regs: Vec<Value> =
-                        self.registers[..self.config.saved_register_count].to_vec();
+                    let saved_regs = self.sparse_save(self.config.saved_register_count);
 
                     let arg_base = self.config.arg_base_register;
                     let max_args = arg_count.min(param_count);
@@ -1753,8 +1771,7 @@ impl Vm {
                     };
 
                     if let Some(&(start_pc, param_count)) = self.functions.get(&func_name) {
-                        let saved_regs: Vec<Value> =
-                            self.registers[..self.config.saved_register_count].to_vec();
+                        let saved_regs = self.sparse_save(self.config.saved_register_count);
                         let arg_base = self.config.arg_base_register;
                         let max_args = arg_count.min(param_count as usize);
                         for i in 0..max_args {
@@ -1942,7 +1959,7 @@ impl Vm {
                 }
             } else {
                 // Save current state for nested call
-                let saved_regs = self.registers[0..self.config.saved_register_count].to_vec();
+                let saved_regs = self.sparse_save(self.config.saved_register_count);
                 self.call_stack.push(CallFrame {
                     return_pc: usize::MAX, // Host return marker
                     base_reg: 0,

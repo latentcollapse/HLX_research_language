@@ -64,7 +64,7 @@ struct Args {
     timeout_ms: Option<u64>,
 
     /// Maximum steps to execute
-    #[arg(long, default_value_t = 1_000_000)]
+    #[arg(long, default_value_t = 100_000_000)]
     max_steps: usize,
 
     /// Path to APE policy file (.axm) for governance
