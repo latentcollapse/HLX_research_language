@@ -32,7 +32,7 @@ impl Default for RuntimeConfig {
             max_steps: 1_000_000,
             register_count: 256,
             arg_base_register: 150,
-            saved_register_count: 20,
+            saved_register_count: 150,
         }
     }
 }
@@ -85,6 +85,8 @@ struct CallFrame {
     #[allow(dead_code)]
     arg_count: usize,
     saved_regs: Vec<Value>,
+    /// Name of the callee function this frame represents
+    func_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -138,6 +140,14 @@ pub struct Vm {
     natives: HashMap<String, Box<dyn Fn(&mut Vm, Vec<Value>) -> Value + Send + Sync>>,
     /// In-memory storage for HIL learn/recall (Phase 10)
     memory: Vec<MemEntry>,
+    /// Debug mode: trace execution
+    debug_mode: bool,
+    /// Memory limits
+    max_array_size: usize,
+    max_string_size: usize,
+    /// Wall-clock timeout
+    start_time: Option<std::time::Instant>,
+    max_duration: Option<std::time::Duration>,
 }
 
 impl Vm {
@@ -172,6 +182,11 @@ impl Vm {
             config,
             natives: HashMap::new(),
             memory: Vec::new(),
+            debug_mode: false,
+            max_array_size: 1_000_000,   // 1 million elements
+            max_string_size: 10_000_000, // 10 MB
+            start_time: None,
+            max_duration: None,
         }
     }
 
@@ -232,6 +247,22 @@ impl Vm {
         self
     }
 
+    pub fn with_debug(mut self, debug: bool) -> Self {
+        self.debug_mode = debug;
+        self
+    }
+
+    pub fn with_memory_limits(mut self, max_array: usize, max_string: usize) -> Self {
+        self.max_array_size = max_array;
+        self.max_string_size = max_string;
+        self
+    }
+
+    pub fn with_timeout(mut self, duration_ms: u64) -> Self {
+        self.max_duration = Some(std::time::Duration::from_millis(duration_ms));
+        self
+    }
+
     pub fn load_functions(&mut self, funcs: &HashMap<String, (u32, u32)>) {
         for (name, &(start_pc, params)) in funcs {
             self.functions
@@ -253,8 +284,77 @@ impl Vm {
         }
     }
 
+    fn debug_trace(&self, pc: usize, opcode: &str, regs: &[Value]) {
+        if self.debug_mode {
+            eprintln!(
+                "[DEBUG] PC={:04} | {:<12} | R0={:?} R1={:?} R2={:?} ...",
+                pc,
+                opcode,
+                regs.get(0),
+                regs.get(1),
+                regs.get(2)
+            );
+        }
+    }
+
+    fn check_timeout(&self) -> RuntimeResult<()> {
+        if let (Some(start), Some(max)) = (self.start_time, self.max_duration) {
+            if std::time::Instant::now().duration_since(start) > max {
+                return Err(RuntimeError::new(
+                    format!("Wall-clock timeout exceeded: {:?}", max),
+                    0,
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn check_array_size(&self, size: usize) -> RuntimeResult<()> {
+        if size > self.max_array_size {
+            return Err(RuntimeError::new(
+                format!(
+                    "Array size {} exceeds maximum {}",
+                    size, self.max_array_size
+                ),
+                0,
+            ));
+        }
+        Ok(())
+    }
+
+    fn check_string_size(&self, size: usize) -> RuntimeResult<()> {
+        if size > self.max_string_size {
+            return Err(RuntimeError::new(
+                format!(
+                    "String size {} exceeds maximum {}",
+                    size, self.max_string_size
+                ),
+                0,
+            ));
+        }
+        Ok(())
+    }
+
     pub fn run(&mut self, bytecode: &Bytecode) -> RuntimeResult<Value> {
-        self.run_from_pc(bytecode, 0)
+        // Initialize start time for timeout
+        if self.max_duration.is_some() && self.start_time.is_none() {
+            self.start_time = Some(std::time::Instant::now());
+        }
+        match self.run_from_pc(bytecode, 0) {
+            Ok(v) => Ok(v),
+            Err(mut e) => {
+                if e.line == 0 {
+                    e.line = bytecode.get_line(e.pc).unwrap_or(0);
+                }
+                e.call_stack = self
+                    .call_stack
+                    .iter()
+                    .rev()
+                    .map(|f| f.func_name.clone())
+                    .collect();
+                Err(e)
+            }
+        }
     }
 
     /// Core execution loop starting from an arbitrary program counter.
@@ -263,6 +363,11 @@ impl Vm {
         let mut pc: usize = start_pc;
 
         while pc < bytecode.code.len() && !self.halted {
+            // Check timeout every 1000 steps
+            if self.steps % 1000 == 0 {
+                self.check_timeout()?;
+            }
+
             self.steps += 1;
             if self.steps > self.max_steps {
                 return Err(RuntimeError::new("Max steps exceeded", pc));
@@ -271,6 +376,12 @@ impl Vm {
             let op_byte = bytecode.read_u16(&mut pc)?;
             let op = Opcode::from_u16(op_byte)
                 .ok_or_else(|| RuntimeError::new(format!("Unknown opcode: {}", op_byte), pc))?;
+
+            // Debug trace before execution
+            if self.debug_mode {
+                let op_name = format!("{:?}", op);
+                self.debug_trace(pc, &op_name, &self.registers);
+            }
 
             match op {
                 Opcode::Nop => {}
@@ -459,6 +570,10 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let val = bytecode.read_u8(&mut pc)? as usize;
                     let arr = self.get_register_cloned(dst);
+                    // Check array size limit
+                    if let Value::Array(ref a) = arr {
+                        self.check_array_size(a.len() + 1)?;
+                    }
                     let new_arr = builtins::builtin_push(&[arr, self.get_register_cloned(val)])?;
                     self.set_register(dst, new_arr);
                 }
@@ -467,10 +582,18 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let arr = bytecode.read_u8(&mut pc)? as usize;
                     let idx = bytecode.read_u8(&mut pc)? as usize;
-                    let val = builtins::builtin_get_at(&[
-                        self.get_register_cloned(arr),
-                        self.get_register_cloned(idx),
-                    ])?;
+                    let container = self.get_register_cloned(arr);
+                    let key = self.get_register_cloned(idx);
+                    let val = match &container {
+                        Value::Array(_) => builtins::builtin_get_at(&[container, key])?,
+                        Value::Map(map) => {
+                            let field = key
+                                .as_string()
+                                .ok_or_else(|| RuntimeError::new("Map key must be String", pc))?;
+                            map.get(field).cloned().unwrap_or(Value::Nil)
+                        }
+                        _ => builtins::builtin_get_at(&[container, key])?,
+                    };
                     self.set_register(dst, val);
                 }
 
@@ -478,13 +601,35 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let idx = bytecode.read_u8(&mut pc)? as usize;
                     let val = bytecode.read_u8(&mut pc)? as usize;
-                    let arr = self.get_register_cloned(dst);
-                    let new_arr = builtins::builtin_set_at(&[
-                        arr,
-                        self.get_register_cloned(idx),
-                        self.get_register_cloned(val),
-                    ])?;
-                    self.set_register(dst, new_arr);
+                    let container = self.get_register_cloned(dst);
+                    let key = self.get_register_cloned(idx);
+                    let value = self.get_register_cloned(val);
+                    match container {
+                        Value::Array(_) => {
+                            let new_arr = builtins::builtin_set_at(&[container, key, value])?;
+                            self.set_register(dst, new_arr);
+                        }
+                        Value::Map(mut map) => {
+                            let field = key
+                                .as_string()
+                                .ok_or_else(|| RuntimeError::new("Map key must be String", pc))?;
+                            map.insert(field.to_string(), value);
+                            self.set_register(dst, Value::Map(map));
+                        }
+                        _ => {
+                            // Auto-promote Nil/I64(0) to Map for struct-like assignment
+                            let mut map = std::collections::BTreeMap::new();
+                            if let Some(field) = key.as_string() {
+                                map.insert(field.to_string(), value);
+                                self.set_register(dst, Value::Map(map));
+                            } else {
+                                return Err(RuntimeError::new(
+                                    format!("Cannot set field on {}", container.type_name()),
+                                    pc,
+                                ));
+                            }
+                        }
+                    }
                 }
 
                 Opcode::Len => {
@@ -540,10 +685,13 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result = builtins::builtin_concat(&[
-                        self.get_register_cloned(a),
-                        self.get_register_cloned(b),
-                    ])?;
+                    let val_a = self.get_register_cloned(a);
+                    let val_b = self.get_register_cloned(b);
+                    // Check string size limit
+                    let new_len = val_a.as_string().map(|s| s.len()).unwrap_or(0)
+                        + val_b.as_string().map(|s| s.len()).unwrap_or(0);
+                    self.check_string_size(new_len)?;
+                    let result = builtins::builtin_concat(&[val_a, val_b])?;
                     self.set_register(dst, result);
                 }
 
@@ -1430,6 +1578,7 @@ impl Vm {
                                 base_reg: dst,
                                 arg_count,
                                 saved_regs,
+                                func_name: func_name.clone(),
                             });
                             pc = start_pc;
                         } else if self.natives.contains_key(func_name) {
@@ -1483,11 +1632,13 @@ impl Vm {
                     let arg_count = bytecode.read_u8(&mut pc)? as usize;
                     let dst = bytecode.read_u8(&mut pc)? as usize;
 
-                    // Find the function at this PC to get param_count
+                    // Find the function at this PC to get param_count and name
                     let mut param_count = 0;
-                    for (_, &(start_pc, params)) in &self.functions {
-                        if start_pc == target_pc as usize {
+                    let mut callee_name = String::from("<?>");
+                    for (name, &(fstart_pc, params)) in &self.functions {
+                        if fstart_pc == target_pc {
                             param_count = params as usize;
+                            callee_name = name.clone();
                             break;
                         }
                     }
@@ -1515,8 +1666,65 @@ impl Vm {
                         base_reg: dst,
                         arg_count,
                         saved_regs,
+                        func_name: callee_name,
                     });
-                    pc = target_pc as usize;
+                    pc = target_pc;
+                }
+
+                Opcode::CallDyn => {
+                    // Call a function stored as Value::Function (or Value::String) in a register.
+                    // Emitted by the lowerer when calling a local variable that holds a lambda.
+                    // Format: fn_reg(u8), arg_count(u8), dst(u8)
+                    let fn_reg = bytecode.read_u8(&mut pc)? as usize;
+                    let arg_count = bytecode.read_u8(&mut pc)? as usize;
+                    let dst = bytecode.read_u8(&mut pc)? as usize;
+
+                    let func_name = match &self.registers[fn_reg] {
+                        Value::Function(name) => name.clone(),
+                        Value::String(name) => name.clone(),
+                        other => {
+                            return Err(RuntimeError::new(
+                                format!("Cannot call value of type {}", other.type_name()),
+                                pc,
+                            ));
+                        }
+                    };
+
+                    if let Some(&(start_pc, param_count)) = self.functions.get(&func_name) {
+                        let saved_regs: Vec<Value> =
+                            self.registers[..self.config.saved_register_count].to_vec();
+                        let arg_base = self.config.arg_base_register;
+                        let max_args = arg_count.min(param_count as usize);
+                        for i in 0..max_args {
+                            self.registers[i + 1] = self.registers[arg_base + i].clone();
+                        }
+                        self.call_stack.push(CallFrame {
+                            return_pc: pc,
+                            base_reg: dst,
+                            arg_count,
+                            saved_regs,
+                            func_name: func_name.clone(),
+                        });
+                        pc = start_pc as usize;
+                    } else if self.natives.contains_key(&func_name) {
+                        let arg_base = self.config.arg_base_register;
+                        let args: Vec<Value> = (0..arg_count)
+                            .map(|i| self.registers[arg_base + i].clone())
+                            .collect();
+                        let func_name_owned = func_name.clone();
+                        if let Some(native) = self.natives.remove(&func_name_owned) {
+                            let result = native(self, args);
+                            self.registers[dst] = result;
+                            self.natives.insert(func_name_owned, native);
+                        }
+                    } else {
+                        let arg_base = self.config.arg_base_register;
+                        let args: Vec<Value> = (0..arg_count)
+                            .map(|i| self.registers[arg_base + i].clone())
+                            .collect();
+                        let result = self.call_builtin_by_name(&func_name, &args)?;
+                        self.registers[dst] = result;
+                    }
                 }
             }
         }
@@ -1675,7 +1883,24 @@ impl Vm {
                 self.set_register(i + 1, arg.clone());
             }
 
-            self.run_from_pc(bytecode, start_pc)
+            match self.run_from_pc(bytecode, start_pc) {
+                Ok(v) => Ok(v),
+                Err(mut e) => {
+                    if e.line == 0 {
+                        e.line = bytecode.get_line(e.pc).unwrap_or(0);
+                    }
+                    // Innermost callee first, then outer frames, then the entrypoint
+                    let mut stack: Vec<String> = self
+                        .call_stack
+                        .iter()
+                        .rev()
+                        .map(|f| f.func_name.clone())
+                        .collect();
+                    stack.push(func_name.to_string());
+                    e.call_stack = stack;
+                    Err(e)
+                }
+            }
         } else {
             Err(RuntimeError::new(
                 format!("Function '{}' not found", func_name),
@@ -1686,12 +1911,13 @@ impl Vm {
 
     fn call_builtin_by_name(&mut self, name: &str, args: &[Value]) -> RuntimeResult<Value> {
         match name {
-            "strlen" => builtins::builtin_strlen(args),
-            "substring" => builtins::builtin_substring(args),
+            "strlen" | "str_len" => builtins::builtin_strlen(args),
+            "substring" | "str_substring" => builtins::builtin_substring(args),
             "concat" => builtins::builtin_concat(args),
             "strcmp" => builtins::builtin_strcmp(args),
             "ord" => builtins::builtin_ord(args),
             "char" => builtins::builtin_char(args),
+            "str_char_at" => builtins::builtin_str_char_at(args),
             "push" => builtins::builtin_push(args),
             "get_at" => builtins::builtin_get_at(args),
             "set_at" => builtins::builtin_set_at(args),
@@ -1755,9 +1981,16 @@ impl Vm {
             "map_contains" => builtins::builtin_map_contains(args),
             "map_remove" => builtins::builtin_map_remove(args),
             // Phase 1.4: I/O builtins
-            "read_file" => builtins::builtin_read_file(args),
-            "write_file" => builtins::builtin_write_file(args),
-            "clock_ms" => builtins::builtin_clock_ms(args),
+            "read_file" | "file_read" => builtins::builtin_read_file(args),
+            "write_file" | "file_write" => builtins::builtin_write_file(args),
+            "clock_ms" | "current_time" => builtins::builtin_clock_ms(args),
+            "sleep" => builtins::builtin_sleep(args),
+            "assert" => builtins::builtin_assert(args),
+            "shell" => builtins::builtin_shell(args),
+            "sort" => builtins::builtin_sort(args),
+            "sin" => builtins::builtin_sin(args),
+            "cos" => builtins::builtin_cos(args),
+            "tan" => builtins::builtin_tan(args),
             // Phase 4.3: Homeostasis and promotion builtins
             "homeostasis_pressure" => builtins::builtin_homeostasis_pressure(args),
             "promotion_level" => builtins::builtin_promotion_level(args),

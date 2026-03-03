@@ -45,6 +45,22 @@ struct Args {
     #[arg(short, long)]
     verbose: bool,
 
+    /// Trace execution (show each opcode and register state)
+    #[arg(short, long)]
+    debug: bool,
+
+    /// Maximum array size (elements)
+    #[arg(long, default_value_t = 1_000_000)]
+    max_array_size: usize,
+
+    /// Maximum string size (bytes)
+    #[arg(long, default_value_t = 10_000_000)]
+    max_string_size: usize,
+
+    /// Wall-clock timeout in milliseconds
+    #[arg(long)]
+    timeout_ms: Option<u64>,
+
     /// Maximum steps to execute
     #[arg(long, default_value_t = 1_000_000)]
     max_steps: usize,
@@ -240,6 +256,19 @@ fn run_bond_handshake(endpoint: &str, prompt: &str, _context: &str) -> String {
     }
 }
 
+fn format_runtime_error(e: &hlx_runtime::RuntimeError) -> anyhow::Error {
+    let line_info = if e.line > 0 {
+        format!(" at line {}", e.line)
+    } else {
+        String::new()
+    };
+    let mut msg = format!("Runtime error{}: {} (pc {})", line_info, e.message, e.pc);
+    for frame in &e.call_stack {
+        msg.push_str(&format!("\n  in {}", frame));
+    }
+    anyhow::anyhow!("{}", msg)
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -378,7 +407,14 @@ fn main() -> Result<()> {
     print!("Executing... ");
     std::io::stdout().flush()?;
 
-    let mut vm = Vm::new().with_max_steps(args.max_steps);
+    let mut vm = Vm::new()
+        .with_max_steps(args.max_steps)
+        .with_debug(args.debug)
+        .with_memory_limits(args.max_array_size, args.max_string_size);
+
+    if let Some(timeout) = args.timeout_ms {
+        vm = vm.with_timeout(timeout);
+    }
 
     // Load existing patterns from DB into VM memory at startup
     match load_patterns_from_db(&db_conn, 500) {
@@ -654,6 +690,15 @@ fn main() -> Result<()> {
 
     // Execute: either call specific function or run from start
     let result = if let Some(func_name) = args.func {
+        // First, run __top_level__ to initialize module-level latent variables
+        if functions.contains_key("__top_level__") {
+            eprintln!("Running __top_level__ initialization...");
+            vm.call_function(&bytecode, "__top_level__", &[])
+                .map_err(|e| {
+                    anyhow::anyhow!("__top_level__ initialization error: {}", e.message)
+                })?;
+        }
+
         // Call specific exported function with arguments
         let func_args: Vec<hlx_runtime::Value> = args
             .args
@@ -676,11 +721,10 @@ fn main() -> Result<()> {
             func_args.len()
         );
         vm.call_function(&bytecode, &func_name, &func_args)
-            .map_err(|e| anyhow::anyhow!("Runtime error: {}", e.message))?
+            .map_err(|e| format_runtime_error(&e))?
     } else {
         // Run from beginning (default behavior)
-        vm.run(&bytecode)
-            .map_err(|e| anyhow::anyhow!("Runtime error: {}", e.message))?
+        vm.run(&bytecode).map_err(|e| format_runtime_error(&e))?
     };
 
     println!("✓");

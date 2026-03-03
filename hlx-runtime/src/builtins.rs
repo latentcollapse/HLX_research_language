@@ -85,6 +85,20 @@ pub fn builtin_char(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::String((code_i as u8 as char).to_string()))
 }
 
+pub fn builtin_str_char_at(args: &[Value]) -> RuntimeResult<Value> {
+    let s = args[0]
+        .as_string()
+        .ok_or_else(|| RuntimeError::new("str_char_at requires String", 0))?;
+    let idx = args[1]
+        .as_i64()
+        .ok_or_else(|| RuntimeError::new("str_char_at index must be i64", 0))?
+        as usize;
+    if idx >= s.len() {
+        return Ok(Value::I64(0));
+    }
+    Ok(Value::I64(s.as_bytes()[idx] as i64))
+}
+
 pub fn builtin_push(args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
@@ -539,6 +553,27 @@ pub fn builtin_sqrt(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::F64(n.sqrt()))
 }
 
+pub fn builtin_sin(args: &[Value]) -> RuntimeResult<Value> {
+    let n = args[0]
+        .as_f64()
+        .ok_or_else(|| RuntimeError::new("sin requires f64 (radians)", 0))?;
+    Ok(Value::F64(n.sin()))
+}
+
+pub fn builtin_cos(args: &[Value]) -> RuntimeResult<Value> {
+    let n = args[0]
+        .as_f64()
+        .ok_or_else(|| RuntimeError::new("cos requires f64 (radians)", 0))?;
+    Ok(Value::F64(n.cos()))
+}
+
+pub fn builtin_tan(args: &[Value]) -> RuntimeResult<Value> {
+    let n = args[0]
+        .as_f64()
+        .ok_or_else(|| RuntimeError::new("tan requires f64 (radians)", 0))?;
+    Ok(Value::F64(n.tan()))
+}
+
 pub fn builtin_hash(args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
@@ -677,6 +712,7 @@ pub fn builtin_type_of(args: &[Value]) -> RuntimeResult<Value> {
         Value::Tensor(_) => "tensor",
         Value::Void => "void",
         Value::Bytes(_) => "bytes",
+        Value::Function(_) => "function",
     };
     Ok(Value::String(type_name.to_string()))
 }
@@ -946,6 +982,101 @@ pub fn builtin_clock_ms(args: &[Value]) -> RuntimeResult<Value> {
     let now = SystemTime::now();
     let since_epoch = now.duration_since(UNIX_EPOCH).unwrap_or_default();
     Ok(Value::I64(since_epoch.as_millis() as i64))
+}
+
+/// Sleep for specified milliseconds
+/// sleep(ms: i64) -> i64
+pub fn builtin_sleep(args: &[Value]) -> RuntimeResult<Value> {
+    let ms = args[0]
+        .as_i64()
+        .ok_or_else(|| RuntimeError::new("sleep requires i64 milliseconds", 0))?;
+    std::thread::sleep(std::time::Duration::from_millis(ms as u64));
+    Ok(Value::I64(ms))
+}
+
+/// Assert that a condition is true
+/// assert(condition: bool, message: String) -> bool
+pub fn builtin_assert(args: &[Value]) -> RuntimeResult<Value> {
+    let condition = args[0]
+        .as_bool()
+        .ok_or_else(|| RuntimeError::new("assert requires bool condition", 0))?;
+    let message = if args.len() > 1 {
+        args[1].as_string().unwrap_or("Assertion failed")
+    } else {
+        "Assertion failed"
+    };
+    if condition {
+        Ok(Value::Bool(true))
+    } else {
+        Err(RuntimeError::new(
+            format!("Assertion failed: {}", message),
+            0,
+        ))
+    }
+}
+
+/// Sort an array (ascending)
+/// sort(arr: Array) -> Array
+pub fn builtin_sort(args: &[Value]) -> RuntimeResult<Value> {
+    let arr = args[0]
+        .as_array()
+        .ok_or_else(|| RuntimeError::new("sort requires Array", 0))?;
+    let mut sorted: Vec<Value> = arr.to_vec();
+    sorted.sort_by(|a, b| {
+        // Try numeric comparison first
+        match (a.as_i64(), b.as_i64()) {
+            (Some(a_i64), Some(b_i64)) => a_i64.cmp(&b_i64),
+            _ => match (a.as_f64(), b.as_f64()) {
+                (Some(a_f64), Some(b_f64)) => a_f64
+                    .partial_cmp(&b_f64)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+                _ => match (a.as_string(), b.as_string()) {
+                    (Some(a_str), Some(b_str)) => a_str.cmp(b_str),
+                    _ => std::cmp::Ordering::Equal,
+                },
+            },
+        }
+    });
+    Ok(Value::Array(sorted))
+}
+
+/// Execute a shell command and return the output as a string
+/// shell(cmd: String) -> String
+pub fn builtin_shell(args: &[Value]) -> RuntimeResult<Value> {
+    let cmd = args[0]
+        .as_string()
+        .ok_or_else(|| RuntimeError::new("shell requires String command", 0))?;
+
+    use std::process::Command;
+
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(cmd)
+        .output()
+        .map_err(|e| RuntimeError::new(format!("shell execution failed: {}", e), 0))?;
+
+    let mut result = String::new();
+
+    if !output.stdout.is_empty() {
+        result.push_str(&String::from_utf8_lossy(&output.stdout));
+    }
+
+    if !output.stderr.is_empty() {
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        result.push_str("[stderr] ");
+        result.push_str(&String::from_utf8_lossy(&output.stderr));
+    }
+
+    // Trim trailing whitespace
+    let result = result.trim_end().to_string();
+
+    if result.is_empty() {
+        Ok(Value::String("(no output)".to_string()))
+    } else {
+        Ok(Value::String(result))
+    }
 }
 
 // ============================================================================

@@ -95,6 +95,10 @@ pub use vm::Vm;
 pub struct RuntimeError {
     pub message: String,
     pub pc: usize,
+    /// Source line number (0 = unknown, populated after lookup in line_table)
+    pub line: u32,
+    /// HLX call stack at the time of error (innermost first)
+    pub call_stack: Vec<String>,
 }
 
 impl RuntimeError {
@@ -102,6 +106,8 @@ impl RuntimeError {
         RuntimeError {
             message: message.into(),
             pc,
+            line: 0,
+            call_stack: Vec::new(),
         }
     }
 }

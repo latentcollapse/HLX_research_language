@@ -14,9 +14,12 @@ pub enum Token {
     // Literals
     Int(i64),
     Float(f64),
-    String(String),
+    String(String),          // Regular string with escape sequences
+    RawString(String),       // Raw string: r"..." no escapes processed
+    MultiLineString(String), // Triple-quoted: """..."""
     Bool(bool),
     Ident(String),
+    DocComment(String), // /// Documentation comments
 
     // Keywords
     Let,
@@ -91,8 +94,14 @@ pub enum Token {
     Bang,
     Amp,
     Pipe,
+    Question, // ?
     FatArrow, // =>
     Arrow,    // ->
+    PlusEq,   // +=
+    MinusEq,  // -=
+    StarEq,   // *=
+    SlashEq,  // /=
+    PercentEq, // %=
 
     // Delimiters
     LParen,
@@ -197,6 +206,26 @@ impl AstParser {
                 continue;
             }
 
+            // Doc comments: ///
+            if c == '/' && pos + 2 < chars.len() && chars[pos + 1] == '/' && chars[pos + 2] == '/' {
+                let start_line = line;
+                let start_col = col;
+                pos += 3; // Skip ///
+                let start = pos;
+                while pos < chars.len() && chars[pos] != '\n' {
+                    pos += 1;
+                }
+                let doc: String = chars[start..pos].iter().collect();
+                self.tokens.push(TokenWithSpan {
+                    token: Token::DocComment(doc.trim().to_string()),
+                    span: TokenSpan::new(start_line, start_col),
+                });
+                line += 1;
+                col = 1;
+                continue;
+            }
+
+            // Regular comments: //
             if c == '/' && pos + 1 < chars.len() && chars[pos + 1] == '/' {
                 while pos < chars.len() && chars[pos] != '\n' {
                     pos += 1;
@@ -204,11 +233,12 @@ impl AstParser {
                 continue;
             }
 
-            if c == '"' {
+            // Raw strings: r"..."
+            if c == 'r' && pos + 1 < chars.len() && chars[pos + 1] == '"' {
                 let start_line = line;
                 let start_col = col;
-                pos += 1;
-                col += 1;
+                pos += 2; // Skip r"
+                col += 2;
                 let start = pos;
                 while pos < chars.len() && chars[pos] != '"' {
                     if chars[pos] == '\n' {
@@ -221,10 +251,81 @@ impl AstParser {
                 }
                 let s: String = chars[start..pos].iter().collect();
                 self.tokens.push(TokenWithSpan {
-                    token: Token::String(s),
+                    token: Token::RawString(s),
                     span: TokenSpan::new(start_line, start_col),
                 });
+                pos += 1; // Skip closing "
+                col += 1;
+                continue;
+            }
+
+            // Multi-line strings: """..."""
+            if c == '"' && pos + 2 < chars.len() && chars[pos + 1] == '"' && chars[pos + 2] == '"' {
+                let start_line = line;
+                let start_col = col;
+                pos += 3; // Skip """
+                col += 3;
+                let start = pos;
+                while pos + 2 < chars.len()
+                    && !(chars[pos] == '"' && chars[pos + 1] == '"' && chars[pos + 2] == '"')
+                {
+                    if chars[pos] == '\n' {
+                        line += 1;
+                        col = 1;
+                    } else {
+                        col += 1;
+                    }
+                    pos += 1;
+                }
+                let s: String = chars[start..pos].iter().collect();
+                self.tokens.push(TokenWithSpan {
+                    token: Token::MultiLineString(s),
+                    span: TokenSpan::new(start_line, start_col),
+                });
+                pos += 3; // Skip closing """
+                col += 3;
+                continue;
+            }
+
+            // Regular strings with escape sequences: "..."
+            if c == '"' {
+                let start_line = line;
+                let start_col = col;
                 pos += 1;
+                col += 1;
+                let start = pos;
+                let mut result = String::new();
+                while pos < chars.len() && chars[pos] != '"' {
+                    if chars[pos] == '\\' && pos + 1 < chars.len() {
+                        // Handle escape sequences
+                        let escaped = chars[pos + 1];
+                        match escaped {
+                            'n' => result.push('\n'),
+                            't' => result.push('\t'),
+                            'r' => result.push('\r'),
+                            '\\' => result.push('\\'),
+                            '"' => result.push('"'),
+                            '0' => result.push('\0'),
+                            _ => result.push(escaped), // Unknown escape, keep as-is
+                        }
+                        pos += 2;
+                        col += 2;
+                    } else {
+                        if chars[pos] == '\n' {
+                            line += 1;
+                            col = 1;
+                        } else {
+                            col += 1;
+                        }
+                        result.push(chars[pos]);
+                        pos += 1;
+                    }
+                }
+                self.tokens.push(TokenWithSpan {
+                    token: Token::String(result),
+                    span: TokenSpan::new(start_line, start_col),
+                });
+                pos += 1; // Skip closing "
                 col += 1;
                 continue;
             }
@@ -343,19 +444,56 @@ impl AstParser {
                 ':' => Token::Colon,
                 ',' => Token::Comma,
                 '.' => Token::Dot,
-                '+' => Token::Plus,
+                '?' => Token::Question,
+                '+' => {
+                    if pos + 1 < chars.len() && chars[pos + 1] == '=' {
+                        pos += 1;
+                        col += 1;
+                        Token::PlusEq
+                    } else {
+                        Token::Plus
+                    }
+                }
                 '-' => {
                     if pos + 1 < chars.len() && chars[pos + 1] == '>' {
                         pos += 1;
                         col += 1;
                         Token::Arrow
+                    } else if pos + 1 < chars.len() && chars[pos + 1] == '=' {
+                        pos += 1;
+                        col += 1;
+                        Token::MinusEq
                     } else {
                         Token::Minus
                     }
                 }
-                '*' => Token::Star,
-                '/' => Token::Slash,
-                '%' => Token::Percent,
+                '*' => {
+                    if pos + 1 < chars.len() && chars[pos + 1] == '=' {
+                        pos += 1;
+                        col += 1;
+                        Token::StarEq
+                    } else {
+                        Token::Star
+                    }
+                }
+                '/' => {
+                    if pos + 1 < chars.len() && chars[pos + 1] == '=' {
+                        pos += 1;
+                        col += 1;
+                        Token::SlashEq
+                    } else {
+                        Token::Slash
+                    }
+                }
+                '%' => {
+                    if pos + 1 < chars.len() && chars[pos + 1] == '=' {
+                        pos += 1;
+                        col += 1;
+                        Token::PercentEq
+                    } else {
+                        Token::Percent
+                    }
+                }
                 '=' => {
                     if pos + 1 < chars.len() && chars[pos + 1] == '=' {
                         pos += 1;
@@ -1432,7 +1570,20 @@ impl AstParser {
     }
 
     fn parse_statement(&mut self) -> Result<Statement, ParseError> {
-        match self.current() {
+        let tok_span = self.current_span();
+        let source_span = SourceSpan::new(
+            tok_span.line as u32,
+            tok_span.col as u32,
+            tok_span.line as u32,
+            tok_span.col as u32,
+        );
+        let stmt = match self.current() {
+            Token::DocComment(_) => {
+                // Skip doc comments for now - they're parsed but not attached
+                self.advance();
+                // Return a no-op statement (expression statement with empty block)
+                Ok(Statement::expr(Expression::int(0)))
+            }
             Token::Let => self.parse_let(),
             Token::Return => self.parse_return(),
             Token::If => self.parse_if(),
@@ -1463,12 +1614,29 @@ impl AstParser {
                     let value = self.parse_expression()?;
                     self.expect(&Token::Semi)?;
                     Ok(Statement::assign(expr, value))
+                } else if matches!(
+                    self.current(),
+                    Token::PlusEq | Token::MinusEq | Token::StarEq | Token::SlashEq | Token::PercentEq
+                ) {
+                    let op = match self.current() {
+                        Token::PlusEq => BinaryOp::Add,
+                        Token::MinusEq => BinaryOp::Sub,
+                        Token::StarEq => BinaryOp::Mul,
+                        Token::SlashEq => BinaryOp::Div,
+                        Token::PercentEq => BinaryOp::Mod,
+                        _ => unreachable!(),
+                    };
+                    self.advance();
+                    let value = self.parse_expression()?;
+                    self.expect(&Token::Semi)?;
+                    Ok(Statement::compound_assign(expr, op, value))
                 } else {
                     self.expect(&Token::Semi)?;
                     Ok(Statement::expr(expr))
                 }
             }
-        }
+        }?;
+        Ok(stmt.with_span(source_span))
     }
 
     fn parse_let(&mut self) -> Result<Statement, ParseError> {
@@ -1782,7 +1950,22 @@ impl AstParser {
     }
 
     fn parse_expression(&mut self) -> Result<Expression, ParseError> {
-        self.parse_or()
+        self.parse_ternary()
+    }
+
+    fn parse_ternary(&mut self) -> Result<Expression, ParseError> {
+        let cond = self.parse_or()?;
+
+        // Ternary: cond ? then : else
+        if matches!(self.current(), Token::Question) {
+            self.advance();
+            let then_expr = self.parse_expression()?;
+            self.expect(&Token::Colon)?;
+            let else_expr = self.parse_expression()?;
+            Ok(Expression::conditional(cond, then_expr, else_expr))
+        } else {
+            Ok(cond)
+        }
     }
 
     fn parse_or(&mut self) -> Result<Expression, ParseError> {
@@ -1931,9 +2114,28 @@ impl AstParser {
                 }
                 Token::Dot => {
                     self.advance();
-                    if let Token::Ident(field) = self.current().clone() {
+                    if let Token::Ident(name) = self.current().clone() {
                         self.advance();
-                        expr = Expression::field_access(expr, field);
+                        // Check if this is a method call: obj.method(args)
+                        if matches!(self.current(), Token::LParen) {
+                            self.advance();
+                            let mut args = Vec::new();
+                            while !matches!(self.current(), Token::RParen) {
+                                args.push(self.parse_expression()?);
+                                if matches!(self.current(), Token::Comma) {
+                                    self.advance();
+                                }
+                            }
+                            self.expect(&Token::RParen)?;
+                            expr = Expression::new(ExprKind::MethodCall {
+                                object: Box::new(expr),
+                                method: name,
+                                arguments: args,
+                            });
+                        } else {
+                            // Regular field access
+                            expr = Expression::field_access(expr, name);
+                        }
                     }
                 }
                 Token::As => {
@@ -1958,7 +2160,7 @@ impl AstParser {
                 self.advance();
                 Ok(Expression::float(n))
             }
-            Token::String(s) => {
+            Token::String(s) | Token::RawString(s) | Token::MultiLineString(s) => {
                 self.advance();
                 Ok(Expression::string(s))
             }
@@ -2018,7 +2220,42 @@ impl AstParser {
                 self.expect(&Token::RBrace)?;
                 Ok(Expression::dict(pairs))
             }
-            _ => Ok(Expression::nil()),
+            // Lambda with parameters: |x, y| expr
+            Token::Pipe => {
+                self.advance();
+                let mut parameters = Vec::new();
+                while !matches!(self.current(), Token::Pipe | Token::Eof) {
+                    if let Token::Ident(name) = self.current().clone() {
+                        parameters.push(name);
+                        self.advance();
+                        if matches!(self.current(), Token::Comma) {
+                            self.advance();
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                self.expect(&Token::Pipe)?;
+                let body = self.parse_expression()?;
+                Ok(Expression::new(ExprKind::Lambda {
+                    parameters,
+                    body: Box::new(body),
+                }))
+            }
+            // Zero-argument lambda: || expr  (|| is lexed as Token::Or)
+            Token::Or => {
+                self.advance();
+                let body = self.parse_expression()?;
+                Ok(Expression::new(ExprKind::Lambda {
+                    parameters: Vec::new(),
+                    body: Box::new(body),
+                }))
+            }
+            other => Err(ParseError {
+                message: format!("Unexpected token: {:?}", other),
+                line: self.current_span().line,
+                col: self.current_span().col,
+            }),
         }
     }
 }

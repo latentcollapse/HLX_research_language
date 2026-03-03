@@ -52,6 +52,7 @@ pub enum Opcode {
     JumpIfNot = 42,
     Call = 50,
     CallAddr = 55, // Call by direct PC address (0x37) - for cross-module imports
+    CallDyn = 56,  // Call by function value in register (for lambdas)
     Return = 51,
     Halt = 52,
     Loop = 60,
@@ -142,6 +143,7 @@ impl Opcode {
             42 => Some(Opcode::JumpIfNot),
             50 => Some(Opcode::Call),
             55 => Some(Opcode::CallAddr), // 0x37
+            56 => Some(Opcode::CallDyn),
             51 => Some(Opcode::Return),
             52 => Some(Opcode::Halt),
             60 => Some(Opcode::Loop),
@@ -216,6 +218,25 @@ pub struct Bytecode {
     pub strings: Vec<String>,
     /// Export table: function name -> start PC (Phase 3.3)
     pub exports: HashMap<String, u32>,
+    /// Line number table: PC -> source line for error reporting
+    /// Format: Vec<(pc, line)> sorted by PC
+    pub line_table: Vec<(u32, u32)>,
+}
+
+impl Bytecode {
+    /// Get source line for a given program counter
+    pub fn get_line(&self, pc: usize) -> Option<u32> {
+        // Binary search for the closest PC <= target
+        let mut result = None;
+        for (entry_pc, line) in &self.line_table {
+            if *entry_pc as usize <= pc {
+                result = Some(*line);
+            } else {
+                break;
+            }
+        }
+        result
+    }
 }
 
 impl Bytecode {
@@ -225,6 +246,7 @@ impl Bytecode {
             constants: Vec::new(),
             strings: Vec::new(),
             exports: HashMap::new(),
+            line_table: Vec::new(),
         }
     }
 
@@ -397,6 +419,7 @@ impl Bytecode {
             constants,
             strings,
             exports: HashMap::new(), // TODO: Phase 3.3 - serialize/deserialize exports
+            line_table: Vec::new(),
         })
     }
 
@@ -463,6 +486,12 @@ impl Bytecode {
                         data.extend_from_slice(&d.to_le_bytes());
                     }
                 }
+                crate::Value::Function(name) => {
+                    data.push(10);
+                    let bytes = name.as_bytes();
+                    data.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+                    data.extend_from_slice(bytes);
+                }
             }
         }
         data
@@ -494,6 +523,12 @@ impl Bytecode {
             }
             crate::Value::Void => {
                 data.push(5);
+            }
+            crate::Value::Function(name) => {
+                data.push(10);
+                let bytes = name.as_bytes();
+                data.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+                data.extend_from_slice(bytes);
             }
             _ => {
                 data.push(4);
@@ -557,6 +592,23 @@ impl Bytecode {
             }
             4 => crate::Value::Nil,
             5 => crate::Value::Void,
+            10 => {
+                if offset + 4 > data.len() {
+                    return Err(BytecodeError::TruncatedData);
+                }
+                let len_bytes: [u8; 4] = data[offset..offset + 4].try_into().map_err(|_| {
+                    BytecodeError::DeserializationFailed("Invalid function name length".into())
+                })?;
+                let len = u32::from_le_bytes(len_bytes) as usize;
+                offset += 4;
+                if offset + len > data.len() {
+                    return Err(BytecodeError::TruncatedData);
+                }
+                let name = String::from_utf8(data[offset..offset + len].to_vec())
+                    .map_err(|e| BytecodeError::DeserializationFailed(e.to_string()))?;
+                offset += len;
+                crate::Value::Function(name)
+            }
             _ => {
                 return Err(BytecodeError::DeserializationFailed(format!(
                     "Unknown value type tag: {}",
@@ -752,6 +804,23 @@ impl Bytecode {
                     let tensor = crate::Tensor::from_data(shape, tensor_data)
                         .map_err(|e| BytecodeError::DeserializationFailed(e.message))?;
                     constants.push(crate::Value::Tensor(tensor));
+                }
+                10 => {
+                    if offset + 4 > data.len() {
+                        return Err(BytecodeError::TruncatedData);
+                    }
+                    let bytes: [u8; 4] = data[offset..offset + 4].try_into().map_err(|_| {
+                        BytecodeError::DeserializationFailed("Invalid function name length bytes".into())
+                    })?;
+                    let len = u32::from_le_bytes(bytes) as usize;
+                    offset += 4;
+                    if offset + len > data.len() {
+                        return Err(BytecodeError::TruncatedData);
+                    }
+                    let name = String::from_utf8(data[offset..offset + len].to_vec())
+                        .map_err(|e| BytecodeError::DeserializationFailed(e.to_string()))?;
+                    constants.push(crate::Value::Function(name));
+                    offset += len;
                 }
                 _ => {
                     return Err(BytecodeError::DeserializationFailed(format!(

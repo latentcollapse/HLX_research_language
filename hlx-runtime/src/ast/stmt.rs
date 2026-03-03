@@ -292,6 +292,10 @@ impl Statement {
         Statement::new(StmtKind::Assign { target, value })
     }
 
+    pub fn compound_assign(target: Expression, op: super::BinaryOp, value: Expression) -> Self {
+        Statement::new(StmtKind::CompoundAssign { target, op, value })
+    }
+
     pub fn expr(expr: Expression) -> Self {
         Statement::new(StmtKind::Expr(expr))
     }

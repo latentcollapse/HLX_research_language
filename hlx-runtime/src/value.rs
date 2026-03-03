@@ -14,6 +14,8 @@ pub enum Value {
     Array(Vec<Value>),
     Map(BTreeMap<String, Value>),
     Tensor(Tensor),
+    /// First-class function reference (used for lambdas / closures)
+    Function(String),
     Void,
     Nil,
 }
@@ -29,6 +31,7 @@ impl Value {
             Value::Array(_) => "Array",
             Value::Map(_) => "Map",
             Value::Tensor(_) => "Tensor",
+            Value::Function(_) => "Function",
             Value::Void => "void",
             Value::Nil => "nil",
         }
@@ -53,6 +56,13 @@ impl Value {
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             Value::F64(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Value::Bool(b) => Some(*b),
             _ => None,
         }
     }
@@ -119,6 +129,7 @@ impl fmt::Display for Value {
                 write!(f, "}}")
             }
             Value::Tensor(t) => write!(f, "{}", t),
+            Value::Function(name) => write!(f, "<fn:{}>", name),
             Value::Void => write!(f, "void"),
             Value::Nil => write!(f, "nil"),
         }

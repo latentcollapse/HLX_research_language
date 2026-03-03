@@ -96,7 +96,7 @@ fn embed(text: String) -> Tensor[64] {
     // Distribute hash across dimensions (deterministic pseudo-embedding)
     let i: i64 = 0;
     loop(i < 64, 100) {
-        let val: f64 = ((hash * (i + 1)) % 1000) as f64 / 1000.0;
+        let val: f64 = i64_to_f64((hash * (i + 1)) % 1000) / 1000.0;
         set_tensor(result, i, val - 0.5);  // Center around 0
         i = i + 1;
     }
@@ -190,7 +190,7 @@ fn evict_weakest_pattern() -> i64 {
     
     let i: i64 = 0;
     loop(i < pattern_count, 10000) {
-        let score: f64 = patterns[i].confidence * (patterns[i].access_count + 1) as f64;
+        let score: f64 = patterns[i].confidence * i64_to_f64(patterns[i].access_count + 1);
         if score < min_score {
             min_score = score;
             min_idx = i;
@@ -335,7 +335,7 @@ fn consolidate_high() -> Tensor[64] {
 fn compute_confidence() -> f64 {
     // Confidence based on state magnitude and pattern matches
     let state_norm: f64 = tensor_norm(z_high) / 8.0;  // Normalize to ~[0,1]
-    let pattern_bonus: f64 = (pattern_count as f64) / 100.0;
+    let pattern_bonus: f64 = i64_to_f64(pattern_count) / 100.0;
     
     let raw: f64 = state_norm * 0.7 + pattern_bonus * 0.3;
     
@@ -570,11 +570,11 @@ fn evaluate_fitness() -> f64 {
     let pattern_util: f64 = 0.0;
     let p: i64 = 0;
     loop(p < pattern_count, 10000) {
-        pattern_util = pattern_util + (patterns[p].access_count as f64);
+        pattern_util = pattern_util + i64_to_f64(patterns[p].access_count);
         p = p + 1;
     }
     if pattern_count > 0 {
-        pattern_util = pattern_util / (pattern_count as f64);
+        pattern_util = pattern_util / i64_to_f64(pattern_count);
     }
     pattern_util = pattern_util / 10.0;  // Normalize
     if pattern_util > 1.0 { pattern_util = 1.0; }
@@ -582,7 +582,7 @@ fn evaluate_fitness() -> f64 {
     let mod_success: f64 = 1.0;
     let total_mods: i64 = successful_modifications + rollback_count;
     if total_mods > 0 {
-        mod_success = successful_modifications as f64 / total_mods as f64;
+        mod_success = i64_to_f64(successful_modifications) / i64_to_f64(total_mods);
     }
     
     return base * 0.5 + pattern_util * 0.3 + mod_success * 0.2;
@@ -724,18 +724,17 @@ export fn repl_step(input: String) -> String {
 }
 
 export fn get_status() -> String {
-    // Return simple status string (not JSON - HLX doesn't have escapes)
-    let status: String = "level=";
-    status = concat(status, level);
-    status = concat(status, " patterns=");
-    status = concat(status, i64_to_str(pattern_count));
-    status = concat(status, " confidence=");
-    status = concat(status, f64_to_str(confidence, 3));
-    status = concat(status, " generation=");
-    status = concat(status, i64_to_str(generation));
-    status = concat(status, " fitness=");
-    status = concat(status, f64_to_str(fitness, 3));
+    // Return simple status string using + operator (avoids concat() bug)
+    let status: String = "level=" + level + " patterns=" + i64_to_str(pattern_count) 
+                        + " confidence=" + f64_to_str(confidence, 3)
+                        + " generation=" + i64_to_str(generation)
+                        + " fitness=" + f64_to_str(fitness, 3);
     return status;
+}
+
+export fn exec_shell(cmd: String) -> String {
+    // Execute a shell command and return the output
+    return shell(cmd);
 }
 
 } // module bit

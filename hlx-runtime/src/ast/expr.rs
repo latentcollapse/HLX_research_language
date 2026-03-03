@@ -300,4 +300,16 @@ impl Expression {
     pub fn nil() -> Self {
         Expression::new(ExprKind::Nil)
     }
+
+    pub fn conditional(
+        condition: Expression,
+        then_expr: Expression,
+        else_expr: Expression,
+    ) -> Self {
+        Expression::new(ExprKind::Conditional {
+            condition: Box::new(condition),
+            then_expr: Box::new(then_expr),
+            else_expr: Box::new(else_expr),
+        })
+    }
 }

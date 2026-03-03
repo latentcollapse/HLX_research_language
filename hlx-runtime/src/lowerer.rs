@@ -57,6 +57,12 @@ pub struct Lowerer {
     loop_stack: Vec<LoopContext>,
     /// Imports to be loaded after main program
     pending_imports: Vec<PendingImport>,
+    /// Whether we're currently inside __top_level__ (module-level init)
+    in_top_level: bool,
+    /// Current source line for line table generation
+    current_line: u32,
+    /// Counter for generating unique lambda names
+    lambda_counter: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -78,6 +84,9 @@ impl Lowerer {
             patch_points: Vec::new(),
             loop_stack: Vec::new(),
             pending_imports: Vec::new(),
+            in_top_level: false,
+            current_line: 0,
+            lambda_counter: 0,
         }
     }
 
@@ -291,6 +300,7 @@ impl Lowerer {
 
     fn lower_function(&mut self, func: &Function) -> LowerResult<()> {
         let is_main = func.name == "main";
+        let is_top_level = func.name == "__top_level__";
         let param_count = func.parameters.len() as u32;
 
         if !is_main {
@@ -304,9 +314,11 @@ impl Lowerer {
                 .insert(func.name.clone(), (start_pc, param_count));
 
             self.with_scope(|this| {
+                this.in_top_level = is_top_level;
                 this.bind_params(&func.parameters);
                 this.lower_body(&func.body)?;
                 this.emit(Opcode::Return);
+                this.in_top_level = false;
                 Ok(())
             })?;
 
@@ -328,9 +340,23 @@ impl Lowerer {
         Ok(())
     }
 
+    /// Reserved register layout:
+    ///   0       = return value
+    ///   1..N    = function parameters (loaded by VM call_function)
+    ///   10      = condition register (if/loop/while conditions)
+    ///   20+     = local variables (safe zone)
+    ///   150+    = call argument base
+    ///   200+    = temp registers
+    const LOCAL_VAR_BASE: u8 = 20;
+
     fn bind_params(&mut self, params: &[Parameter]) {
         for (i, param) in params.iter().enumerate() {
             self.variables.insert(param.name.clone(), (i + 1) as u8);
+        }
+        // Local variables start at LOCAL_VAR_BASE to avoid colliding with
+        // register 0 (return), registers 1-N (parameters), and register 10 (conditions).
+        if self.next_var_reg < Self::LOCAL_VAR_BASE {
+            self.next_var_reg = Self::LOCAL_VAR_BASE;
         }
     }
 
@@ -346,6 +372,10 @@ impl Lowerer {
     // ─── Statements ─────────────────────────────────────────────────────
 
     fn lower_statement(&mut self, stmt: &Statement) -> LowerResult<()> {
+        if stmt.span.start_line > 0 {
+            let pc = self.current_pc() as u32;
+            self.bytecode.line_table.push((pc, stmt.span.start_line));
+        }
         match &stmt.kind {
             StmtKind::Let {
                 name, value, ty, ..
@@ -354,15 +384,40 @@ impl Lowerer {
                 if let Some(val) = value {
                     self.lower_expr(val, reg)?;
                 } else {
-                    // Check for Tensor[N] type annotation and auto-initialize to zero tensor
+                    // Auto-initialize based on type annotation
                     let default_val = if let Some(ann) = ty {
                         if ann.name.starts_with("Tensor[") {
-                            let size: usize = ann.name
+                            let size: usize = ann
+                                .name
                                 .trim_start_matches("Tensor[")
                                 .trim_end_matches(']')
                                 .parse()
                                 .unwrap_or(64);
                             Value::Tensor(Tensor::zeros(vec![size]))
+                        } else if ann.name.starts_with('[') && ann.name.contains(';') {
+                            // Array type: [Type; N] — e.g. "[i64; 10]", "[f64; 10]"
+                            let parts: Vec<&str> = ann
+                                .name
+                                .trim_matches(|c| c == '[' || c == ']')
+                                .split(';')
+                                .collect();
+                            let size: usize = parts
+                                .get(1)
+                                .and_then(|s| s.trim().parse().ok())
+                                .unwrap_or(0);
+                            let elem_type = parts.first().map(|s| s.trim()).unwrap_or("");
+                            let default_elem = match elem_type {
+                                "f64" => Value::F64(0.0),
+                                "String" => Value::String(String::new()),
+                                _ => Value::I64(0),
+                            };
+                            Value::Array(vec![default_elem; size])
+                        } else if ann.name == "String" {
+                            Value::String(String::new())
+                        } else if ann.name == "f64" {
+                            Value::F64(0.0)
+                        } else if ann.name == "dict" {
+                            Value::Map(std::collections::BTreeMap::new())
                         } else {
                             Value::I64(0)
                         }
@@ -374,23 +429,218 @@ impl Lowerer {
                     self.emit_u8(reg);
                     self.emit_u32(idx);
                 }
+                // In __top_level__, persist to latent state so other functions can read it
+                if self.in_top_level {
+                    let name_idx = self.get_or_add_string(name) as u32;
+                    self.emit(Opcode::LatentSet);
+                    self.emit_u32(name_idx);
+                    self.emit_u8(reg);
+                }
             }
             StmtKind::Assign { target, value } => {
                 if let ExprKind::Identifier(name) = &target.kind {
-                    let reg = self.resolve_or_alloc_var(name)?;
-                    self.lower_expr(value, reg)?;
+                    if let Some(&reg) = self.variables.get(name.as_str()) {
+                        // Local variable — write to its register
+                        self.lower_expr(value, reg)?;
+                    } else {
+                        // Not a local variable — treat as latent (module-level)
+                        let tmp = self.alloc_tmp()?;
+                        self.lower_expr(value, tmp)?;
+                        let name_idx = self.get_or_add_string(name) as u32;
+                        self.emit(Opcode::LatentSet);
+                        self.emit_u32(name_idx);
+                        self.emit_u8(tmp);
+                    }
+                } else if let ExprKind::Index { array, index } = &target.kind {
+                    // Index assignment: arr[idx] = value
+                    if let ExprKind::Identifier(arr_name) = &array.kind {
+                        if let Some(&arr_reg) = self.variables.get(arr_name.as_str()) {
+                            // Local array — emit Set opcode
+                            let idx_reg = self.alloc_tmp()?;
+                            self.lower_expr(index, idx_reg)?;
+                            let val_reg = self.alloc_tmp()?;
+                            self.lower_expr(value, val_reg)?;
+                            self.emit(Opcode::Set);
+                            self.emit_u8(arr_reg);
+                            self.emit_u8(idx_reg);
+                            self.emit_u8(val_reg);
+                        } else {
+                            // Latent array — read, modify, write back
+                            let arr_reg = self.alloc_tmp()?;
+                            let name_idx = self.get_or_add_string(arr_name) as u32;
+                            self.emit(Opcode::LatentGet);
+                            self.emit_u8(arr_reg);
+                            self.emit_u32(name_idx);
+                            let idx_reg = self.alloc_tmp()?;
+                            self.lower_expr(index, idx_reg)?;
+                            let val_reg = self.alloc_tmp()?;
+                            self.lower_expr(value, val_reg)?;
+                            self.emit(Opcode::Set);
+                            self.emit_u8(arr_reg);
+                            self.emit_u8(idx_reg);
+                            self.emit_u8(val_reg);
+                            self.emit(Opcode::LatentSet);
+                            self.emit_u32(name_idx);
+                            self.emit_u8(arr_reg);
+                        }
+                    } else {
+                        // Complex array expression — evaluate array to temp
+                        let arr_reg = self.alloc_tmp()?;
+                        self.lower_expr(array, arr_reg)?;
+                        let idx_reg = self.alloc_tmp()?;
+                        self.lower_expr(index, idx_reg)?;
+                        let val_reg = self.alloc_tmp()?;
+                        self.lower_expr(value, val_reg)?;
+                        self.emit(Opcode::Set);
+                        self.emit_u8(arr_reg);
+                        self.emit_u8(idx_reg);
+                        self.emit_u8(val_reg);
+                    }
+                } else if let ExprKind::FieldAccess { object, field } = &target.kind {
+                    // Field assignment: obj.field = value
+                    if let ExprKind::Identifier(obj_name) = &object.kind {
+                        if let Some(&obj_reg) = self.variables.get(obj_name.as_str()) {
+                            // Local object — obj_reg is in saved range (0-149), safe across calls.
+                            // Evaluate value first so any function call doesn't clobber field_reg.
+                            let val_reg = self.alloc_tmp()?;
+                            self.lower_expr(value, val_reg)?;
+                            let field_reg = self.alloc_tmp()?;
+                            let field_const =
+                                self.bytecode.add_constant(Value::String(field.clone()));
+                            self.emit(Opcode::Const);
+                            self.emit_u8(field_reg);
+                            self.emit_u32(field_const);
+                            self.emit(Opcode::Set);
+                            self.emit_u8(obj_reg);
+                            self.emit_u8(field_reg);
+                            self.emit_u8(val_reg);
+                        } else {
+                            // Latent object — obj_reg is a temp (200+), not saved across calls.
+                            // Evaluate value first, then LatentGet, then load field name.
+                            let name_idx = self.get_or_add_string(obj_name) as u32;
+                            let val_reg = self.alloc_tmp()?;
+                            self.lower_expr(value, val_reg)?;
+                            let obj_reg = self.alloc_tmp()?;
+                            self.emit(Opcode::LatentGet);
+                            self.emit_u8(obj_reg);
+                            self.emit_u32(name_idx);
+                            let field_reg = self.alloc_tmp()?;
+                            let field_const =
+                                self.bytecode.add_constant(Value::String(field.clone()));
+                            self.emit(Opcode::Const);
+                            self.emit_u8(field_reg);
+                            self.emit_u32(field_const);
+                            self.emit(Opcode::Set);
+                            self.emit_u8(obj_reg);
+                            self.emit_u8(field_reg);
+                            self.emit_u8(val_reg);
+                            self.emit(Opcode::LatentSet);
+                            self.emit_u32(name_idx);
+                            self.emit_u8(obj_reg);
+                        }
+                    } else if let ExprKind::Index { array, index } = &object.kind {
+                        // arr[idx].field = value — read-modify-write for indexed struct fields
+                        if let ExprKind::Identifier(arr_name) = &array.kind {
+                            let val_reg = self.alloc_tmp()?;
+                            self.lower_expr(value, val_reg)?;
+                            let idx_reg = self.alloc_tmp()?;
+                            self.lower_expr(index, idx_reg)?;
+                            if let Some(&arr_reg) = self.variables.get(arr_name.as_str()) {
+                                // Local array of structs: read element, modify field, write back
+                                let obj_reg = self.alloc_tmp()?;
+                                self.emit(Opcode::Get);
+                                self.emit_u8(obj_reg);
+                                self.emit_u8(arr_reg);
+                                self.emit_u8(idx_reg);
+                                let field_reg = self.alloc_tmp()?;
+                                let field_const =
+                                    self.bytecode.add_constant(Value::String(field.clone()));
+                                self.emit(Opcode::Const);
+                                self.emit_u8(field_reg);
+                                self.emit_u32(field_const);
+                                self.emit(Opcode::Set);
+                                self.emit_u8(obj_reg);
+                                self.emit_u8(field_reg);
+                                self.emit_u8(val_reg);
+                                self.emit(Opcode::Set);
+                                self.emit_u8(arr_reg);
+                                self.emit_u8(idx_reg);
+                                self.emit_u8(obj_reg);
+                            } else {
+                                // Latent array of structs: LatentGet → Get element → modify → Set element → LatentSet
+                                let arr_name_idx = self.get_or_add_string(arr_name) as u32;
+                                let arr_reg = self.alloc_tmp()?;
+                                self.emit(Opcode::LatentGet);
+                                self.emit_u8(arr_reg);
+                                self.emit_u32(arr_name_idx);
+                                let obj_reg = self.alloc_tmp()?;
+                                self.emit(Opcode::Get);
+                                self.emit_u8(obj_reg);
+                                self.emit_u8(arr_reg);
+                                self.emit_u8(idx_reg);
+                                let field_reg = self.alloc_tmp()?;
+                                let field_const =
+                                    self.bytecode.add_constant(Value::String(field.clone()));
+                                self.emit(Opcode::Const);
+                                self.emit_u8(field_reg);
+                                self.emit_u32(field_const);
+                                self.emit(Opcode::Set);
+                                self.emit_u8(obj_reg);
+                                self.emit_u8(field_reg);
+                                self.emit_u8(val_reg);
+                                self.emit(Opcode::Set);
+                                self.emit_u8(arr_reg);
+                                self.emit_u8(idx_reg);
+                                self.emit_u8(obj_reg);
+                                self.emit(Opcode::LatentSet);
+                                self.emit_u32(arr_name_idx);
+                                self.emit_u8(arr_reg);
+                            }
+                        }
+                    } else {
+                        // Generic complex object — evaluate value first, then object, then field.
+                        // NOTE: no writeback — for simple cases without compound objects.
+                        let val_reg = self.alloc_tmp()?;
+                        self.lower_expr(value, val_reg)?;
+                        let obj_reg = self.alloc_tmp()?;
+                        self.lower_expr(object, obj_reg)?;
+                        let field_reg = self.alloc_tmp()?;
+                        let field_const = self.bytecode.add_constant(Value::String(field.clone()));
+                        self.emit(Opcode::Const);
+                        self.emit_u8(field_reg);
+                        self.emit_u32(field_const);
+                        self.emit(Opcode::Set);
+                        self.emit_u8(obj_reg);
+                        self.emit_u8(field_reg);
+                        self.emit_u8(val_reg);
+                    }
                 } else {
-                    // Index assignment, field assignment, etc. — emit to temp
-                    let tmp = self.next_tmp_reg;
+                    // Unknown assignment target — evaluate value to temp (no-op)
+                    let tmp = self.alloc_tmp()?;
                     self.lower_expr(value, tmp)?;
                 }
             }
             StmtKind::CompoundAssign { target, op, value } => {
                 if let ExprKind::Identifier(name) = &target.kind {
-                    let reg = self.resolve_or_alloc_var(name)?;
-                    let tmp = self.alloc_tmp()?;
-                    self.lower_expr(value, tmp)?;
-                    self.emit_binop(*op, reg, reg, tmp);
+                    if let Some(&reg) = self.variables.get(name.as_str()) {
+                        // Local variable
+                        let tmp = self.alloc_tmp()?;
+                        self.lower_expr(value, tmp)?;
+                        self.emit_binop(*op, reg, reg, tmp);
+                    } else {
+                        // Latent variable — read, modify, write back
+                        let reg = self.alloc_tmp()?;
+                        let name_idx = self.get_or_add_string(name) as u32;
+                        self.emit(Opcode::LatentGet);
+                        self.emit_u8(reg);
+                        self.emit_u32(name_idx);
+                        let tmp = self.alloc_tmp()?;
+                        self.lower_expr(value, tmp)?;
+                        self.emit_binop(*op, reg, reg, tmp);
+                        self.emit(Opcode::LatentSet);
+                        self.emit_u32(name_idx);
+                        self.emit_u8(reg);
+                    }
                 }
             }
             StmtKind::Return(opt_expr) => {
@@ -570,83 +820,74 @@ impl Lowerer {
                 body,
             } => {
                 // Lower: for item in collection { body }
-                // As:
-                //   i = 0
-                //   len = collection.len()
-                // loop_start:
-                //   if i >= len goto loop_end
-                //   item = collection[i]
-                //   [body]
-                //   i = i + 1
-                //   goto loop_start
-                // loop_end:
-
-                // Allocate registers for loop state
-                let i_reg = self.alloc_tmp()?;
-                let len_reg = self.alloc_tmp()?;
-                let item_reg = self.alloc_tmp()?;
+                // CRITICAL FIX: Use high reserved registers (240-243) for loop state
+                // These won't be touched by alloc_var (0-199) or alloc_tmp (200-229)
+                const FOR_I_REG: u8 = 240;
+                const FOR_LEN_REG: u8 = 241;
+                const FOR_ITEM_REG: u8 = 242;
+                const FOR_COLL_REG: u8 = 243;
 
                 // Initialize i = 0
                 let zero_idx = self.bytecode.add_constant(Value::I64(0));
                 self.emit(Opcode::Const);
-                self.emit_u8(i_reg);
+                self.emit_u8(FOR_I_REG);
                 self.emit_u32(zero_idx);
 
-                // Get collection and its length
-                let coll_reg = self.alloc_tmp()?;
-                self.lower_expr(iterable, coll_reg)?;
+                // Get collection
+                self.lower_expr(iterable, FOR_COLL_REG)?;
 
                 // len = collection.len()
                 self.emit(Opcode::Len);
-                self.emit_u8(len_reg);
-                self.emit_u8(coll_reg);
+                self.emit_u8(FOR_LEN_REG);
+                self.emit_u8(FOR_COLL_REG);
 
                 // loop_start label
                 let loop_start = self.current_pc();
 
-                // cmp = i >= len
+                // Check if i >= len
+                let cmp_reg = self.alloc_tmp()?;
                 self.emit(Opcode::Ge);
-                self.emit_u8(item_reg); // reuse item_reg for cmp result
-                self.emit_u8(i_reg);
-                self.emit_u8(len_reg);
+                self.emit_u8(cmp_reg);
+                self.emit_u8(FOR_I_REG);
+                self.emit_u8(FOR_LEN_REG);
 
-                // if cmp goto loop_end
+                // Exit if done
                 self.emit(Opcode::JumpIf);
-                self.emit_u8(item_reg);
+                self.emit_u8(cmp_reg);
                 let exit_jump = self.current_pc();
-                self.emit_u32(0); // placeholder
+                self.emit_u32(0);
 
-                // item = collection[i]
+                // Get item = collection[i]
                 self.emit(Opcode::Get);
-                self.emit_u8(item_reg);
-                self.emit_u8(coll_reg);
-                self.emit_u8(i_reg);
+                self.emit_u8(FOR_ITEM_REG);
+                self.emit_u8(FOR_COLL_REG);
+                self.emit_u8(FOR_I_REG);
 
-                // Bind pattern to item_reg - for simple ident pattern, store in variable
+                // Bind the pattern variable to FOR_ITEM_REG
                 if let Pattern::Identifier(name) = pattern {
-                    self.variables.insert(name.clone(), item_reg);
+                    self.variables.insert(name.clone(), FOR_ITEM_REG);
                 }
 
-                // Lower body
+                // Lower the body
                 self.lower_body(body)?;
 
-                // i = i + 1
+                // Increment i
                 let one_idx = self.bytecode.add_constant(Value::I64(1));
-                let tmp_reg = self.alloc_tmp()?;
+                let one_reg = self.alloc_tmp()?;
                 self.emit(Opcode::Const);
-                self.emit_u8(tmp_reg);
+                self.emit_u8(one_reg);
                 self.emit_u32(one_idx);
 
                 self.emit(Opcode::Add);
-                self.emit_u8(i_reg);
-                self.emit_u8(i_reg);
-                self.emit_u8(tmp_reg);
+                self.emit_u8(FOR_I_REG);
+                self.emit_u8(FOR_I_REG);
+                self.emit_u8(one_reg);
 
-                // goto loop_start
+                // Jump back
                 self.emit(Opcode::Jump);
                 self.emit_u32(loop_start as u32);
 
-                // loop_end - patch exit jump
+                // Patch exit
                 let loop_end = self.current_pc();
                 self.patch_jump(exit_jump, loop_end)?;
             }
@@ -701,18 +942,44 @@ impl Lowerer {
                     self.emit_u8(dst);
                     self.emit_u8(src_reg);
                 } else {
-                    // Unknown variable — emit Nil
-                    let idx = self.bytecode.add_constant(Value::Nil);
-                    self.emit(Opcode::Const);
+                    // Not a local variable — try latent state (module-level variable)
+                    let name_idx = self.get_or_add_string(name) as u32;
+                    self.emit(Opcode::LatentGet);
                     self.emit_u8(dst);
-                    self.emit_u32(idx);
+                    self.emit_u32(name_idx);
                 }
             }
             ExprKind::BinaryOp { op, left, right } => {
-                self.lower_expr(left, dst)?;
-                let rhs = self.alloc_tmp()?;
-                self.lower_expr(right, rhs)?;
-                self.emit_binop(*op, dst, dst, rhs);
+                match op {
+                    BinaryOp::And => {
+                        // Short-circuit: if left is false, skip right (dst retains falsy value)
+                        self.lower_expr(left, dst)?;
+                        self.emit(Opcode::JumpIfNot);
+                        self.emit_u8(dst);
+                        let skip_pos = self.current_pc();
+                        self.emit_u32(0);
+                        self.lower_expr(right, dst)?;
+                        let end_pc = self.current_pc();
+                        self.patch_jump(skip_pos, end_pc)?;
+                    }
+                    BinaryOp::Or => {
+                        // Short-circuit: if left is true, skip right (dst retains truthy value)
+                        self.lower_expr(left, dst)?;
+                        self.emit(Opcode::JumpIf);
+                        self.emit_u8(dst);
+                        let skip_pos = self.current_pc();
+                        self.emit_u32(0);
+                        self.lower_expr(right, dst)?;
+                        let end_pc = self.current_pc();
+                        self.patch_jump(skip_pos, end_pc)?;
+                    }
+                    _ => {
+                        self.lower_expr(left, dst)?;
+                        let rhs = self.alloc_tmp()?;
+                        self.lower_expr(right, rhs)?;
+                        self.emit_binop(*op, dst, dst, rhs);
+                    }
+                }
             }
             ExprKind::UnaryOp { op, operand } => {
                 self.lower_expr(operand, dst)?;
@@ -743,32 +1010,44 @@ impl Lowerer {
                 for (i, arg) in arguments.iter().enumerate() {
                     self.lower_expr(arg, arg_base + i as u8)?;
                 }
-                self.emit(Opcode::Call);
-                let name_idx = self.get_or_add_string(function);
-                self.emit_u32(name_idx);
-                self.emit_u8(arguments.len() as u8);
-                self.emit_u8(dst);
 
-                if !self.functions.contains_key(function) {
-                    let call_site = self.current_pc() - 6; // -6 because emit() writes u16 (2 bytes) + u32 name_idx (4 bytes) = 6 bytes before arg_count/dst
-                    self.patch_points.push((call_site, function.clone()));
+                // If the function name resolves to a local variable (not a top-level
+                // function definition), it may hold a Value::Function — use CallDyn.
+                if self.variables.contains_key(function.as_str())
+                    && !self.functions.contains_key(function.as_str())
+                {
+                    let var_reg = self.variables[function.as_str()];
+                    self.emit(Opcode::CallDyn);
+                    self.emit_u8(var_reg);
+                    self.emit_u8(arguments.len() as u8);
+                    self.emit_u8(dst);
+                } else {
+                    self.emit(Opcode::Call);
+                    let name_idx = self.get_or_add_string(function);
+                    self.emit_u32(name_idx);
+                    self.emit_u8(arguments.len() as u8);
+                    self.emit_u8(dst);
+
+                    if !self.functions.contains_key(function) {
+                        let call_site = self.current_pc() - 6;
+                        self.patch_points.push((call_site, function.clone()));
+                    }
                 }
             }
             ExprKind::Array(elements) => {
-                // Push each element, then build array
-                for (i, elem) in elements.iter().enumerate() {
-                    let reg = 150u8 + i as u8;
-                    self.lower_expr(elem, reg)?;
-                    self.emit(Opcode::Push);
-                    self.emit_u8(reg);
-                }
-                // Store array length as constant
-                let len_idx = self
-                    .bytecode
-                    .add_constant(Value::I64(elements.len() as i64));
+                // Initialize dst with an empty array, then push each element.
+                // Push opcode: dst(u8) = array reg, val(u8) = element reg.
+                let empty_idx = self.bytecode.add_constant(Value::Array(Vec::new()));
                 self.emit(Opcode::Const);
                 self.emit_u8(dst);
-                self.emit_u32(len_idx);
+                self.emit_u32(empty_idx);
+                for elem in elements.iter() {
+                    let elem_reg = self.alloc_tmp()?;
+                    self.lower_expr(elem, elem_reg)?;
+                    self.emit(Opcode::Push);
+                    self.emit_u8(dst);
+                    self.emit_u8(elem_reg);
+                }
             }
             ExprKind::Index { array, index } => {
                 self.lower_expr(array, dst)?;
@@ -912,11 +1191,78 @@ impl Lowerer {
                     self.patch_jump(ep, end_pc)?;
                 }
             }
+            // Ternary conditional: cond ? then : else
+            ExprKind::Conditional {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
+                // Evaluate condition
+                self.lower_expr(condition, 10)?;
+
+                // Jump to else if condition is false
+                self.emit(Opcode::JumpIfNot);
+                self.emit_u8(10);
+                let else_jump = self.current_pc();
+                self.emit_u32(0);
+
+                // Then branch - evaluate and store in dst
+                self.lower_expr(then_expr, dst)?;
+
+                // Jump over else
+                self.emit(Opcode::Jump);
+                let end_jump = self.current_pc();
+                self.emit_u32(0);
+
+                // Else branch
+                let else_pc = self.current_pc();
+                self.patch_jump(else_jump, else_pc)?;
+                self.lower_expr(else_expr, dst)?;
+
+                // End
+                let end_pc = self.current_pc();
+                self.patch_jump(end_jump, end_pc)?;
+            }
+            ExprKind::Lambda { parameters, body } => {
+                // Compile the lambda body as a named anonymous function __lambda_N__
+                let lambda_name = format!("__lambda_{}__", self.lambda_counter);
+                self.lambda_counter += 1;
+
+                // Jump over the lambda body so top-level execution skips it
+                self.emit(Opcode::Jump);
+                let skip_pos = self.current_pc();
+                self.emit_u32(0);
+
+                let start_pc = self.current_pc() as u32;
+                let param_count = parameters.len() as u32;
+                self.functions
+                    .insert(lambda_name.clone(), (start_pc, param_count));
+
+                // Build fake Parameter list from the lambda's plain-string param names
+                let fake_params: Vec<Parameter> = parameters
+                    .iter()
+                    .map(|name| Parameter::new(name.clone()))
+                    .collect();
+
+                self.with_scope(|this| {
+                    this.bind_params(&fake_params);
+                    // Lambda body is a single expression — evaluate into reg 0 (return)
+                    this.lower_expr(body, 0)?;
+                    this.emit(Opcode::Return);
+                    Ok(())
+                })?;
+
+                let end_pc = self.current_pc();
+                self.patch_jump(skip_pos, end_pc)?;
+
+                // Emit a Value::Function constant so the lambda is a first-class value
+                let func_val_idx = self.bytecode.add_constant(Value::Function(lambda_name));
+                self.emit(Opcode::Const);
+                self.emit_u8(dst);
+                self.emit_u32(func_val_idx);
+            }
             // Unsupported in bytecode — emit Nop placeholders
-            ExprKind::Range { .. }
-            | ExprKind::Contract { .. }
-            | ExprKind::Lambda { .. }
-            | ExprKind::Conditional { .. } => {
+            ExprKind::Range { .. } | ExprKind::Contract { .. } => {
                 self.emit(Opcode::Nop);
             }
         }
@@ -1286,7 +1632,7 @@ impl Lowerer {
         let saved_tmp_reg = self.next_tmp_reg;
 
         self.variables.clear();
-        self.next_var_reg = 0;
+        self.next_var_reg = Self::LOCAL_VAR_BASE;
         self.next_tmp_reg = 200;
 
         let result = f(self);
