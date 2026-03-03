@@ -239,9 +239,8 @@ class BitSeed:
         import string
         import re
         
-        # Tokenize question into word set
-        question_lower = question.lower()
-        question_lower = re.sub(r'[^\w\s]', '', question_lower)  # Strip punctuation
+        # Tokenize question into word set (underscores → spaces so compound names split)
+        question_lower = re.sub(r'[\W_]+', ' ', question.lower())
         question_words = set(question_lower.split())
         
         if not question_words:
@@ -254,20 +253,20 @@ class BitSeed:
             conn = sqlite3.connect(self.corpus_path)
             cursor = conn.cursor()
             
-            # Get rules
+            # Get rules (schema: name, description, confidence — no content column)
             cursor.execute(
-                "SELECT name, description, content, confidence FROM rules ORDER BY confidence DESC"
+                "SELECT name, description, confidence FROM rules ORDER BY confidence DESC"
             )
             for row in cursor.fetchall():
-                name, description, content, confidence = row
-                rule_text = f"{name} {description} {content}"
-                rule_words = set(re.sub(r'[^\w\s]', '', rule_text.lower()).split())
+                name, description, confidence = row
+                rule_text = f"{name} {description}"
+                rule_words = set(re.sub(r'[\W_]+', ' ', rule_text.lower()).split())
                 overlap = len(question_words & rule_words)
                 if overlap > 0:
                     matches.append({
                         'type': 'rule',
                         'name': name,
-                        'content': content,
+                        'description': description,
                         'confidence': confidence,
                         'overlap': overlap
                     })
@@ -279,7 +278,7 @@ class BitSeed:
             for row in cursor.fetchall():
                 source, content, relevance = row
                 mem_text = f"{source} {content}"
-                mem_words = set(re.sub(r'[^\w\s]', '', mem_text.lower()).split())
+                mem_words = set(re.sub(r'[\W_]+', ' ', mem_text.lower()).split())
                 overlap = len(question_words & mem_words)
                 if overlap > 0:
                     matches.append({
@@ -290,6 +289,21 @@ class BitSeed:
                         'overlap': overlap
                     })
             
+            # Get documents (K-12 curriculum, encyclopedia articles)
+            cursor.execute(
+                "SELECT name, content, doc_type FROM documents WHERE length(content) < 2000 ORDER BY created_at DESC LIMIT 20"
+            )
+            for row in cursor.fetchall():
+                name, content, doc_type = row
+                doc_text = f"{name} {content}"
+                doc_words = set(re.sub(r'[\W_]+', ' ', doc_text.lower()).split())
+                overlap = len(question_words & doc_words)
+                if overlap > 0:
+                    matches.append({
+                        'type': 'document', 'name': name, 'content': content,
+                        'confidence': 0.8, 'overlap': overlap
+                    })
+
             conn.close()
         except Exception as e:
             # If DB fails, continue with learned patterns only
@@ -299,7 +313,7 @@ class BitSeed:
         for pattern in self.learned_patterns:
             pattern_text = pattern.get('pattern', '')
             pattern_conf = pattern.get('confidence', 0.5)
-            pattern_words = set(re.sub(r'[^\w\s]', '', pattern_text.lower()).split())
+            pattern_words = set(re.sub(r'[\W_]+', ' ', pattern_text.lower()).split())
             overlap = len(question_words & pattern_words)
             if overlap > 0:
                 matches.append({
@@ -333,12 +347,20 @@ class BitSeed:
         # Build answer from top matches
         answer_parts = []
         
+        # Add top documents (up to 2) - K-12 and encyclopedia
+        documents = [m for m in matches[:5] if m['type'] == 'document'][:2]
+        if documents:
+            answer_parts.append("From my knowledge base:")
+            for doc in documents:
+                content_preview = doc['content'][:200] + "..." if len(doc['content']) > 200 else doc['content']
+                answer_parts.append(f"  - {content_preview}")
+        
         # Add top rules (up to 3)
         rules = [m for m in matches[:5] if m['type'] == 'rule'][:3]
         if rules:
             answer_parts.append("Based on my conscience rules:")
             for rule in rules:
-                answer_parts.append(f"  - {rule['name']}: {rule.get('content', rule.get('description', ''))}")
+                answer_parts.append(f"  - {rule['name']}: {rule['description']}")
         
         # Add top patterns (up to 2)
         patterns = [m for m in matches[:5] if m['type'] == 'pattern'][:2]
@@ -354,7 +376,7 @@ class BitSeed:
         memory = next((m for m in matches if m['type'] == 'memory'), None)
         if memory:
             answer_parts.append(f"\nContext from {memory['source']}: {memory['content']}")
-        
+
         answer = "\n".join(answer_parts) if answer_parts else ""
         return (answer, confidence)
 
@@ -372,12 +394,12 @@ class BitSeed:
         belief_answer, belief_conf = self.answer_from_beliefs(question)
         if belief_answer and belief_conf >= 0.5:
             return f"[Symbolic] {belief_answer} (confidence: {belief_conf:.2f})"
-        
+
         # Fall back to symbolic reasoning
         symbolic_answer, symbolic_conf = self.reason_symbolically(question)
         if symbolic_answer and symbolic_conf >= 0.4:
             return f"[Symbolic] {symbolic_answer} (confidence: {symbolic_conf:.2f})"
-        
+
         # General response with observations and patterns
         answer_parts = [f"[Bit - Level {self.level.value}] thinking about: {question}"]
 
@@ -517,10 +539,10 @@ class BitSeed:
     ) -> dict:
         """
         Add a belief to Bitsy's self-model.
-        
+
         Beliefs with subject="I" form her self-identity. Duplicate beliefs
         reinforce existing entries (confidence increases).
-        
+
         Args:
             subject: The subject ("I", "Matt", etc.)
             predicate: The relationship ("am", "name is", "built", etc.)
@@ -528,42 +550,39 @@ class BitSeed:
             raw_source: Original text before transformation
             source_type: "training", "observation", "inference", or "bond"
             confidence: Initial confidence (0.0-1.0)
-        
+
         Returns:
             Dict with belief status and handle
         """
         import hashlib
-        
-        # Create content hash for deduplication
+
         content = f"{subject}:{predicate}:{obj}"
         content_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
-        
+
         try:
             conn = sqlite3.connect(self.corpus_path)
             cursor = conn.cursor()
-            
-            # Check if belief already exists
+
             cursor.execute(
                 "SELECT id, confidence, reinforcement_count FROM beliefs WHERE content_hash = ?",
                 (content_hash,)
             )
             row = cursor.fetchone()
-            
+
             if row:
-                # Reinforce existing belief
                 belief_id, old_conf, old_count = row
                 new_conf = min(old_conf + 0.05, 1.0)
                 new_count = old_count + 1
-                
+
                 cursor.execute(
-                    """UPDATE beliefs 
+                    """UPDATE beliefs
                        SET confidence = ?, reinforcement_count = ?, created_at = CURRENT_TIMESTAMP
                        WHERE id = ?""",
                     (new_conf, new_count, belief_id)
                 )
                 conn.commit()
                 conn.close()
-                
+
                 return {
                     "status": "reinforced",
                     "belief_id": belief_id,
@@ -571,9 +590,8 @@ class BitSeed:
                     "reinforcement_count": new_count,
                 }
             else:
-                # Insert new belief
                 cursor.execute(
-                    """INSERT INTO beliefs 
+                    """INSERT INTO beliefs
                        (subject, predicate, object, raw_source, source_type, confidence, content_hash)
                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     (subject, predicate, obj, raw_source, source_type, confidence, content_hash)
@@ -581,7 +599,7 @@ class BitSeed:
                 belief_id = cursor.lastrowid
                 conn.commit()
                 conn.close()
-                
+
                 return {
                     "status": "created",
                     "belief_id": belief_id,
@@ -600,37 +618,37 @@ class BitSeed:
     ) -> list:
         """
         Query Bitsy's beliefs.
-        
+
         Args:
             subject: Filter by subject (e.g., "I" for self-model)
             predicate: Filter by predicate (e.g., "am", "name is")
             min_confidence: Minimum confidence threshold
             limit: Max results to return
-        
+
         Returns:
             List of belief dicts with subject, predicate, object, confidence
         """
         try:
             conn = sqlite3.connect(self.corpus_path)
             cursor = conn.cursor()
-            
+
             query = "SELECT subject, predicate, object, confidence, source_type, reinforcement_count FROM beliefs WHERE confidence >= ?"
             params = [min_confidence]
-            
+
             if subject:
                 query += " AND subject = ?"
                 params.append(subject)
             if predicate:
                 query += " AND predicate LIKE ?"
                 params.append(f"%{predicate}%")
-            
+
             query += " ORDER BY confidence DESC, reinforcement_count DESC LIMIT ?"
             params.append(limit)
-            
+
             cursor.execute(query, params)
             rows = cursor.fetchall()
             conn.close()
-            
+
             return [
                 {
                     "subject": row[0],
@@ -642,28 +660,27 @@ class BitSeed:
                 }
                 for row in rows
             ]
-        except Exception as e:
+        except Exception:
             return []
 
     def get_self_model(self) -> dict:
         """
         Get Bitsy's self-model - all beliefs where subject="I".
-        
+
         Returns:
             Dict with beliefs grouped by predicate type
         """
         beliefs = self.query_beliefs(subject="I", min_confidence=0.3)
-        
-        # Group by predicate type for easier consumption
+
         identity = {
             "name": [],
-            "nature": [],  # "am", "was"
-            "capabilities": [],  # "can"
-            "possessions": [],  # "have", "name is"
-            "relationships": [],  # "was built by", etc.
+            "nature": [],
+            "capabilities": [],
+            "possessions": [],
+            "relationships": [],
             "all": beliefs,
         }
-        
+
         for b in beliefs:
             pred = b["predicate"].lower()
             if "name" in pred:
@@ -678,64 +695,62 @@ class BitSeed:
                 identity["relationships"].append(b)
             else:
                 identity["nature"].append(b)
-        
+
         return identity
 
     def answer_from_beliefs(self, question: str) -> tuple[str, float]:
         """
         Attempt to answer a question using the belief system.
-        
+
         Returns (answer, confidence). If no good match, returns ("", 0.0).
         """
         import re
-        
+
         question_lower = question.lower()
-        
-        # Pattern matching for common question types
+
         if re.search(r'what is your name|who are you', question_lower):
             beliefs = self.query_beliefs(subject="I", predicate="name", limit=1)
             if beliefs:
                 b = beliefs[0]
                 return (f"My name is {b['object']}", b['confidence'])
-            # Try "am" predicate
             beliefs = self.query_beliefs(subject="I", predicate="am", limit=1)
             if beliefs:
                 b = beliefs[0]
                 return (f"I am {b['object']}", b['confidence'])
-        
+
         if re.search(r'who (built|made|created) you', question_lower):
-            beliefs = self.query_beliefs(subject="I", limit=5)
+            beliefs = self.query_beliefs(subject="I", limit=100)
             for b in beliefs:
                 if 'built' in b['object'] or 'created' in b['object'] or 'by' in b['object']:
                     return (f"I am {b['object']}", b['confidence'])
-        
+
         if re.search(r'what can you do|what are your capabilities', question_lower):
             beliefs = self.query_beliefs(subject="I", predicate="can", min_confidence=0.4)
             if beliefs:
                 caps = [b['object'] for b in beliefs[:3]]
                 conf = sum(b['confidence'] for b in beliefs[:3]) / len(beliefs[:3])
                 return (f"I can {', and I can '.join(caps)}", conf)
-        
+
         # Generic: look for keyword matches in beliefs
-        words = set(re.sub(r'[^\w\s]', '', question_lower).split())
+        words = set(re.sub(r'[\W_]+', ' ', question_lower).split())
         all_beliefs = self.query_beliefs(subject="I", limit=20)
-        
+
         best_match = None
         best_score = 0
-        
+
         for b in all_beliefs:
             belief_text = f"{b['subject']} {b['predicate']} {b['object']}".lower()
-            belief_words = set(re.sub(r'[^\w\s]', '', belief_text).split())
+            belief_words = set(re.sub(r'[\W_]+', ' ', belief_text).split())
             overlap = len(words & belief_words)
             score = overlap * b['confidence']
             if score > best_score:
                 best_score = score
                 best_match = b
-        
+
         if best_match and best_score > 0.5:
-            return (f"{best_match['subject']} {best_match['predicate']} {best_match['object']}", 
+            return (f"{best_match['subject']} {best_match['predicate']} {best_match['object']}",
                     best_match['confidence'])
-        
+
         return ("", 0.0)
 
     def on_homeostasis(self) -> None:

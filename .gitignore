@@ -21,10 +21,15 @@ venv/
 *.bin
 *.safetensors
 
-# Training data — datasets are large, store separately
+# Bitsy runtime files — Bitsy's home is in Bitsy's Place, not the HLX repo
+# Only .hlx programs and identity.md belong here
 Bitsy/training_data/
-Bitsy/corpus.db
-Bitsy/glm5/corpus.db
+Bitsy/*.db
+Bitsy/glm5/
+Bitsy/*.py
+Bitsy/*.json
+Bitsy/*.sh
+Bitsy/BITHOME_PLAN.md
 
 # Compiled binaries in bin/
 bin/hlx-run
