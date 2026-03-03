@@ -1,7 +1,7 @@
 use crate::{Bytecode, RuntimeError, RuntimeResult, Tensor, Value, Vm};
 use image::ImageFormat;
 
-pub fn builtin_strlen(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_strlen(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     match &args[0] {
         Value::String(s) => Ok(Value::I64(s.len() as i64)),
         Value::Array(arr) => Ok(Value::I64(arr.len() as i64)),
@@ -15,7 +15,7 @@ pub fn builtin_strlen(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runti
     }
 }
 
-pub fn builtin_substring(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_substring(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0].as_string().ok_or_else(|| {
         RuntimeError::new(
             format!("substring: expected String, got {}", args[0].type_name()),
@@ -53,7 +53,7 @@ pub fn builtin_substring(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Ru
     Ok(Value::String(s[start..end].to_string()))
 }
 
-pub fn builtin_concat(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_concat(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let a = args[0].as_string().ok_or_else(|| {
         RuntimeError::new(
             format!("concat: expected String, got {}", args[0].type_name()),
@@ -69,7 +69,7 @@ pub fn builtin_concat(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runti
     Ok(Value::String(format!("{}{}", a, b)))
 }
 
-pub fn builtin_strcmp(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_strcmp(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let a = args[0].as_string().ok_or_else(|| {
         RuntimeError::new(
             format!("strcmp: expected String, got {}", args[0].type_name()),
@@ -89,7 +89,7 @@ pub fn builtin_strcmp(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runti
     }))
 }
 
-pub fn builtin_ord(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_ord(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("ord requires String", 0))?;
@@ -99,7 +99,7 @@ pub fn builtin_ord(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeR
     Ok(Value::I64(s.as_bytes()[0] as i64))
 }
 
-pub fn builtin_char(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_char(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let code_i = args[0]
         .as_i64()
         .ok_or_else(|| RuntimeError::new("char requires i64", 0))?;
@@ -112,7 +112,7 @@ pub fn builtin_char(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runtime
     Ok(Value::String((code_i as u8 as char).to_string()))
 }
 
-pub fn builtin_str_char_at(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_char_at(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_char_at requires String", 0))?;
@@ -126,7 +126,7 @@ pub fn builtin_str_char_at(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> 
     Ok(Value::I64(s.as_bytes()[idx] as i64))
 }
 
-pub fn builtin_push(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_push(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("push requires Array", 0))?;
@@ -135,7 +135,7 @@ pub fn builtin_push(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runtime
     Ok(Value::Array(new_arr))
 }
 
-pub fn builtin_get_at(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_get_at(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("get_at requires Array", 0))?;
@@ -147,7 +147,7 @@ pub fn builtin_get_at(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runti
         .ok_or_else(|| RuntimeError::new(format!("get_at: index {} out of bounds", idx), 0))
 }
 
-pub fn builtin_set_at(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_set_at(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("set_at requires Array", 0))?;
@@ -165,7 +165,7 @@ pub fn builtin_set_at(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runti
     Ok(Value::Array(new_arr))
 }
 
-pub fn builtin_array_len(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_array_len(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     match &args[0] {
         Value::Array(arr) => Ok(Value::I64(arr.len() as i64)),
         Value::String(s) => Ok(Value::I64(s.len() as i64)),
@@ -176,17 +176,17 @@ pub fn builtin_array_len(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Ru
     }
 }
 
-pub fn builtin_print(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_print(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     print!("{}", args[0]);
     Ok(Value::Void)
 }
 
-pub fn builtin_println(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_println(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     println!("{}", args[0]);
     Ok(Value::Void)
 }
 
-pub fn builtin_image_load(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_image_load(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let path = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("image_load requires String path", 0))?;
@@ -201,7 +201,7 @@ pub fn builtin_image_load(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> R
     Ok(Value::Tensor(tensor))
 }
 
-pub fn builtin_image_save(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_image_save(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let tensor = match &args[0] {
         Value::Tensor(t) => t,
         _ => return Err(RuntimeError::new("image_save requires Tensor", 0)),
@@ -228,7 +228,7 @@ pub fn builtin_image_save(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> R
     Ok(Value::Void)
 }
 
-pub fn builtin_image_process(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_image_process(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let tensor = match &args[0] {
         Value::Tensor(t) => t.clone(),
         _ => return Err(RuntimeError::new("image_process requires Tensor", 0)),
@@ -400,7 +400,7 @@ pub fn builtin_image_process(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -
     Ok(Value::Tensor(result))
 }
 
-pub fn builtin_image_info(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_image_info(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let tensor = match &args[0] {
         Value::Tensor(t) => t,
         _ => return Err(RuntimeError::new("image_info requires Tensor", 0)),
@@ -415,7 +415,7 @@ pub fn builtin_image_info(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> R
     ]))
 }
 
-pub fn builtin_audio_load(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_audio_load(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let path = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("audio_load requires String path", 0))?;
@@ -424,7 +424,7 @@ pub fn builtin_audio_load(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> R
     Ok(Value::Tensor(tensor))
 }
 
-pub fn builtin_audio_save(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_audio_save(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let tensor = match &args[0] {
         Value::Tensor(t) => t,
         _ => return Err(RuntimeError::new("audio_save requires Tensor", 0)),
@@ -445,7 +445,7 @@ pub fn builtin_audio_save(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> R
     Ok(Value::Void)
 }
 
-pub fn builtin_audio_info(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_audio_info(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let tensor = match &args[0] {
         Value::Tensor(t) => t,
         _ => return Err(RuntimeError::new("audio_info requires Tensor", 0)),
@@ -459,7 +459,7 @@ pub fn builtin_audio_info(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> R
     ]))
 }
 
-pub fn builtin_audio_resample(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_audio_resample(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let tensor = match &args[0] {
         Value::Tensor(t) => t.clone(),
         _ => return Err(RuntimeError::new("audio_resample requires Tensor", 0)),
@@ -505,7 +505,7 @@ pub fn builtin_audio_resample(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) 
     Ok(Value::Tensor(result))
 }
 
-pub fn builtin_audio_normalize(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_audio_normalize(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let tensor = match &args[0] {
         Value::Tensor(t) => t.clone(),
         _ => return Err(RuntimeError::new("audio_normalize requires Tensor", 0)),
@@ -529,7 +529,7 @@ pub fn builtin_audio_normalize(vm: &mut Vm, bytecode: &Bytecode, args: &[Value])
 // Bit's Builtins (Phase 2)
 // ============================================================================
 
-pub fn builtin_zeros(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_zeros(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let size = args[0]
         .as_i64()
         .ok_or_else(|| RuntimeError::new("zeros requires i64", 0))?;
@@ -539,14 +539,14 @@ pub fn builtin_zeros(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runtim
     Ok(Value::Tensor(Tensor::zeros(vec![size as usize])))
 }
 
-pub fn builtin_i64_to_str(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_i64_to_str(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_i64()
         .ok_or_else(|| RuntimeError::new("i64_to_str requires i64", 0))?;
     Ok(Value::String(n.to_string()))
 }
 
-pub fn builtin_f64_to_str(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_f64_to_str(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0].as_f64().ok_or_else(|| {
         RuntimeError::new(
             format!("f64_to_str requires f64, got {}", args[0].type_name()),
@@ -568,7 +568,7 @@ pub fn builtin_f64_to_str(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> R
     Ok(Value::String(format!("{:.1$}", n, places)))
 }
 
-pub fn builtin_str_contains(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_contains(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let haystack = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_contains requires String", 0))?;
@@ -578,7 +578,7 @@ pub fn builtin_str_contains(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) ->
     Ok(Value::Bool(haystack.contains(&needle)))
 }
 
-pub fn builtin_str_equals(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_equals(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let a = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_equals requires String", 0))?;
@@ -588,35 +588,35 @@ pub fn builtin_str_equals(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> R
     Ok(Value::Bool(a == b))
 }
 
-pub fn builtin_sqrt(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_sqrt(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("sqrt requires f64", 0))?;
     Ok(Value::F64(n.sqrt()))
 }
 
-pub fn builtin_sin(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_sin(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("sin requires f64 (radians)", 0))?;
     Ok(Value::F64(n.sin()))
 }
 
-pub fn builtin_cos(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_cos(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("cos requires f64 (radians)", 0))?;
     Ok(Value::F64(n.cos()))
 }
 
-pub fn builtin_tan(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_tan(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("tan requires f64 (radians)", 0))?;
     Ok(Value::F64(n.tan()))
 }
 
-pub fn builtin_hash(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_hash(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("hash requires String", 0))?;
@@ -631,7 +631,7 @@ pub fn builtin_hash(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runtime
 // Phase 1.4: Missing builtins - Math
 // ============================================================================
 
-pub fn builtin_abs(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_abs(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     match &args[0] {
         Value::I64(n) => Ok(Value::I64(n.abs())),
         Value::F64(n) => Ok(Value::F64(n.abs())),
@@ -639,28 +639,28 @@ pub fn builtin_abs(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeR
     }
 }
 
-pub fn builtin_floor(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_floor(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("floor requires f64", 0))?;
     Ok(Value::I64(n.floor() as i64))
 }
 
-pub fn builtin_ceil(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_ceil(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("ceil requires f64", 0))?;
     Ok(Value::I64(n.ceil() as i64))
 }
 
-pub fn builtin_round(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_round(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("round requires f64", 0))?;
     Ok(Value::I64(n.round() as i64))
 }
 
-pub fn builtin_min(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_min(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     match (&args[0], &args[1]) {
         (Value::I64(a), Value::I64(b)) => Ok(Value::I64(*a.min(b))),
         (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a.min(*b))),
@@ -668,7 +668,7 @@ pub fn builtin_min(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeR
     }
 }
 
-pub fn builtin_max(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_max(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     match (&args[0], &args[1]) {
         (Value::I64(a), Value::I64(b)) => Ok(Value::I64(*a.max(b))),
         (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a.max(*b))),
@@ -676,7 +676,7 @@ pub fn builtin_max(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeR
     }
 }
 
-pub fn builtin_pow(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_pow(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let base = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("pow base must be f64", 0))?;
@@ -686,13 +686,13 @@ pub fn builtin_pow(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeR
     Ok(Value::F64(base.powf(exp)))
 }
 
-pub fn builtin_rand(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_rand(_vm: &mut Vm, _bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     Ok(Value::F64(rng.gen::<f64>()))
 }
 
-pub fn builtin_rand_range(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_rand_range(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     use rand::Rng;
     let lo = args[0]
         .as_i64()
@@ -708,21 +708,21 @@ pub fn builtin_rand_range(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> R
 // Phase 1.4: Missing builtins - Type conversion
 // ============================================================================
 
-pub fn builtin_f64_to_i64(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_f64_to_i64(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("f64_to_i64 requires f64", 0))?;
     Ok(Value::I64(n as i64))
 }
 
-pub fn builtin_i64_to_f64(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_i64_to_f64(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_i64()
         .ok_or_else(|| RuntimeError::new("i64_to_f64 requires i64", 0))?;
     Ok(Value::F64(n as f64))
 }
 
-pub fn builtin_parse_i64(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_parse_i64(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("parse_i64 requires String", 0))?;
@@ -732,7 +732,7 @@ pub fn builtin_parse_i64(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Ru
     }
 }
 
-pub fn builtin_parse_f64(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_parse_f64(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("parse_f64 requires String", 0))?;
@@ -742,7 +742,7 @@ pub fn builtin_parse_f64(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Ru
     }
 }
 
-pub fn builtin_type_of(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_type_of(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let type_name = match &args[0] {
         Value::I64(_) => "i64",
         Value::F64(_) => "f64",
@@ -763,7 +763,7 @@ pub fn builtin_type_of(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runt
 // Phase 1.4: Missing builtins - String operations
 // ============================================================================
 
-pub fn builtin_str_split(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_split(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_split requires String", 0))?;
@@ -777,14 +777,14 @@ pub fn builtin_str_split(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Ru
     Ok(Value::Array(parts))
 }
 
-pub fn builtin_str_trim(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_trim(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_trim requires String", 0))?;
     Ok(Value::String(s.trim().to_string()))
 }
 
-pub fn builtin_str_replace(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_replace(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_replace requires String", 0))?;
@@ -797,21 +797,21 @@ pub fn builtin_str_replace(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> 
     Ok(Value::String(s.replace(from, to)))
 }
 
-pub fn builtin_str_to_upper(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_to_upper(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_to_upper requires String", 0))?;
     Ok(Value::String(s.to_uppercase()))
 }
 
-pub fn builtin_str_to_lower(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_to_lower(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_to_lower requires String", 0))?;
     Ok(Value::String(s.to_lowercase()))
 }
 
-pub fn builtin_str_starts_with(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_starts_with(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_starts_with requires String", 0))?;
@@ -821,7 +821,7 @@ pub fn builtin_str_starts_with(vm: &mut Vm, bytecode: &Bytecode, args: &[Value])
     Ok(Value::Bool(s.starts_with(prefix)))
 }
 
-pub fn builtin_str_ends_with(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_ends_with(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_ends_with requires String", 0))?;
@@ -831,7 +831,7 @@ pub fn builtin_str_ends_with(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -
     Ok(Value::Bool(s.ends_with(suffix)))
 }
 
-pub fn builtin_str_index_of(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_index_of(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_index_of requires String", 0))?;
@@ -848,7 +848,7 @@ pub fn builtin_str_index_of(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) ->
 // Phase 1.4: Missing builtins - Array operations
 // ============================================================================
 
-pub fn builtin_array_slice(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_array_slice(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("array_slice requires Array", 0))?;
@@ -869,7 +869,7 @@ pub fn builtin_array_slice(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> 
     }
 }
 
-pub fn builtin_array_concat(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_array_concat(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let a = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("array_concat first arg must be Array", 0))?;
@@ -881,7 +881,7 @@ pub fn builtin_array_concat(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) ->
     Ok(Value::Array(result))
 }
 
-pub fn builtin_array_contains(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_array_contains(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("array_contains requires Array", 0))?;
@@ -889,7 +889,7 @@ pub fn builtin_array_contains(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) 
     Ok(Value::Bool(arr.iter().any(|x| x == val)))
 }
 
-pub fn builtin_array_pop(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_array_pop(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("array_pop requires Array", 0))?;
@@ -900,7 +900,7 @@ pub fn builtin_array_pop(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Ru
     Ok(new_arr.pop().unwrap_or(Value::Nil))
 }
 
-pub fn builtin_array_reverse(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_array_reverse(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("array_reverse requires Array", 0))?;
@@ -909,7 +909,7 @@ pub fn builtin_array_reverse(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -
     Ok(Value::Array(result))
 }
 
-pub fn builtin_array_sort(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_array_sort(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("array_sort requires Array", 0))?;
@@ -932,7 +932,7 @@ pub fn builtin_array_sort(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> R
 
 
 
-pub fn builtin_map_get(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_map_get(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let map = args[0]
         .as_map()
         .ok_or_else(|| RuntimeError::new("map_get requires Map", 0))?;
@@ -945,7 +945,7 @@ pub fn builtin_map_get(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runt
     }
 }
 
-pub fn builtin_map_set(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_map_set(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let map = args[0]
         .as_map()
         .ok_or_else(|| RuntimeError::new("map_set requires Map", 0))?;
@@ -958,7 +958,7 @@ pub fn builtin_map_set(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runt
     Ok(Value::Map(new_map))
 }
 
-pub fn builtin_map_keys(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_map_keys(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let map = args[0]
         .as_map()
         .ok_or_else(|| RuntimeError::new("map_keys requires Map", 0))?;
@@ -966,7 +966,7 @@ pub fn builtin_map_keys(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Run
     Ok(Value::Array(keys))
 }
 
-pub fn builtin_map_values(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_map_values(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let map = args[0]
         .as_map()
         .ok_or_else(|| RuntimeError::new("map_values requires Map", 0))?;
@@ -974,7 +974,7 @@ pub fn builtin_map_values(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> R
     Ok(Value::Array(values))
 }
 
-pub fn builtin_map_contains(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_map_contains(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let map = args[0]
         .as_map()
         .ok_or_else(|| RuntimeError::new("map_contains requires Map", 0))?;
@@ -984,7 +984,7 @@ pub fn builtin_map_contains(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) ->
     Ok(Value::Bool(map.contains_key(key)))
 }
 
-pub fn builtin_map_remove(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_map_remove(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let map = args[0]
         .as_map()
         .ok_or_else(|| RuntimeError::new("map_remove requires Map", 0))?;
@@ -1002,7 +1002,7 @@ pub fn builtin_map_remove(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> R
 // Phase 1.4: Missing builtins - I/O operations
 // ============================================================================
 
-pub fn builtin_read_file(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_read_file(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let path = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("read_file requires String path", 0))?;
@@ -1012,7 +1012,7 @@ pub fn builtin_read_file(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Ru
     }
 }
 
-pub fn builtin_write_file(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_write_file(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let path = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("write_file requires String path", 0))?;
@@ -1025,7 +1025,7 @@ pub fn builtin_write_file(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> R
     }
 }
 
-pub fn builtin_clock_ms(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_clock_ms(_vm: &mut Vm, _bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let now = SystemTime::now();
     let since_epoch = now.duration_since(UNIX_EPOCH).unwrap_or_default();
@@ -1034,7 +1034,7 @@ pub fn builtin_clock_ms(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Run
 
 /// Sleep for specified milliseconds
 /// sleep(ms: i64) -> i64
-pub fn builtin_sleep(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_sleep(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let ms = args[0]
         .as_i64()
         .ok_or_else(|| RuntimeError::new("sleep requires i64 milliseconds", 0))?;
@@ -1044,7 +1044,7 @@ pub fn builtin_sleep(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runtim
 
 /// Assert that a condition is true
 /// assert(condition: bool, message: String) -> bool
-pub fn builtin_assert(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_assert(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let condition = args[0]
         .as_bool()
         .ok_or_else(|| RuntimeError::new("assert requires bool condition", 0))?;
@@ -1065,7 +1065,7 @@ pub fn builtin_assert(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runti
 
 /// Sort an array (ascending)
 /// sort(arr: Array) -> Array
-pub fn builtin_sort(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_sort(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("sort requires Array", 0))?;
@@ -1090,7 +1090,7 @@ pub fn builtin_sort(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runtime
 
 /// Execute a shell command and return the output as a string
 /// shell(cmd: String) -> String
-pub fn builtin_shell(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_shell(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let cmd = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("shell requires String command", 0))?;
@@ -1134,7 +1134,7 @@ pub fn builtin_shell(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> Runtim
 
 /// Returns the current homeostasis pressure (0.0-1.0)
 /// High pressure means system is under stress from too many modifications
-pub fn builtin_homeostasis_pressure(vm: &mut Vm, bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_homeostasis_pressure(_vm: &mut Vm, _bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
     // For now, return a simulated value based on time
     // In full implementation, this queries the RSI pipeline's HomeostasisGate
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1148,21 +1148,21 @@ pub fn builtin_homeostasis_pressure(vm: &mut Vm, bytecode: &Bytecode, _args: &[V
 }
 
 /// Returns the current promotion level (0=Seedling, 1=Sprout, 2=Sapling, 3=Mature)
-pub fn builtin_promotion_level(vm: &mut Vm, bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_promotion_level(_vm: &mut Vm, _bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
     // Returns current level as i64
     // 0 = Seedling, 1 = Sprout, 2 = Sapling, 3 = Mature
     Ok(Value::I64(0)) // Default to seedling - VM will override
 }
 
 /// Returns whether self-modification is currently allowed
-pub fn builtin_can_modify_self(vm: &mut Vm, bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_can_modify_self(_vm: &mut Vm, _bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
     // Returns true if the agent can propose modifications at current level
     // Seedling can only do parameter/threshold changes
     Ok(Value::Bool(true))
 }
 
 /// Returns RSI modification history as a list of dicts
-pub fn builtin_rsi_history(vm: &mut Vm, bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_rsi_history(_vm: &mut Vm, _bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
     // Returns list of past modifications: [{proposal_id, type, success}, ...]
     // For now, return empty list
     Ok(Value::Array(vec![]))
@@ -1175,7 +1175,7 @@ pub fn builtin_rsi_history(vm: &mut Vm, bytecode: &Bytecode, _args: &[Value]) ->
 
 /// Evaluates current fitness score (0.0-1.0)
 /// Combines: confidence, pattern utilization, modification success rate
-pub fn builtin_evaluate_fitness(vm: &mut Vm, bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_evaluate_fitness(_vm: &mut Vm, _bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
     // Returns a composite fitness score
     // In full implementation, this queries AgentMemory and RSI pipeline
     // For now, return a placeholder based on time
@@ -1194,7 +1194,7 @@ pub fn builtin_evaluate_fitness(vm: &mut Vm, bytecode: &Bytecode, _args: &[Value
 
 /// Records a fitness snapshot before/after modification
 /// Returns snapshot ID for comparison
-pub fn builtin_fitness_snapshot(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_fitness_snapshot(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let label = if args.is_empty() {
         "snapshot"
     } else {
@@ -1212,14 +1212,14 @@ pub fn builtin_fitness_snapshot(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]
     map.insert("timestamp".to_string(), Value::I64(now));
     map.insert(
         "fitness".to_string(),
-        builtin_evaluate_fitness(vm, bytecode, &[])?.clone(),
+        builtin_evaluate_fitness(_vm, _bytecode, &[])?.clone(),
     );
     Ok(Value::Map(map))
 }
 
 /// Compares two fitness snapshots
 /// Returns dict with before, after, delta
-pub fn builtin_fitness_compare(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_fitness_compare(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let before = args.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0);
     let after = args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0);
     let delta = after - before;
@@ -1234,7 +1234,7 @@ pub fn builtin_fitness_compare(vm: &mut Vm, bytecode: &Bytecode, args: &[Value])
 
 /// bond(prompt, context) - Call the bonded LLM (Qwen3)
 /// Returns the LLM response as a string
-pub fn builtin_bond(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_bond(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let prompt = args
         .get(0)
         .and_then(|v| v.as_string())
@@ -1331,7 +1331,7 @@ fn bond_http_request(
     Ok(response)
 }
 
-pub fn builtin_set_tensor(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_set_tensor(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     if args.len() != 3 {
         return Err(RuntimeError::new("set_tensor requires 3 args", 0));
     }
@@ -1356,7 +1356,7 @@ pub fn builtin_set_tensor(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> R
     }
 }
 
-pub fn builtin_get_tensor(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_get_tensor(_vm: &mut Vm, _bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     if args.len() != 2 {
         return Err(RuntimeError::new("get_tensor requires 2 args", 0));
     }

@@ -1088,6 +1088,11 @@ impl ConscienceKernel {
         }
         Ok(())
     }
+
+    /// Return the number of entries currently in the audit log.
+    pub fn audit_log_len(&self) -> usize {
+        self.intent_log.len()
+    }
 }
 
 /// Result from query_conscience (Section 6.4)

@@ -262,7 +262,7 @@ impl HomeostasisGate {
     ///
     /// This is the single entry point. Called by RSIPipeline before
     /// every proposal enters the voting pipeline.
-    pub fn evaluate(&mut self, modification: &ModificationType) -> GateDecision {
+    pub fn evaluate(&mut self, _modification: &ModificationType) -> GateDecision {
         let now = Instant::now();
         self.last_evaluation = Some(now);
 

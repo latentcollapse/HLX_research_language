@@ -640,7 +640,7 @@ impl TypeChecker {
                     span: Some(span.clone()),
                 });
             }
-            for (i, (expected, actual)) in params.iter().zip(arg_types.iter()).enumerate() {
+            for (_i, (expected, actual)) in params.iter().zip(arg_types.iter()).enumerate() {
                 self.check_assignable(expected, actual, span)?;
             }
             return Ok(*ret);

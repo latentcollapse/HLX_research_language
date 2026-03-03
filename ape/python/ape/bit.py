@@ -1018,6 +1018,25 @@ class BitSeed:
         except Exception:
             return None
 
+    def verify_audit_chain(self) -> dict:
+        """Walk the BLAKE3 audit chain and verify every pre_hash link is intact.
+
+        Returns a dict with:
+          - chain_ok: True/False/None (None = no conscience engine loaded)
+          - entries: number of logged intent entries
+          - error: description of broken link, or None
+        """
+        if self.conscience_engine is None:
+            return {"chain_ok": None, "entries": 0, "error": "No conscience engine loaded"}
+
+        try:
+            n = self.conscience_engine.audit_log_len()
+            result = self.conscience_engine.verify_audit_chain()
+            # verify_audit_chain() returns None on success (Ok(())) or raises on error
+            return {"chain_ok": True, "entries": n, "error": None}
+        except Exception as e:
+            return {"chain_ok": False, "entries": 0, "error": str(e)}
+
     def _assess_risk(self, mod_type: str, description: str) -> float:
         risk_scores = {
             "parameter_update": 0.2,

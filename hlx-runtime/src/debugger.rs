@@ -166,6 +166,7 @@ impl Default for Debugger {
 /// DAP (Debug Adapter Protocol) server
 pub struct DapServer {
     debugger: Debugger,
+    #[allow(dead_code)]
     vm: Option<Vm>,
     event_rx: Option<Receiver<DebugEvent>>,
 }
@@ -179,7 +180,7 @@ impl DapServer {
         }
     }
 
-    pub fn attach_vm(&mut self, vm: &mut Vm) {
+    pub fn attach_vm(&mut self, _vm: &mut Vm) {
         let (tx, rx) = channel();
         self.debugger.debug_tx = Some(tx);
         self.event_rx = Some(rx);

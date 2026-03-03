@@ -309,7 +309,7 @@ impl Interpreter {
                 let value = self.eval_expr(&match_stmt.value)?;
                 for arm in &match_stmt.arms {
                     if self.pattern_matches(&arm.pattern, &value) {
-                        let result = self.eval_expr(&arm.body)?;
+                        let _result = self.eval_expr(&arm.body)?;
                         // If the match arm body is a block that returns, propagate
                         return Ok(Signal::None);
                     }
@@ -422,7 +422,7 @@ impl Interpreter {
                     )),
                 }
             }
-            Expr::ContractInit(name, fields, span) => {
+            Expr::ContractInit(name, fields, _span) => {
                 let mut field_values = BTreeMap::new();
                 for (fname, fexpr) in fields {
                     let val = self.eval_expr(fexpr)?;
@@ -1206,7 +1206,7 @@ impl Interpreter {
                     pred_name, description
                 ));
                 // In emulated mode, auto-accept restriction predicates
-                self.conscience.add_restriction(
+                let _ = self.conscience.add_restriction(
                     pred_name.clone(),
                     description,
                     vec![EffectClass::Execute],

@@ -3,7 +3,7 @@
 //! Provides depth-first recursive compilation with cycle detection.
 //! This is the new infrastructure for Phase 3 module system.
 
-use crate::ast::{Function, Import, Item};
+use crate::ast::{Function, Item};
 use crate::ast_parser::AstParser;
 use crate::{Bytecode, Lowerer};
 use std::collections::{HashMap, HashSet};

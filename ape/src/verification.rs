@@ -59,12 +59,12 @@ impl Verifier {
     ///
     /// # Example
     /// ```no_run
-    /// use axiom_lang::policy::PolicyLoader;
-    /// use axiom_lang::verification::Verifier;
+    /// use ape::policy::PolicyLoader;
+    /// use ape::verification::Verifier;
     ///
     /// let policy = PolicyLoader::load_file("security.axm")?;
     /// let verifier = Verifier::new(policy);
-    /// # Ok::<(), axiom_lang::error::AxiomError>(())
+    /// # Ok::<(), ape::error::AxiomError>(())
     /// ```
     pub fn new(policy: Policy) -> Self {
         Verifier {
@@ -85,8 +85,8 @@ impl Verifier {
     ///
     /// # Example
     /// ```no_run
-    /// use axiom_lang::policy::PolicyLoader;
-    /// use axiom_lang::verification::Verifier;
+    /// use ape::policy::PolicyLoader;
+    /// use ape::verification::Verifier;
     ///
     /// let policy = PolicyLoader::load_file("security.axm")?;
     /// let verifier = Verifier::new(policy);
@@ -101,7 +101,7 @@ impl Verifier {
     /// } else {
     ///     println!("Policy denied: {}", verdict.reason().unwrap());
     /// }
-    /// # Ok::<(), axiom_lang::error::AxiomError>(())
+    /// # Ok::<(), ape::error::AxiomError>(())
     /// ```
     pub fn verify(&self, intent_name: &str, fields: &[(&str, &str)]) -> AxiomResult<Verdict> {
         // Look up the intent declaration
@@ -156,6 +156,43 @@ impl Verifier {
             .get(name)
             .and_then(|i| i.clauses.effect.as_ref())
             .and_then(|e| EffectClass::from_str(e))
+    }
+
+    /// Verify and log: pure verification for full Verdict, then append to the BLAKE3 audit chain.
+    ///
+    /// Calls `verify()` for the rich `Verdict` (deny_reason, category, guidance), then
+    /// calls `conscience.evaluate()` to append a signed `IntentLogEntry` to the chain.
+    /// The two-phase design keeps `verify()` pure while adding tamper-evident logging.
+    pub fn verify_and_log(&mut self, intent_name: &str, fields: &[(&str, &str)]) -> AxiomResult<Verdict> {
+        // Phase 1: pure verification — get full Verdict with deny_reason/category/guidance
+        let verdict = self.verify(intent_name, fields)?;
+
+        // Phase 2: logging — resolve effect + field_map and append to audit chain
+        let effect = self.intents
+            .get(intent_name)
+            .and_then(|i| i.clauses.effect.as_ref())
+            .and_then(|e| EffectClass::from_str(e))
+            .unwrap_or(EffectClass::Noop);
+
+        let mut field_map = HashMap::new();
+        for (key, value) in fields {
+            field_map.insert(key.to_string(), value.to_string());
+        }
+
+        self.conscience.evaluate(intent_name, &effect, &field_map);
+
+        Ok(verdict)
+    }
+
+    /// Walk the BLAKE3 audit chain and verify every entry's pre_hash links correctly.
+    /// Returns `Ok(())` if the chain is intact, or an `Err` describing the broken link.
+    pub fn verify_audit_chain(&self) -> Result<(), String> {
+        self.conscience.verify_audit_chain()
+    }
+
+    /// Return the number of intent entries currently in the audit log.
+    pub fn audit_log_len(&self) -> usize {
+        self.conscience.audit_log_len()
     }
 }
 

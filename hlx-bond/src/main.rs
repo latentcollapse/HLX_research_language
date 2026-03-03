@@ -91,6 +91,7 @@ struct GgufTokenizer {
     /// merged_token[rank] = resulting token id after merge
     merged_token: Vec<u32>,
     /// special token ids
+    #[allow(dead_code)]
     pub bos_id: u32,
     pub eos_id: u32,
     pub im_start_id: u32,
@@ -1033,7 +1034,7 @@ fn run_server(
     corpus: &CorpusContext,
     args: &Args,
 ) -> Result<()> {
-    use tiny_http::{Request, Response, Server};
+    use tiny_http::Server;
 
     let addr = format!("127.0.0.1:{}", port);
     let server = Server::http(&addr)

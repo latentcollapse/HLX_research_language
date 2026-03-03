@@ -75,6 +75,8 @@ pub enum Token {
     While,
     For,
     As,
+    Migrate,
+    To,
 
     // Operators
     Eq,
@@ -293,7 +295,7 @@ impl AstParser {
                 let start_col = col;
                 pos += 1;
                 col += 1;
-                let start = pos;
+                let _start = pos;
                 let mut result = String::new();
                 while pos < chars.len() && chars[pos] != '"' {
                     if chars[pos] == '\\' && pos + 1 < chars.len() {
@@ -420,6 +422,8 @@ impl AstParser {
                     "while" => Token::While,
                     "for" => Token::For,
                     "as" => Token::As,
+                    "migrate" => Token::Migrate,
+                    "to" => Token::To,
                     "true" => Token::Bool(true),
                     "false" => Token::Bool(false),
                     _ => Token::Ident(word),
@@ -630,6 +634,8 @@ impl AstParser {
             Token::Gives => Some("gives".to_string()),
             Token::Generation => Some("generation".to_string()),
             Token::Lifetime => Some("lifetime".to_string()),
+            Token::Migrate => Some("migrate".to_string()),
+            Token::To => Some("to".to_string()),
             _ => None,
         };
         if name.is_some() {
@@ -1608,6 +1614,7 @@ impl AstParser {
                 Ok(Statement::continue_())
             }
             Token::Switch => self.parse_switch(),
+            Token::Migrate => self.parse_migrate(),
             Token::LBrace => {
                 self.advance();
                 let stmts = self.parse_block_body()?;
@@ -1672,8 +1679,7 @@ impl AstParser {
             | Token::Barrier
             | Token::Consensus
             | Token::Action
-            | Token::Lifetime
-            | Token::Generation => {
+            | Token::Lifetime => {
                 let n = format!("{:?}", self.current()).to_lowercase();
                 self.advance();
                 n
@@ -1844,6 +1850,29 @@ impl AstParser {
             iterable,
             body,
         }))
+    }
+
+    fn parse_migrate(&mut self) -> Result<Statement, ParseError> {
+        let span = self.current_span();
+        self.expect(&Token::Migrate)?;
+        let agent = match self.current().clone() {
+            Token::Ident(name) => { self.advance(); name }
+            tok => return Err(ParseError {
+                message: format!("Expected agent name after 'migrate', got {:?}", tok),
+                line: span.line, col: span.col,
+            }),
+        };
+        self.expect(&Token::To)?;
+        let target = match self.current().clone() {
+            Token::Ident(name) => { self.advance(); name }
+            Token::String(s)   => { self.advance(); s }
+            tok => return Err(ParseError {
+                message: format!("Expected target after 'to', got {:?}", tok),
+                line: span.line, col: span.col,
+            }),
+        };
+        self.expect(&Token::Semi)?;
+        Ok(Statement::new(StmtKind::Migrate { agent, target }))
     }
 
     fn parse_switch(&mut self) -> Result<Statement, ParseError> {

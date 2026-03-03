@@ -175,7 +175,7 @@ impl IntegritySystem {
     {
         let mut violations = 0;
 
-        for (id, name, description, confidence) in rules {
+        for (_id, name, description, confidence) in rules {
             if !conscience_check(name, description, *confidence) {
                 violations += 1;
             }

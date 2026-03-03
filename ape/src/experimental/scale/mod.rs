@@ -44,6 +44,7 @@ pub struct Agent {
     /// The agent's current contribution for this epoch
     pub contribution: Option<AgentContribution>,
     /// Coherence metric (kernel-internal, NOT agent-readable)
+    #[allow(dead_code)]
     coherence: f64,
 }
 

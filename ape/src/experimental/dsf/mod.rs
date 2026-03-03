@@ -22,6 +22,7 @@ pub struct DsfAnalyzer {
     /// Current function being analyzed
     current_function: String,
     /// Track sealed type accesses
+    #[allow(dead_code)]
     sealed_accesses: Vec<String>,
 }
 

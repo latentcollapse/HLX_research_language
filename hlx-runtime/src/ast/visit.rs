@@ -277,6 +277,7 @@ pub fn walk_statement(visitor: &mut impl Visitor, stmt: &Statement) -> VisitResu
             VisitResult::Continue
         }
         StmtKind::Import(_) | StmtKind::Export(_) => VisitResult::Continue,
+        StmtKind::Migrate { .. } => VisitResult::Continue,
     };
 
     if result == VisitResult::Stop {

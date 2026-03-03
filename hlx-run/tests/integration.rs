@@ -283,3 +283,22 @@ fn test_bit_hlx_get_status() {
         .success()
         .stdout(predicate::str::contains("level="));
 }
+
+#[test]
+fn test_migrate_keyword() {
+    let f = write_hlx(
+        r#"
+fn main() {
+    println("before");
+    migrate worker to cluster_b;
+    println("after");
+}
+"#,
+    );
+    hlx_run()
+        .arg(f.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("before"))
+        .stdout(predicate::str::contains("after"));
+}

@@ -3,7 +3,7 @@
 //! Shows how to use Axiom to verify red team operations before execution.
 //! This demonstrates "policy-as-code" for security testing guardrails.
 
-use axiom_lang::{AxiomEngine, AxiomResult};
+use ape::{AxiomEngine, AxiomResult};
 
 fn main() -> AxiomResult<()> {
     println!("=== Red Team Safety Verification ===\n");

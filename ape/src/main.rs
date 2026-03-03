@@ -1,3 +1,6 @@
+// APE binary uses many forward-declared AST nodes and experimental modules
+#![allow(dead_code, unused_variables, unused_mut, unused_imports)]
+
 mod error;
 mod lexer;
 mod parser;

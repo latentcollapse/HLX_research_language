@@ -426,6 +426,11 @@ impl ScalePool {
     pub fn count(&self) -> usize {
         self.scales.len()
     }
+
+    /// Find a scale cluster by name, returns its ID if found.
+    pub fn find_by_name(&self, name: &str) -> Option<u64> {
+        self.scales.iter().find(|(_, s)| s.name == name).map(|(&id, _)| id)
+    }
 }
 
 impl Default for ScalePool {

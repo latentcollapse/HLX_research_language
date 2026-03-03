@@ -105,6 +105,7 @@ pub fn goto_definition(_content: &str, _line: u32, _character: u32) -> Option<Lo
 }
 
 /// Get document symbols (outline view)
+#[allow(deprecated)]
 pub fn get_document_symbols(content: &str) -> Vec<DocumentSymbol> {
     let mut symbols = Vec::new();
     

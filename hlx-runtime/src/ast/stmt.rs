@@ -83,6 +83,11 @@ pub enum StmtKind {
     Import(Import),
     /// Export statement
     Export(Export),
+    /// Migrate an agent to a different cluster or host: migrate agent_name to target;
+    Migrate {
+        agent: String,
+        target: String,
+    },
 }
 
 /// If statement

@@ -5,7 +5,7 @@
 //!
 //! Run with: cargo run --example embed_verify
 
-use axiom_lang::{AxiomEngine, AxiomResult};
+use ape::{AxiomEngine, AxiomResult};
 
 fn main() -> AxiomResult<()> {
     println!("=== Axiom Verification Example ===\n");

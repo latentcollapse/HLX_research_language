@@ -441,6 +441,9 @@ impl Render for Statement {
             StmtKind::Export(e) => {
                 format!("{}export {};\n", ind, e.item.render(0))
             }
+            StmtKind::Migrate { agent, target } => {
+                format!("{}migrate {} to {};\n", ind, agent, target)
+            }
         }
     }
 }

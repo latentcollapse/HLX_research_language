@@ -12,11 +12,11 @@ use clap::Parser;
 use rusqlite::Connection;
 use serde_json::json;
 use std::fs;
-use std::io::{self, Write};
-use std::path::Path;
+use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+#[allow(dead_code)]
 const DB_PATH: &str = "hlx_memory.db";
 
 #[derive(Parser)]
@@ -328,7 +328,7 @@ fn main() -> Result<()> {
     println!();
 
     // Initialize APE engine for governance
-    let ape_engine = if args.no_verify {
+    let mut ape_engine = if args.no_verify {
         None
     } else {
         // Resolve policy path: try CWD first, then binary location, then HLX_ROOT
@@ -369,9 +369,9 @@ fn main() -> Result<()> {
         }
     };
 
-    // APE: Verify RunCommand intent before compiling
-    if let Some(ref engine) = ape_engine {
-        let verdict = engine.verify(
+    // APE: Verify RunCommand intent before compiling (logged to BLAKE3 audit chain)
+    if let Some(ref mut engine) = ape_engine {
+        let verdict = engine.verify_and_log(
             "RunCommand",
             &[("command", "compile"), ("verified", "true")],
         );
@@ -758,10 +758,10 @@ fn main() -> Result<()> {
     println!("✓");
     println!();
 
-    // APE: Verify output before displaying (Governance at the boundary)
-    if let Some(ref engine) = ape_engine {
+    // APE: Verify output before displaying (logged to BLAKE3 audit chain)
+    if let Some(ref mut engine) = ape_engine {
         let result_str = format!("{}", result);
-        let verdict = engine.verify(
+        let verdict = engine.verify_and_log(
             "GenerateResponse",
             &[
                 ("output", &result_str),
@@ -789,6 +789,22 @@ fn main() -> Result<()> {
     println!("{}", result);
     println!();
 
+    // APE: Walk the BLAKE3 audit chain at exit — confirms no tampering during the run.
+    if let Some(ref engine) = ape_engine {
+        let n = engine.audit_log_len();
+        match engine.verify_audit_chain() {
+            Ok(()) => log::info!(
+                target: "ape",
+                "Audit chain OK — {} intent(s) logged, chain intact",
+                n
+            ),
+            Err(e) => {
+                // Chain corruption is a hard error — surface it even without --verbose
+                eprintln!("[APE] ⚠ Audit chain BROKEN: {}", e);
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -799,7 +815,7 @@ fn run_repl(verbose: bool, max_steps: usize) -> Result<()> {
     println!("╚══════════════════════════════════════════════════════════════════════╝");
     println!();
 
-    use hlx_runtime::{Compiler, Vm};
+    
 
     let mut source = String::new();
 

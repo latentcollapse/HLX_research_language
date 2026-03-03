@@ -57,11 +57,11 @@ impl PolicyLoader {
     ///
     /// # Example
     /// ```no_run
-    /// use axiom_lang::policy::PolicyLoader;
+    /// use ape::policy::PolicyLoader;
     ///
     /// let policy = PolicyLoader::load_file("security.axm")?;
     /// println!("Loaded {} intents", policy.intents.len());
-    /// # Ok::<(), axiom_lang::error::AxiomError>(())
+    /// # Ok::<(), ape::error::AxiomError>(())
     /// ```
     pub fn load_file(path: impl AsRef<Path>) -> AxiomResult<Policy> {
         let path = path.as_ref();
@@ -78,7 +78,7 @@ impl PolicyLoader {
     ///
     /// # Example
     /// ```no_run
-    /// use axiom_lang::policy::PolicyLoader;
+    /// use ape::policy::PolicyLoader;
     ///
     /// let source = r#"
     ///     module my_policy {
@@ -92,7 +92,7 @@ impl PolicyLoader {
     /// "#;
     ///
     /// let policy = PolicyLoader::load_source(source)?;
-    /// # Ok::<(), axiom_lang::error::AxiomError>(())
+    /// # Ok::<(), ape::error::AxiomError>(())
     /// ```
     pub fn load_source(source: &str) -> AxiomResult<Policy> {
         // Step 1: Lex

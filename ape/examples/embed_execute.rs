@@ -5,8 +5,8 @@
 //!
 //! Run with: cargo run --example embed_execute
 
-use axiom_lang::{AxiomEngine, AxiomResult, AxiomError};
-use axiom_lang::error::ErrorKind;
+use ape::{AxiomEngine, AxiomResult, AxiomError};
+use ape::error::ErrorKind;
 
 fn main() -> AxiomResult<()> {
     println!("=== Axiom Execution Example ===\n");

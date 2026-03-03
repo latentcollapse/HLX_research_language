@@ -454,7 +454,7 @@ impl Parser {
 
         let mut takes = Vec::new();
         let mut gives = Vec::new();
-        let mut shape_rule = None;
+        let shape_rule = None;
 
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             match self.peek_kind() {
@@ -1098,7 +1098,7 @@ impl Parser {
                     // Peek ahead to see if this is field access or enum access
                     // We treat it as potential enum access if the name starts uppercase
                     if name.chars().next().is_some_and(|c| c.is_uppercase()) {
-                        let dot_span = self.current_span();
+                        let _dot_span = self.current_span();
                         self.advance(); // consume .
                         let variant = self.expect_ident()?;
 

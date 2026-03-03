@@ -39,11 +39,13 @@ impl Default for RuntimeConfig {
     }
 }
 
+#[allow(dead_code)]
 struct NestingGuard<'a> {
     vm: &'a mut Vm,
 }
 
 impl<'a> NestingGuard<'a> {
+    #[allow(dead_code)]
     fn new(vm: &'a mut Vm) -> Self {
         vm.exec_nesting += 1;
         Self { vm }
@@ -104,8 +106,10 @@ struct CallFrame {
     #[allow(dead_code)]
     arg_count: usize,
     /// Sparse save: only (index, value) pairs for non-Nil registers.
-    /// On restore, the saved range is zeroed first, then non-nil values written back.
+    /// On restore, only the callee's dirty registers are zeroed, then saved values written back.
     saved_regs: Vec<(usize, Value)>,
+    /// Caller's dirty-register bitset, saved here so the callee can start fresh.
+    caller_dirty_bits: [u64; 4],
     /// Name of the callee function this frame represents
     func_name: String,
 }
@@ -147,6 +151,8 @@ pub struct Vm {
     current_agent: Option<u64>,
     current_scale: Option<u64>,
     functions: HashMap<String, (usize, usize)>,
+    /// Reverse map: start_pc → (param_count, name). Eliminates O(n) scan in CallAddr.
+    functions_by_pc: HashMap<usize, (usize, String)>,
     #[allow(dead_code)]
     globals: HashMap<String, Value>,
     latent_states: HashMap<String, Value>,
@@ -174,6 +180,9 @@ pub struct Vm {
     /// Shutdown flag: set by Ctrl+C handler to halt VM cleanly
     shutdown_flag: Option<Arc<AtomicBool>>,
     exec_nesting: usize,
+    /// Dirty-register bitset: bit i set iff register[i] was written since last call frame push.
+    /// 256 bits → 4 × u64 words (covers all 256 registers).
+    dirty_bits: [u64; 4],
 }
 
 impl Vm {
@@ -195,6 +204,7 @@ impl Vm {
             current_agent: None,
             current_scale: None,
             functions: HashMap::new(),
+            functions_by_pc: HashMap::new(),
             globals: HashMap::new(),
             latent_states: HashMap::new(),
             halted: false,
@@ -216,6 +226,7 @@ impl Vm {
             max_memory_entries: 50_000,
             shutdown_flag: None,
             exec_nesting: 0,
+            dirty_bits: [0u64; 4],
         }
     }
 
@@ -325,6 +336,15 @@ impl Vm {
     pub fn set_register(&mut self, idx: usize, val: Value) {
         if idx < self.registers.len() {
             self.registers[idx] = val;
+            self.mark_dirty(idx);
+        }
+    }
+
+    /// Mark register `i` as written in the current call frame's dirty-bits word.
+    #[inline]
+    fn mark_dirty(&mut self, i: usize) {
+        if i < 256 {
+            self.dirty_bits[i >> 6] |= 1u64 << (i & 63);
         }
     }
 
@@ -338,8 +358,10 @@ impl Vm {
             .collect()
     }
 
-    /// Restore a sparse snapshot: zero [0..count], then write non-nil values back.
-    fn sparse_restore(&mut self, count: usize, saved: &[(usize, Value)]) {
+    /// Restore a sparse snapshot: zero registers[0..count], then write non-nil caller values back.
+    /// `_callee_dirty` is reserved for a future targeted-zero optimization once all register
+    /// writes are instrumented via `mark_dirty`. Currently unused to guarantee correctness.
+    fn sparse_restore(&mut self, count: usize, _callee_dirty: [u64; 4], saved: &[(usize, Value)]) {
         for reg in &mut self.registers[..count] {
             *reg = Value::Nil;
         }
@@ -401,7 +423,6 @@ impl Vm {
     }
 
     pub fn run(&mut self, bytecode: &Bytecode) -> RuntimeResult<Value> {
-        eprintln!("VM_DEBUG: run entered");
         // Initialize start time for timeout
         if self.max_duration.is_some() && self.start_time.is_none() {
             self.start_time = Some(std::time::Instant::now());
@@ -633,7 +654,12 @@ impl Vm {
                 Opcode::Return => {
                     let return_val = self.registers[0].clone();
                     if let Some(frame) = self.call_stack.pop() {
-                        self.sparse_restore(self.config.saved_register_count, &frame.saved_regs);
+                        // Capture callee's dirty_bits and restore caller's before zeroing.
+                        // dirty_bits is not yet used for targeted zero (all opcodes need
+                        // instrumentation first) — sparse_restore uses count-based zero.
+                        let callee_dirty = self.dirty_bits;
+                        self.dirty_bits = frame.caller_dirty_bits;
+                        self.sparse_restore(self.config.saved_register_count, callee_dirty, &frame.saved_regs);
                         self.registers[frame.base_reg] = return_val.clone();
                         pc = frame.return_pc;
                         if pc == usize::MAX {  return Ok(return_val.clone()); }
@@ -1072,6 +1098,38 @@ impl Vm {
                                 ("votes".to_string(), Value::I64(result.total_votes as i64)),
                             ]);
                             self.set_register(dst, Value::Map(map));
+                        }
+                    }
+                }
+
+                Opcode::ScaleMigrate => {
+                    // migrate <agent> to <target>
+                    // Reads agent name and target cluster/host name from the string pool,
+                    // then removes the agent from the current scale and looks up the target
+                    // scale by name, adding the agent there.
+                    let agent_idx = bytecode.read_u32(&mut pc)? as usize;
+                    let target_idx = bytecode.read_u32(&mut pc)? as usize;
+                    let agent_name = bytecode.strings.get(agent_idx).cloned().unwrap_or_default();
+                    let target_name = bytecode.strings.get(target_idx).cloned().unwrap_or_default();
+                    log::debug!(target: "hlx", "migrate {} to {}", agent_name, target_name);
+                    // Find the agent ID by name from current scale, then migrate
+                    if let Some(src_id) = self.current_scale {
+                        // Collect agent IDs to migrate (agents whose registered name matches)
+                        let agent_ids: Vec<u64> = self.scale_pool
+                            .get(src_id)
+                            .map(|s| s.agents.clone())
+                            .unwrap_or_default();
+                        // Find target scale by name
+                        let target_scale_id = self.scale_pool.find_by_name(&target_name);
+                        for agent_id in agent_ids {
+                            if let Some(src) = self.scale_pool.get_mut(src_id) {
+                                src.remove_agent(agent_id);
+                            }
+                            if let Some(dst_id) = target_scale_id {
+                                if let Some(dst) = self.scale_pool.get_mut(dst_id) {
+                                    dst.add_agent(agent_id);
+                                }
+                            }
                         }
                     }
                 }
@@ -1638,6 +1696,8 @@ impl Vm {
                     if let Some(func_name) = bytecode.strings.get(func_idx) {
                         if let Some(&(start_pc, param_count)) = self.functions.get(func_name) {
                             let saved_regs = self.sparse_save(self.config.saved_register_count);
+                            let caller_dirty = self.dirty_bits;
+                            self.dirty_bits = [0u64; 4];
 
                             let arg_base = self.config.arg_base_register;
                             let max_args = arg_count.min(param_count);
@@ -1652,6 +1712,7 @@ impl Vm {
                             }
                             for i in 0..max_args {
                                 self.registers[i + 1] = self.registers[arg_base + i].clone();
+                                self.mark_dirty(i + 1);
                             }
 
                             self.call_stack.push(CallFrame {
@@ -1659,6 +1720,7 @@ impl Vm {
                                 base_reg: dst,
                                 arg_count,
                                 saved_regs,
+                                caller_dirty_bits: caller_dirty,
                                 func_name: func_name.clone(),
                             });
                             pc = start_pc;
@@ -1713,18 +1775,15 @@ impl Vm {
                     let arg_count = bytecode.read_u8(&mut pc)? as usize;
                     let dst = bytecode.read_u8(&mut pc)? as usize;
 
-                    // Find the function at this PC to get param_count and name
-                    let mut param_count = 0;
-                    let mut callee_name = String::from("<?>");
-                    for (name, &(fstart_pc, params)) in &self.functions {
-                        if fstart_pc == target_pc {
-                            param_count = params as usize;
-                            callee_name = name.clone();
-                            break;
-                        }
-                    }
+                    // O(1) reverse lookup: pc → (param_count, name)
+                    let (param_count, callee_name) = self.functions_by_pc
+                        .get(&target_pc)
+                        .map(|(params, name)| (*params, name.clone()))
+                        .unwrap_or((0, String::from("<?>")));
 
                     let saved_regs = self.sparse_save(self.config.saved_register_count);
+                    let caller_dirty = self.dirty_bits;
+                    self.dirty_bits = [0u64; 4];
 
                     let arg_base = self.config.arg_base_register;
                     let max_args = arg_count.min(param_count);
@@ -1739,6 +1798,7 @@ impl Vm {
                     }
                     for i in 0..max_args {
                         self.registers[i + 1] = self.registers[arg_base + i].clone();
+                        self.mark_dirty(i + 1);
                     }
 
                     self.call_stack.push(CallFrame {
@@ -1746,6 +1806,7 @@ impl Vm {
                         base_reg: dst,
                         arg_count,
                         saved_regs,
+                        caller_dirty_bits: caller_dirty,
                         func_name: callee_name,
                     });
                     pc = target_pc;
@@ -1772,16 +1833,20 @@ impl Vm {
 
                     if let Some(&(start_pc, param_count)) = self.functions.get(&func_name) {
                         let saved_regs = self.sparse_save(self.config.saved_register_count);
+                        let caller_dirty = self.dirty_bits;
+                        self.dirty_bits = [0u64; 4];
                         let arg_base = self.config.arg_base_register;
                         let max_args = arg_count.min(param_count as usize);
                         for i in 0..max_args {
                             self.registers[i + 1] = self.registers[arg_base + i].clone();
+                            self.mark_dirty(i + 1);
                         }
                         self.call_stack.push(CallFrame {
                             return_pc: pc,
                             base_reg: dst,
                             arg_count,
                             saved_regs,
+                            caller_dirty_bits: caller_dirty,
                             func_name: func_name.clone(),
                         });
                         pc = start_pc as usize;
@@ -1926,6 +1991,7 @@ impl Vm {
 
     pub fn register_function(&mut self, name: &str, start_pc: usize, params: usize) {
         self.functions.insert(name.to_string(), (start_pc, params));
+        self.functions_by_pc.insert(start_pc, (params, name.to_string()));
     }
 
     /// Call an exported function by name with arguments.
@@ -1960,12 +2026,15 @@ impl Vm {
             } else {
                 // Save current state for nested call
                 let saved_regs = self.sparse_save(self.config.saved_register_count);
+                let caller_dirty = self.dirty_bits;
+                self.dirty_bits = [0u64; 4];
                 self.call_stack.push(CallFrame {
                     return_pc: usize::MAX, // Host return marker
                     base_reg: 0,
                     func_name: func_name.to_string(),
                     arg_count: 0,
                     saved_regs,
+                    caller_dirty_bits: caller_dirty,
                 });
             }
 

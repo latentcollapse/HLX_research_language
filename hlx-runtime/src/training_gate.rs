@@ -65,6 +65,7 @@ pub struct CheckResult {
 
 pub struct TrainingGate {
     auth_gate: AuthorizationGate,
+    #[allow(dead_code)]
     integrity: IntegritySystem,
     proposal: Option<TrainingProposal>,
     checkpoints: Vec<CheckpointData>,

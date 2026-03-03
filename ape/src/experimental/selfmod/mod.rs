@@ -188,6 +188,7 @@ impl ComplexityTracker {
     }
 
     /// Reset backoff after rebase validation (H6: requires proof hash)
+    #[allow(dead_code)]
     pub(crate) fn reset_backoff_with_proof(
         &mut self,
         module: &str,

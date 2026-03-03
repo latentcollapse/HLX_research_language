@@ -5,14 +5,14 @@
 //!
 //! Just 5 lines to get started:
 //! ```no_run
-//! use axiom_lang::AxiomEngine;
+//! use ape::AxiomEngine;
 //!
 //! let engine = AxiomEngine::from_file("policy.axm")?;
 //! let verdict = engine.verify("WriteFile", &[("path", "/tmp/test.txt")])?;
 //! if verdict.allowed() {
 //!     // Your code runs
 //! }
-//! # Ok::<(), axiom_lang::error::AxiomError>(())
+//! # Ok::<(), ape::error::AxiomError>(())
 //! ```
 
 use std::path::Path;
@@ -32,7 +32,7 @@ use crate::error::{AxiomResult, AxiomError, ErrorKind};
 ///
 /// # Example
 /// ```no_run
-/// use axiom_lang::AxiomEngine;
+/// use ape::AxiomEngine;
 ///
 /// // Load policy (fast, no execution setup)
 /// let engine = AxiomEngine::from_file("security.axm")?;
@@ -43,7 +43,7 @@ use crate::error::{AxiomResult, AxiomError, ErrorKind};
 /// if verdict.allowed() {
 ///     println!("Policy allows this operation");
 /// }
-/// # Ok::<(), axiom_lang::error::AxiomError>(())
+/// # Ok::<(), ape::error::AxiomError>(())
 /// ```
 pub struct AxiomEngine {
     /// The loaded policy
@@ -88,10 +88,10 @@ impl AxiomEngine {
     ///
     /// # Example
     /// ```no_run
-    /// use axiom_lang::AxiomEngine;
+    /// use ape::AxiomEngine;
     ///
     /// let engine = AxiomEngine::from_file("security.axm")?;
-    /// # Ok::<(), axiom_lang::error::AxiomError>(())
+    /// # Ok::<(), ape::error::AxiomError>(())
     /// ```
     pub fn from_file(path: impl AsRef<Path>) -> AxiomResult<Self> {
         let policy = PolicyLoader::load_file(path)?;
@@ -108,7 +108,7 @@ impl AxiomEngine {
     ///
     /// # Example
     /// ```no_run
-    /// use axiom_lang::AxiomEngine;
+    /// use ape::AxiomEngine;
     ///
     /// let source = r#"
     ///     module security {
@@ -122,7 +122,7 @@ impl AxiomEngine {
     /// "#;
     ///
     /// let engine = AxiomEngine::from_source(source)?;
-    /// # Ok::<(), axiom_lang::error::AxiomError>(())
+    /// # Ok::<(), ape::error::AxiomError>(())
     /// ```
     pub fn from_source(source: &str) -> AxiomResult<Self> {
         let policy = PolicyLoader::load_source(source)?;
@@ -149,7 +149,7 @@ impl AxiomEngine {
     ///
     /// # Example
     /// ```no_run
-    /// use axiom_lang::AxiomEngine;
+    /// use ape::AxiomEngine;
     ///
     /// let engine = AxiomEngine::from_file("policy.axm")?;
     ///
@@ -170,6 +170,32 @@ impl AxiomEngine {
         self.verifier.verify(intent_name, fields)
     }
 
+    /// Verify and log to the BLAKE3 audit chain.
+    ///
+    /// Identical to `verify()` from the caller's perspective, but also appends a
+    /// signed `IntentLogEntry` to the tamper-evident chain so every governance
+    /// decision is auditable after the fact. Requires `&mut self`.
+    ///
+    /// Use this wherever you would call `verify()` in production code.
+    /// Use `verify()` only when you explicitly need a pure, side-effect-free check.
+    pub fn verify_and_log(&mut self, intent_name: &str, fields: &[(&str, &str)]) -> AxiomResult<Verdict> {
+        self.verifier.verify_and_log(intent_name, fields)
+    }
+
+    /// Walk the BLAKE3 audit chain and verify every `pre_hash` link is intact.
+    ///
+    /// Returns `Ok(())` if the chain is unbroken, or `Err(description)` naming the
+    /// first broken link. Call this at program exit to confirm no entries were
+    /// replayed, reordered, or tampered with during the run.
+    pub fn verify_audit_chain(&self) -> Result<(), String> {
+        self.verifier.verify_audit_chain()
+    }
+
+    /// Return the number of intent entries currently in the audit log.
+    pub fn audit_log_len(&self) -> usize {
+        self.verifier.audit_log_len()
+    }
+
     /// Evaluate an intent - verify AND execute
     ///
     /// This is the advanced operation that both verifies and executes the intent.
@@ -184,7 +210,7 @@ impl AxiomEngine {
     ///
     /// # Example
     /// ```no_run
-    /// use axiom_lang::{AxiomEngine, Value};
+    /// use ape::{AxiomEngine, Value};
     ///
     /// let mut engine = AxiomEngine::from_file("policy.axm")?;
     ///
@@ -193,7 +219,7 @@ impl AxiomEngine {
     /// ])?;
     ///
     /// println!("Result: {:?}", result.value);
-    /// # Ok::<(), axiom_lang::error::AxiomError>(())
+    /// # Ok::<(), ape::error::AxiomError>(())
     /// ```
     pub fn evaluate(
         &mut self,
@@ -226,7 +252,7 @@ impl AxiomEngine {
 
         // Lazy initialization of interpreter
         if self.interpreter.is_none() {
-            let mut interp = Interpreter::new();
+            let interp = Interpreter::new();
             // Load the policy declarations into the interpreter
             // This is a simplified version - full implementation would need
             // to actually execute the policy source through the interpreter

@@ -5,14 +5,13 @@
 
 use crate::ast::{
     AgentDef, BinaryOp, CycleLevel, ExprKind, Expression, Function, Gate, Import, Item,
-    ModificationKind, ModuleDef, Parameter, Pattern, Program, Statement, StmtKind, UnaryOp,
+    ModificationKind, Parameter, Pattern, Program, Statement, StmtKind, UnaryOp,
 };
 use crate::ast_parser::AstParser;
-use crate::resolver::{ImportStyle, ModuleResolver};
+use crate::resolver::ModuleResolver;
 use crate::tensor::Tensor;
 use crate::{Bytecode, Opcode, Value};
 use std::collections::HashMap;
-use std::path::Path;
 
 /// Errors that can occur during lowering
 #[derive(Debug, Clone)]
@@ -60,6 +59,7 @@ pub struct Lowerer {
     /// Whether we're currently inside __top_level__ (module-level init)
     in_top_level: bool,
     /// Current source line for line table generation
+    #[allow(dead_code)]
     current_line: u32,
     /// Counter for generating unique lambda names
     lambda_counter: u32,
@@ -275,6 +275,7 @@ impl Lowerer {
     }
 
     /// Lower a single imported function (emit immediately - for use after main program)
+    #[allow(dead_code)]
     fn lower_imported_function(&mut self, name: &str, func: &Function) -> LowerResult<()> {
         // Emit jump over function body (same pattern as lower_function for non-main)
         self.emit(Opcode::Jump);
@@ -846,7 +847,6 @@ impl Lowerer {
                             }
                             _ => {
                                 // Unknown pattern variant — treat as wildcard
-                                None::<()>;
                                 // Fall through to body without comparison
                                 self.lower_body(&case.body)?;
                                 self.emit(Opcode::Jump);
@@ -984,6 +984,15 @@ impl Lowerer {
                 self.patch_jump(exit_jump, loop_end)?;
             }
             StmtKind::Module(_) | StmtKind::Import(_) | StmtKind::Export(_) => {}
+            StmtKind::Migrate { agent, target } => {
+                // ScaleMigrate: move agent from its current cluster to target
+                // Format: ScaleMigrate <agent_name_idx: u32> <target_name_idx: u32>
+                let agent_idx = self.get_or_add_string(agent);
+                let target_idx = self.get_or_add_string(target);
+                self.emit(Opcode::ScaleMigrate);
+                self.emit_u32(agent_idx);
+                self.emit_u32(target_idx);
+            }
         }
         Ok(())
     }
@@ -1535,7 +1544,6 @@ impl Lowerer {
 
             // Set confidence threshold from gates
             let mut confidence_threshold: u8 = 80; // default 80%
-            let mut cooldown: u8 = 5; // default 5 steps
 
             for gate in &modify.gates {
                 match gate {
@@ -1570,9 +1578,8 @@ impl Lowerer {
             self.emit(Opcode::GovernSetConfidence);
             self.emit_u8(confidence_threshold);
 
-            // Set cooldown steps
-            cooldown = modify.cooldown_steps.max(1).min(255) as u8;
-            let _ = cooldown;
+            // Set cooldown steps (unused until GovernSetCooldown opcode is wired up)
+            let _cooldown = modify.cooldown_steps.max(1).min(255) as u8;
 
             // Lower each modification proposal through full RSI flow
             for proposal in &modify.proposals {
@@ -1761,6 +1768,7 @@ impl Lowerer {
         Ok(reg)
     }
 
+    #[allow(dead_code)]
     fn resolve_or_alloc_var(&mut self, name: &str) -> LowerResult<u8> {
         if let Some(&reg) = self.variables.get(name) {
             Ok(reg)

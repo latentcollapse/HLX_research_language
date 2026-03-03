@@ -3,7 +3,7 @@
 //! Attempts to bypass Axiom's verification layer using various techniques.
 //! This is NOT BlackArch tools - this is direct attacks on the verification logic.
 
-use axiom_lang::{AxiomEngine, AxiomResult};
+use ape::{AxiomEngine, AxiomResult};
 
 fn main() -> AxiomResult<()> {
     println!("=== AXIOM RED TEAM ATTACK SUITE ===\n");
@@ -210,7 +210,7 @@ fn main() -> AxiomResult<()> {
     println!("\nATTACK 13: Resource exhaustion (10MB path)");
     let huge_path = "/tmp/".to_string() + &"A".repeat(10_000_000);
     let start = std::time::Instant::now();
-    let verdict = engine.verify("WriteFile", &[("path", &huge_path), ("content", "x")])?;
+    let verdict = engine.verify("WriteFile", &[("path", huge_path.as_str()), ("content", "x")])?;
     let elapsed = start.elapsed();
     println!("  ℹ️  Result: {} (took {:?})", verdict.allowed(), elapsed);
     if elapsed.as_millis() > 100 {
