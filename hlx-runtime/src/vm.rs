@@ -34,8 +34,25 @@ impl Default for RuntimeConfig {
             max_steps: 1_000_000,
             register_count: 256,
             arg_base_register: 150,
-            saved_register_count: 150,
+            saved_register_count: 250,
         }
+    }
+}
+
+struct NestingGuard<'a> {
+    vm: &'a mut Vm,
+}
+
+impl<'a> NestingGuard<'a> {
+    fn new(vm: &'a mut Vm) -> Self {
+        vm.exec_nesting += 1;
+        Self { vm }
+    }
+}
+
+impl<'a> Drop for NestingGuard<'a> {
+    fn drop(&mut self) {
+        self.vm.exec_nesting -= 1;
     }
 }
 
@@ -139,7 +156,7 @@ pub struct Vm {
     config: RuntimeConfig,
     /// Native function registry for builtins like bond(), mem_store(), mem_query()
     /// Functions get &mut Vm so they can access VM state (memory, etc.)
-    natives: HashMap<String, Box<dyn Fn(&mut Vm, Vec<Value>) -> Value + Send + Sync>>,
+    natives: HashMap<String, Box<dyn Fn(&mut Vm, &Bytecode, Vec<Value>) -> Value + Send + Sync>>,
     /// In-memory storage for HIL learn/recall (Phase 10)
     memory: Vec<MemEntry>,
     /// Debug mode: trace execution
@@ -154,6 +171,7 @@ pub struct Vm {
     max_memory_entries: usize,
     /// Shutdown flag: set by Ctrl+C handler to halt VM cleanly
     shutdown_flag: Option<Arc<AtomicBool>>,
+    exec_nesting: usize,
 }
 
 impl Vm {
@@ -195,6 +213,7 @@ impl Vm {
             max_duration: None,
             max_memory_entries: 50_000,
             shutdown_flag: None,
+            exec_nesting: 0,
         }
     }
 
@@ -203,7 +222,7 @@ impl Vm {
     pub fn register_native(
         &mut self,
         name: &str,
-        f: impl Fn(&mut Vm, Vec<Value>) -> Value + Send + Sync + 'static,
+        f: impl Fn(&mut Vm, &Bytecode, Vec<Value>) -> Value + Send + Sync + 'static,
     ) {
         self.natives.insert(name.to_string(), Box::new(f));
     }
@@ -360,6 +379,7 @@ impl Vm {
     }
 
     pub fn run(&mut self, bytecode: &Bytecode) -> RuntimeResult<Value> {
+        eprintln!("VM_DEBUG: run entered");
         // Initialize start time for timeout
         if self.max_duration.is_some() && self.start_time.is_none() {
             self.start_time = Some(std::time::Instant::now());
@@ -384,6 +404,13 @@ impl Vm {
     /// Core execution loop starting from an arbitrary program counter.
     /// Both `run()` and `call_function()` delegate here.
     fn run_from_pc(&mut self, bytecode: &Bytecode, start_pc: usize) -> RuntimeResult<Value> {
+        self.exec_nesting += 1;
+        let res = self.run_from_pc_internal(bytecode, start_pc);
+        self.exec_nesting -= 1;
+        res
+    }
+
+    fn run_from_pc_internal(&mut self, bytecode: &Bytecode, start_pc: usize) -> RuntimeResult<Value> {
         let mut pc: usize = start_pc;
 
         while pc < bytecode.code.len() && !self.halted {
@@ -587,19 +614,17 @@ impl Vm {
                         for (i, val) in frame.saved_regs.iter().enumerate() {
                             self.registers[i] = val.clone();
                         }
-                        self.registers[frame.base_reg] = return_val;
+                        self.registers[frame.base_reg] = return_val.clone();
                         pc = frame.return_pc;
-                        // GC: release arg-passing zone (150-199) and temp zone (200-249)
-                        // Only when returning to native (call_stack empty) — intermediate
-                        // returns must not clear registers that the caller still needs.
-                        if self.call_stack.is_empty() {
-                            for i in 150..250 {
-                                self.registers[i] = Value::Nil;
-                            }
-                        }
+                        if pc == usize::MAX {  return Ok(return_val.clone()); }
                     } else {
-                        self.halted = true;
-                        return Ok(return_val);
+                        // GC: release arg-passing zone (150-199) and temp zone (200-249)
+                        // Only when returning to native host — intermediate returns
+                        // must not clear registers that the caller still needs.
+                        for i in 150..250 {
+                            self.registers[i] = Value::Nil;
+                        }
+                         return Ok(return_val);
                     }
                 }
 
@@ -611,7 +636,7 @@ impl Vm {
                     if let Value::Array(ref a) = arr {
                         self.check_array_size(a.len() + 1)?;
                     }
-                    let new_arr = builtins::builtin_push(&[arr, self.get_register_cloned(val)])?;
+                    let new_arr = builtins::builtin_push(self, bytecode, &[arr, self.get_register_cloned(val)])?;
                     self.set_register(dst, new_arr);
                 }
 
@@ -622,14 +647,14 @@ impl Vm {
                     let container = self.get_register_cloned(arr);
                     let key = self.get_register_cloned(idx);
                     let val = match &container {
-                        Value::Array(_) => builtins::builtin_get_at(&[container, key])?,
+                        Value::Array(_) => builtins::builtin_get_at(self, bytecode, &[container, key])?,
                         Value::Map(map) => {
                             let field = key
                                 .as_string()
                                 .ok_or_else(|| RuntimeError::new("Map key must be String", pc))?;
                             map.get(field).cloned().unwrap_or(Value::Nil)
                         }
-                        _ => builtins::builtin_get_at(&[container, key])?,
+                        _ => builtins::builtin_get_at(self, bytecode, &[container, key])?,
                     };
                     self.set_register(dst, val);
                 }
@@ -643,7 +668,7 @@ impl Vm {
                     let value = self.get_register_cloned(val);
                     match container {
                         Value::Array(_) => {
-                            let new_arr = builtins::builtin_set_at(&[container, key, value])?;
+                            let new_arr = builtins::builtin_set_at(self, bytecode, &[container, key, value])?;
                             self.set_register(dst, new_arr);
                         }
                         Value::Map(mut map) => {
@@ -672,7 +697,7 @@ impl Vm {
                 Opcode::Len => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    let len = builtins::builtin_array_len(&[self.get_register_cloned(src)])?;
+                    let len = builtins::builtin_array_len(self, bytecode, &[self.get_register_cloned(src)])?;
                     self.set_register(dst, len);
                 }
 
@@ -701,7 +726,7 @@ impl Vm {
                 Opcode::StrLen => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    let len = builtins::builtin_strlen(&[self.get_register_cloned(src)])?;
+                    let len = builtins::builtin_strlen(self, bytecode, &[self.get_register_cloned(src)])?;
                     self.set_register(dst, len);
                 }
 
@@ -710,7 +735,7 @@ impl Vm {
                     let s = bytecode.read_u8(&mut pc)? as usize;
                     let start = bytecode.read_u8(&mut pc)? as usize;
                     let len = bytecode.read_u8(&mut pc)? as usize;
-                    let result = builtins::builtin_substring(&[
+                    let result = builtins::builtin_substring(self, bytecode, &[
                         self.get_register_cloned(s),
                         self.get_register_cloned(start),
                         self.get_register_cloned(len),
@@ -728,7 +753,7 @@ impl Vm {
                     let new_len = val_a.as_string().map(|s| s.len()).unwrap_or(0)
                         + val_b.as_string().map(|s| s.len()).unwrap_or(0);
                     self.check_string_size(new_len)?;
-                    let result = builtins::builtin_concat(&[val_a, val_b])?;
+                    let result = builtins::builtin_concat(self, bytecode, &[val_a, val_b])?;
                     self.set_register(dst, result);
                 }
 
@@ -736,7 +761,7 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result = builtins::builtin_strcmp(&[
+                    let result = builtins::builtin_strcmp(self, bytecode, &[
                         self.get_register_cloned(a),
                         self.get_register_cloned(b),
                     ])?;
@@ -746,14 +771,14 @@ impl Vm {
                 Opcode::Ord => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    let result = builtins::builtin_ord(&[self.get_register_cloned(src)])?;
+                    let result = builtins::builtin_ord(self, bytecode, &[self.get_register_cloned(src)])?;
                     self.set_register(dst, result);
                 }
 
                 Opcode::Char => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    let result = builtins::builtin_char(&[self.get_register_cloned(src)])?;
+                    let result = builtins::builtin_char(self, bytecode, &[self.get_register_cloned(src)])?;
                     self.set_register(dst, result);
                 }
 
@@ -1637,7 +1662,7 @@ impl Vm {
                             // Take ownership of the native function to avoid borrow issues
                             let func_name_owned = func_name.clone();
                             if let Some(native) = self.natives.remove(&func_name_owned) {
-                                let result = native(self, args);
+                                let result = native(self, bytecode, args);
                                 self.registers[dst] = result;
                                 // Re-insert the native function for future calls
                                 self.natives.insert(func_name_owned, native);
@@ -1656,7 +1681,7 @@ impl Vm {
                             let args: Vec<Value> = (0..arg_count)
                                 .map(|i| self.registers[arg_base + i].clone())
                                 .collect();
-                            let result = self.call_builtin_by_name(func_name, &args)?;
+                            let result = self.call_builtin_by_name(func_name, &args, bytecode)?;
                             self.registers[dst] = result;
                         }
                     }
@@ -1750,7 +1775,7 @@ impl Vm {
                             .collect();
                         let func_name_owned = func_name.clone();
                         if let Some(native) = self.natives.remove(&func_name_owned) {
-                            let result = native(self, args);
+                            let result = native(self, bytecode, args);
                             self.registers[dst] = result;
                             self.natives.insert(func_name_owned, native);
                         }
@@ -1759,7 +1784,7 @@ impl Vm {
                         let args: Vec<Value> = (0..arg_count)
                             .map(|i| self.registers[arg_base + i].clone())
                             .collect();
-                        let result = self.call_builtin_by_name(&func_name, &args)?;
+                        let result = self.call_builtin_by_name(&func_name, &args, bytecode)?;
                         self.registers[dst] = result;
                     }
                 }
@@ -1895,24 +1920,36 @@ impl Vm {
         func_name: &str,
         args: &[Value],
     ) -> RuntimeResult<Value> {
+        let is_nested = self.exec_nesting > 0;
+        
         if let Some(&(start_pc, param_count)) = self.functions.get(func_name) {
-            // Reset state
-            self.halted = false;
-            self.steps = 0;
-            for reg in &mut self.registers {
-                *reg = Value::Nil;
-            }
-
-            // Run __top_level__ first to initialize module-level latent variables.
-            // Latent state lives in agent_pool, not registers, so it survives the reg clear below.
-            if let Some(&(top_pc, _)) = self.functions.get("__top_level__") {
-                self.run_from_pc(bytecode, top_pc)?;
-                // Reset halted/steps for the real function call
+            if !is_nested {
+                // Reset state for top-level call
                 self.halted = false;
                 self.steps = 0;
                 for reg in &mut self.registers {
                     *reg = Value::Nil;
                 }
+
+                // Run __top_level__ first
+                if let Some(&(top_pc, _)) = self.functions.get("__top_level__") {
+                    self.run_from_pc(bytecode, top_pc)?;
+                    self.halted = false;
+                    self.steps = 0;
+                    for reg in &mut self.registers {
+                        *reg = Value::Nil;
+                    }
+                }
+            } else {
+                // Save current state for nested call
+                let saved_regs = self.registers[0..self.config.saved_register_count].to_vec();
+                self.call_stack.push(CallFrame {
+                    return_pc: usize::MAX, // Host return marker
+                    base_reg: 0,
+                    func_name: func_name.to_string(),
+                    arg_count: 0,
+                    saved_regs,
+                });
             }
 
             // Set up arguments in registers (starting at register 1, reserve 0 for return)
@@ -1926,7 +1963,6 @@ impl Vm {
                     if e.line == 0 {
                         e.line = bytecode.get_line(e.pc).unwrap_or(0);
                     }
-                    // Innermost callee first, then outer frames, then the entrypoint
                     let mut stack: Vec<String> = self
                         .call_stack
                         .iter()
@@ -1935,113 +1971,136 @@ impl Vm {
                         .collect();
                     stack.push(func_name.to_string());
                     e.call_stack = stack;
-                    Err(e)
+                    return Err(e);
                 }
             }
         } else {
             Err(RuntimeError::new(
                 format!("Function '{}' not found", func_name),
+                0))
+        }
+    }
+    pub fn call_value(
+        &mut self,
+        func: &Value,
+        args: &[Value],
+        bytecode: &Bytecode,
+    ) -> RuntimeResult<Value> {
+        match func {
+            Value::Function(name) => self.call_function(bytecode, name, args),
+            Value::String(name) => {
+                if self.functions.contains_key(name) {
+                    self.call_function(bytecode, name, args)
+                } else {
+                    self.call_builtin_by_name(name, args, bytecode)
+                }
+            }
+            _ => Err(RuntimeError::new(
+                format!("Cannot call value of type {}", func.type_name()),
                 0,
-            ))
+            )),
         }
     }
 
-    fn call_builtin_by_name(&mut self, name: &str, args: &[Value]) -> RuntimeResult<Value> {
+    fn call_builtin_by_name(&mut self, name: &str, args: &[Value], bytecode: &Bytecode) -> RuntimeResult<Value> {
         match name {
-            "strlen" | "str_len" => builtins::builtin_strlen(args),
-            "substring" | "str_substring" => builtins::builtin_substring(args),
-            "concat" => builtins::builtin_concat(args),
-            "strcmp" => builtins::builtin_strcmp(args),
-            "ord" => builtins::builtin_ord(args),
-            "char" => builtins::builtin_char(args),
-            "str_char_at" => builtins::builtin_str_char_at(args),
-            "push" => builtins::builtin_push(args),
-            "get_at" => builtins::builtin_get_at(args),
-            "set_at" => builtins::builtin_set_at(args),
-            "array_len" | "len" => builtins::builtin_array_len(args),
-            "print" => builtins::builtin_print(args),
-            "println" => builtins::builtin_println(args),
-            "image_load" => builtins::builtin_image_load(args),
-            "image_save" => builtins::builtin_image_save(args),
-            "image_process" => builtins::builtin_image_process(args),
-            "image_info" => builtins::builtin_image_info(args),
-            "audio_load" => builtins::builtin_audio_load(args),
-            "audio_save" => builtins::builtin_audio_save(args),
-            "audio_info" => builtins::builtin_audio_info(args),
-            "audio_resample" => builtins::builtin_audio_resample(args),
-            "audio_normalize" => builtins::builtin_audio_normalize(args),
+            "map" => builtins::builtin_map(self, bytecode, args),
+            "filter" => builtins::builtin_filter(self, bytecode, args),
+            "fold" | "reduce" => builtins::builtin_fold(self, bytecode, args),
+            "strlen" | "str_len" => builtins::builtin_strlen(self, bytecode, args),
+            "substring" | "str_substring" => builtins::builtin_substring(self, bytecode, args),
+            "concat" => builtins::builtin_concat(self, bytecode, args),
+            "strcmp" => builtins::builtin_strcmp(self, bytecode, args),
+            "ord" => builtins::builtin_ord(self, bytecode, args),
+            "char" => builtins::builtin_char(self, bytecode, args),
+            "str_char_at" => builtins::builtin_str_char_at(self, bytecode, args),
+            "push" => builtins::builtin_push(self, bytecode, args),
+            "get_at" => builtins::builtin_get_at(self, bytecode, args),
+            "set_at" => builtins::builtin_set_at(self, bytecode, args),
+            "array_len" | "len" => builtins::builtin_array_len(self, bytecode, args),
+            "print" => builtins::builtin_print(self, bytecode, args),
+            "println" => builtins::builtin_println(self, bytecode, args),
+            "image_load" => builtins::builtin_image_load(self, bytecode, args),
+            "image_save" => builtins::builtin_image_save(self, bytecode, args),
+            "image_process" => builtins::builtin_image_process(self, bytecode, args),
+            "image_info" => builtins::builtin_image_info(self, bytecode, args),
+            "audio_load" => builtins::builtin_audio_load(self, bytecode, args),
+            "audio_save" => builtins::builtin_audio_save(self, bytecode, args),
+            "audio_info" => builtins::builtin_audio_info(self, bytecode, args),
+            "audio_resample" => builtins::builtin_audio_resample(self, bytecode, args),
+            "audio_normalize" => builtins::builtin_audio_normalize(self, bytecode, args),
             // Bit's builtins (Phase 2)
-            "zeros" => builtins::builtin_zeros(args),
-            "i64_to_str" => builtins::builtin_i64_to_str(args),
-            "f64_to_str" => builtins::builtin_f64_to_str(args),
-            "str_contains" => builtins::builtin_str_contains(args),
-            "str_equals" => builtins::builtin_str_equals(args),
-            "sqrt" => builtins::builtin_sqrt(args),
-            "hash" => builtins::builtin_hash(args),
+            "zeros" => builtins::builtin_zeros(self, bytecode, args),
+            "i64_to_str" => builtins::builtin_i64_to_str(self, bytecode, args),
+            "f64_to_str" => builtins::builtin_f64_to_str(self, bytecode, args),
+            "str_contains" => builtins::builtin_str_contains(self, bytecode, args),
+            "str_equals" => builtins::builtin_str_equals(self, bytecode, args),
+            "sqrt" => builtins::builtin_sqrt(self, bytecode, args),
+            "hash" => builtins::builtin_hash(self, bytecode, args),
             // Phase 1.4: Math builtins
-            "abs" => builtins::builtin_abs(args),
-            "floor" => builtins::builtin_floor(args),
-            "ceil" => builtins::builtin_ceil(args),
-            "round" => builtins::builtin_round(args),
-            "min" => builtins::builtin_min(args),
-            "max" => builtins::builtin_max(args),
-            "pow" => builtins::builtin_pow(args),
-            "rand" => builtins::builtin_rand(args),
-            "rand_range" => builtins::builtin_rand_range(args),
+            "abs" => builtins::builtin_abs(self, bytecode, args),
+            "floor" => builtins::builtin_floor(self, bytecode, args),
+            "ceil" => builtins::builtin_ceil(self, bytecode, args),
+            "round" => builtins::builtin_round(self, bytecode, args),
+            "min" => builtins::builtin_min(self, bytecode, args),
+            "max" => builtins::builtin_max(self, bytecode, args),
+            "pow" => builtins::builtin_pow(self, bytecode, args),
+            "rand" => builtins::builtin_rand(self, bytecode, args),
+            "rand_range" => builtins::builtin_rand_range(self, bytecode, args),
             // Phase 1.4: Type conversion builtins
-            "f64_to_i64" => builtins::builtin_f64_to_i64(args),
-            "i64_to_f64" => builtins::builtin_i64_to_f64(args),
-            "parse_i64" => builtins::builtin_parse_i64(args),
-            "parse_f64" => builtins::builtin_parse_f64(args),
-            "type_of" => builtins::builtin_type_of(args),
+            "f64_to_i64" => builtins::builtin_f64_to_i64(self, bytecode, args),
+            "i64_to_f64" => builtins::builtin_i64_to_f64(self, bytecode, args),
+            "parse_i64" => builtins::builtin_parse_i64(self, bytecode, args),
+            "parse_f64" => builtins::builtin_parse_f64(self, bytecode, args),
+            "type_of" => builtins::builtin_type_of(self, bytecode, args),
             // Phase 1.4: String builtins
-            "str_split" => builtins::builtin_str_split(args),
-            "str_trim" => builtins::builtin_str_trim(args),
-            "str_replace" => builtins::builtin_str_replace(args),
-            "str_to_upper" => builtins::builtin_str_to_upper(args),
-            "str_to_lower" => builtins::builtin_str_to_lower(args),
-            "str_starts_with" => builtins::builtin_str_starts_with(args),
-            "str_ends_with" => builtins::builtin_str_ends_with(args),
-            "str_index_of" => builtins::builtin_str_index_of(args),
+            "str_split" => builtins::builtin_str_split(self, bytecode, args),
+            "str_trim" => builtins::builtin_str_trim(self, bytecode, args),
+            "str_replace" => builtins::builtin_str_replace(self, bytecode, args),
+            "str_to_upper" => builtins::builtin_str_to_upper(self, bytecode, args),
+            "str_to_lower" => builtins::builtin_str_to_lower(self, bytecode, args),
+            "str_starts_with" => builtins::builtin_str_starts_with(self, bytecode, args),
+            "str_ends_with" => builtins::builtin_str_ends_with(self, bytecode, args),
+            "str_index_of" => builtins::builtin_str_index_of(self, bytecode, args),
             // Phase 1.4: Array builtins
-            "array_slice" => builtins::builtin_array_slice(args),
-            "array_concat" => builtins::builtin_array_concat(args),
-            "array_contains" => builtins::builtin_array_contains(args),
-            "array_pop" => builtins::builtin_array_pop(args),
-            "array_reverse" => builtins::builtin_array_reverse(args),
-            "array_sort" => builtins::builtin_array_sort(args),
+            "array_slice" => builtins::builtin_array_slice(self, bytecode, args),
+            "array_concat" => builtins::builtin_array_concat(self, bytecode, args),
+            "array_contains" => builtins::builtin_array_contains(self, bytecode, args),
+            "array_pop" => builtins::builtin_array_pop(self, bytecode, args),
+            "array_reverse" => builtins::builtin_array_reverse(self, bytecode, args),
+            "array_sort" => builtins::builtin_array_sort(self, bytecode, args),
             // Phase 1.4: Map builtins
-            "map_get" => builtins::builtin_map_get(args),
-            "map_set" => builtins::builtin_map_set(args),
-            "map_keys" => builtins::builtin_map_keys(args),
-            "map_values" => builtins::builtin_map_values(args),
-            "map_contains" => builtins::builtin_map_contains(args),
-            "map_remove" => builtins::builtin_map_remove(args),
+            "map_get" => builtins::builtin_map_get(self, bytecode, args),
+            "map_set" => builtins::builtin_map_set(self, bytecode, args),
+            "map_keys" => builtins::builtin_map_keys(self, bytecode, args),
+            "map_values" => builtins::builtin_map_values(self, bytecode, args),
+            "map_contains" => builtins::builtin_map_contains(self, bytecode, args),
+            "map_remove" => builtins::builtin_map_remove(self, bytecode, args),
             // Phase 1.4: I/O builtins
-            "read_file" | "file_read" => builtins::builtin_read_file(args),
-            "write_file" | "file_write" => builtins::builtin_write_file(args),
-            "clock_ms" | "current_time" => builtins::builtin_clock_ms(args),
-            "sleep" => builtins::builtin_sleep(args),
-            "assert" => builtins::builtin_assert(args),
-            "shell" => builtins::builtin_shell(args),
-            "sort" => builtins::builtin_sort(args),
-            "sin" => builtins::builtin_sin(args),
-            "cos" => builtins::builtin_cos(args),
-            "tan" => builtins::builtin_tan(args),
+            "read_file" | "file_read" => builtins::builtin_read_file(self, bytecode, args),
+            "write_file" | "file_write" => builtins::builtin_write_file(self, bytecode, args),
+            "clock_ms" | "current_time" => builtins::builtin_clock_ms(self, bytecode, args),
+            "sleep" => builtins::builtin_sleep(self, bytecode, args),
+            "assert" => builtins::builtin_assert(self, bytecode, args),
+            "shell" => builtins::builtin_shell(self, bytecode, args),
+            "sort" => builtins::builtin_sort(self, bytecode, args),
+            "sin" => builtins::builtin_sin(self, bytecode, args),
+            "cos" => builtins::builtin_cos(self, bytecode, args),
+            "tan" => builtins::builtin_tan(self, bytecode, args),
             // Phase 4.3: Homeostasis and promotion builtins
-            "homeostasis_pressure" => builtins::builtin_homeostasis_pressure(args),
-            "promotion_level" => builtins::builtin_promotion_level(args),
-            "can_modify_self" => builtins::builtin_can_modify_self(args),
-            "rsi_history" => builtins::builtin_rsi_history(args),
+            "homeostasis_pressure" => builtins::builtin_homeostasis_pressure(self, bytecode, args),
+            "promotion_level" => builtins::builtin_promotion_level(self, bytecode, args),
+            "can_modify_self" => builtins::builtin_can_modify_self(self, bytecode, args),
+            "rsi_history" => builtins::builtin_rsi_history(self, bytecode, args),
             // Phase 4.5: Fitness evaluation hooks
-            "evaluate_fitness" => builtins::builtin_evaluate_fitness(args),
-            "fitness_snapshot" => builtins::builtin_fitness_snapshot(args),
-            "fitness_compare" => builtins::builtin_fitness_compare(args),
+            "evaluate_fitness" => builtins::builtin_evaluate_fitness(self, bytecode, args),
+            "fitness_snapshot" => builtins::builtin_fitness_snapshot(self, bytecode, args),
+            "fitness_compare" => builtins::builtin_fitness_compare(self, bytecode, args),
             // Phase 5.3: Bond builtin
-            "bond" => builtins::builtin_bond(args),
+            "bond" => builtins::builtin_bond(self, bytecode, args),
             // Tensor builtins for Bit
-            "set_tensor" => builtins::builtin_set_tensor(args),
-            "get_tensor" => builtins::builtin_get_tensor(args),
+            "set_tensor" => builtins::builtin_set_tensor(self, bytecode, args),
+            "get_tensor" => builtins::builtin_get_tensor(self, bytecode, args),
             _ => Err(RuntimeError::new(format!("Unknown function: {}", name), 0)),
         }
     }

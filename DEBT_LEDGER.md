@@ -86,6 +86,8 @@
 | DEBT-008 | 2026-03-02 | Method call syntax | `obj.method()` now works! Lowerer transforms to `method(obj, args)` | Kilo |
 | DEBT-009 | 2026-03-02 | For loops | `for x in arr` implemented and working | Kilo/Claude |
 | DEBT-017 | 2026-03-02 | Doc comments | `///` comments now parsed (stored but not yet attached to items) | Kilo |
+| DEBT-034 | 2026-03-02 | Function-valued params return nil | Moved register clearing to `else` branch in Return opcode. Nested calls now properly propagate return values. `apply(double, 5)` returns 10. | Gemini/Kilo |
+| DEBT-034 | 2026-03-02 | Function-valued params return nil | Moved register clearing to `else` branch in Return opcode. Nested calls now properly propagate return values. `apply(double, 5)` returns 10. | Gemini/Kilo |
 
 ### ⚪ Icebox (No timeline)
 

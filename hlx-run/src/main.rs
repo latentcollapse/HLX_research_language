@@ -466,7 +466,7 @@ fn main() -> Result<()> {
 
     // Register native bond() function for HIL inference
     let bond_endpoint = args.bond_endpoint.clone();
-    vm.register_native("bond", move |_vm, args| {
+    vm.register_native("bond", move |_vm, _bytecode, args| {
         let prompt = match args.get(0) {
             Some(hlx_runtime::Value::String(s)) => s.clone(),
             _ => {
@@ -492,7 +492,7 @@ fn main() -> Result<()> {
     let memory_db_path = args.memory_db.clone();
 
     // Register native memory functions for HIL learn/recall with persistence
-    vm.register_native("mem_store", move |vm, args| {
+    vm.register_native("mem_store", move |vm, _bytecode, args| {
         let pattern = match args.get(0) {
             Some(hlx_runtime::Value::String(s)) => s.clone(),
             _ => return hlx_runtime::Value::Bool(false),
@@ -513,7 +513,7 @@ fn main() -> Result<()> {
         hlx_runtime::Value::Bool(true)
     });
 
-    vm.register_native("mem_query", |vm, args| {
+    vm.register_native("mem_query", |vm, _bytecode, args| {
         let query = match args.get(0) {
             Some(hlx_runtime::Value::String(s)) => s.clone(),
             _ => return hlx_runtime::Value::Array(Vec::new()),
@@ -533,7 +533,7 @@ fn main() -> Result<()> {
     });
 
     // Register pattern extraction natives for hil::pattern
-    vm.register_native("pat_extract", |_vm, args| {
+    vm.register_native("pat_extract", |_vm, _bytecode, args| {
         // arg[0]: List of String observations
         let observations = match args.get(0) {
             Some(hlx_runtime::Value::Array(arr)) => arr,
@@ -590,7 +590,7 @@ fn main() -> Result<()> {
         hlx_runtime::Value::Array(results)
     });
 
-    vm.register_native("pat_match", |_vm, args| {
+    vm.register_native("pat_match", |_vm, _bytecode, args| {
         // arg[0]: observation String, arg[1]: known_patterns List of String
         let observation = match args.get(0) {
             Some(hlx_runtime::Value::String(s)) => s.as_str(),
@@ -628,7 +628,7 @@ fn main() -> Result<()> {
         hlx_runtime::Value::Map(result)
     });
 
-    vm.register_native("pat_matches", |_vm, args| {
+    vm.register_native("pat_matches", |_vm, _bytecode, args| {
         // arg[0]: observation, arg[1]: pattern, arg[2]: min_confidence f64
         let observation = match args.get(0) {
             Some(hlx_runtime::Value::String(s)) => s.as_str(),
@@ -650,7 +650,7 @@ fn main() -> Result<()> {
         hlx_runtime::Value::Bool(score >= min_confidence)
     });
 
-    vm.register_native("pat_frequency", |_vm, args| {
+    vm.register_native("pat_frequency", |_vm, _bytecode, args| {
         // arg[0]: pattern String, arg[1]: observations List
         let pattern = match args.get(0) {
             Some(hlx_runtime::Value::String(s)) => s.as_str(),
@@ -677,7 +677,7 @@ fn main() -> Result<()> {
     });
 
     // Register eval_hlx for RSI loop - compiles and executes HLX code
-    vm.register_native("eval_hlx", |_vm, args| {
+    vm.register_native("eval_hlx", |_vm, _bytecode, args| {
         let code = match args.get(0) {
             Some(hlx_runtime::Value::String(s)) => s.as_str(),
             _ => return hlx_runtime::Value::String("[eval error: expected string code]".into()),

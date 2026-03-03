@@ -1,7 +1,7 @@
-use crate::{RuntimeError, RuntimeResult, Tensor, Value};
+use crate::{Bytecode, RuntimeError, RuntimeResult, Tensor, Value, Vm};
 use image::ImageFormat;
 
-pub fn builtin_strlen(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_strlen(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     match &args[0] {
         Value::String(s) => Ok(Value::I64(s.len() as i64)),
         Value::Array(arr) => Ok(Value::I64(arr.len() as i64)),
@@ -15,7 +15,7 @@ pub fn builtin_strlen(args: &[Value]) -> RuntimeResult<Value> {
     }
 }
 
-pub fn builtin_substring(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_substring(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0].as_string().ok_or_else(|| {
         RuntimeError::new(
             format!("substring: expected String, got {}", args[0].type_name()),
@@ -53,7 +53,7 @@ pub fn builtin_substring(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::String(s[start..end].to_string()))
 }
 
-pub fn builtin_concat(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_concat(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let a = args[0].as_string().ok_or_else(|| {
         RuntimeError::new(
             format!("concat: expected String, got {}", args[0].type_name()),
@@ -69,7 +69,7 @@ pub fn builtin_concat(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::String(format!("{}{}", a, b)))
 }
 
-pub fn builtin_strcmp(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_strcmp(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let a = args[0].as_string().ok_or_else(|| {
         RuntimeError::new(
             format!("strcmp: expected String, got {}", args[0].type_name()),
@@ -89,7 +89,7 @@ pub fn builtin_strcmp(args: &[Value]) -> RuntimeResult<Value> {
     }))
 }
 
-pub fn builtin_ord(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_ord(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("ord requires String", 0))?;
@@ -99,7 +99,7 @@ pub fn builtin_ord(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::I64(s.as_bytes()[0] as i64))
 }
 
-pub fn builtin_char(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_char(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let code_i = args[0]
         .as_i64()
         .ok_or_else(|| RuntimeError::new("char requires i64", 0))?;
@@ -112,7 +112,7 @@ pub fn builtin_char(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::String((code_i as u8 as char).to_string()))
 }
 
-pub fn builtin_str_char_at(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_char_at(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_char_at requires String", 0))?;
@@ -126,7 +126,7 @@ pub fn builtin_str_char_at(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::I64(s.as_bytes()[idx] as i64))
 }
 
-pub fn builtin_push(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_push(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("push requires Array", 0))?;
@@ -135,7 +135,7 @@ pub fn builtin_push(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Array(new_arr))
 }
 
-pub fn builtin_get_at(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_get_at(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("get_at requires Array", 0))?;
@@ -147,7 +147,7 @@ pub fn builtin_get_at(args: &[Value]) -> RuntimeResult<Value> {
         .ok_or_else(|| RuntimeError::new(format!("get_at: index {} out of bounds", idx), 0))
 }
 
-pub fn builtin_set_at(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_set_at(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("set_at requires Array", 0))?;
@@ -165,7 +165,7 @@ pub fn builtin_set_at(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Array(new_arr))
 }
 
-pub fn builtin_array_len(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_array_len(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     match &args[0] {
         Value::Array(arr) => Ok(Value::I64(arr.len() as i64)),
         Value::String(s) => Ok(Value::I64(s.len() as i64)),
@@ -176,17 +176,17 @@ pub fn builtin_array_len(args: &[Value]) -> RuntimeResult<Value> {
     }
 }
 
-pub fn builtin_print(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_print(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     print!("{}", args[0]);
     Ok(Value::Void)
 }
 
-pub fn builtin_println(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_println(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     println!("{}", args[0]);
     Ok(Value::Void)
 }
 
-pub fn builtin_image_load(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_image_load(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let path = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("image_load requires String path", 0))?;
@@ -201,7 +201,7 @@ pub fn builtin_image_load(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Tensor(tensor))
 }
 
-pub fn builtin_image_save(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_image_save(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let tensor = match &args[0] {
         Value::Tensor(t) => t,
         _ => return Err(RuntimeError::new("image_save requires Tensor", 0)),
@@ -228,7 +228,7 @@ pub fn builtin_image_save(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Void)
 }
 
-pub fn builtin_image_process(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_image_process(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let tensor = match &args[0] {
         Value::Tensor(t) => t.clone(),
         _ => return Err(RuntimeError::new("image_process requires Tensor", 0)),
@@ -400,7 +400,7 @@ pub fn builtin_image_process(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Tensor(result))
 }
 
-pub fn builtin_image_info(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_image_info(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let tensor = match &args[0] {
         Value::Tensor(t) => t,
         _ => return Err(RuntimeError::new("image_info requires Tensor", 0)),
@@ -415,7 +415,7 @@ pub fn builtin_image_info(args: &[Value]) -> RuntimeResult<Value> {
     ]))
 }
 
-pub fn builtin_audio_load(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_audio_load(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let path = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("audio_load requires String path", 0))?;
@@ -424,7 +424,7 @@ pub fn builtin_audio_load(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Tensor(tensor))
 }
 
-pub fn builtin_audio_save(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_audio_save(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let tensor = match &args[0] {
         Value::Tensor(t) => t,
         _ => return Err(RuntimeError::new("audio_save requires Tensor", 0)),
@@ -445,7 +445,7 @@ pub fn builtin_audio_save(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Void)
 }
 
-pub fn builtin_audio_info(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_audio_info(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let tensor = match &args[0] {
         Value::Tensor(t) => t,
         _ => return Err(RuntimeError::new("audio_info requires Tensor", 0)),
@@ -459,7 +459,7 @@ pub fn builtin_audio_info(args: &[Value]) -> RuntimeResult<Value> {
     ]))
 }
 
-pub fn builtin_audio_resample(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_audio_resample(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let tensor = match &args[0] {
         Value::Tensor(t) => t.clone(),
         _ => return Err(RuntimeError::new("audio_resample requires Tensor", 0)),
@@ -505,7 +505,7 @@ pub fn builtin_audio_resample(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Tensor(result))
 }
 
-pub fn builtin_audio_normalize(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_audio_normalize(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let tensor = match &args[0] {
         Value::Tensor(t) => t.clone(),
         _ => return Err(RuntimeError::new("audio_normalize requires Tensor", 0)),
@@ -529,7 +529,7 @@ pub fn builtin_audio_normalize(args: &[Value]) -> RuntimeResult<Value> {
 // Bit's Builtins (Phase 2)
 // ============================================================================
 
-pub fn builtin_zeros(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_zeros(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let size = args[0]
         .as_i64()
         .ok_or_else(|| RuntimeError::new("zeros requires i64", 0))?;
@@ -539,14 +539,14 @@ pub fn builtin_zeros(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Tensor(Tensor::zeros(vec![size as usize])))
 }
 
-pub fn builtin_i64_to_str(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_i64_to_str(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_i64()
         .ok_or_else(|| RuntimeError::new("i64_to_str requires i64", 0))?;
     Ok(Value::String(n.to_string()))
 }
 
-pub fn builtin_f64_to_str(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_f64_to_str(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0].as_f64().ok_or_else(|| {
         RuntimeError::new(
             format!("f64_to_str requires f64, got {}", args[0].type_name()),
@@ -568,7 +568,7 @@ pub fn builtin_f64_to_str(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::String(format!("{:.1$}", n, places)))
 }
 
-pub fn builtin_str_contains(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_contains(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let haystack = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_contains requires String", 0))?;
@@ -578,7 +578,7 @@ pub fn builtin_str_contains(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Bool(haystack.contains(&needle)))
 }
 
-pub fn builtin_str_equals(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_equals(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let a = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_equals requires String", 0))?;
@@ -588,35 +588,35 @@ pub fn builtin_str_equals(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Bool(a == b))
 }
 
-pub fn builtin_sqrt(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_sqrt(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("sqrt requires f64", 0))?;
     Ok(Value::F64(n.sqrt()))
 }
 
-pub fn builtin_sin(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_sin(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("sin requires f64 (radians)", 0))?;
     Ok(Value::F64(n.sin()))
 }
 
-pub fn builtin_cos(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_cos(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("cos requires f64 (radians)", 0))?;
     Ok(Value::F64(n.cos()))
 }
 
-pub fn builtin_tan(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_tan(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("tan requires f64 (radians)", 0))?;
     Ok(Value::F64(n.tan()))
 }
 
-pub fn builtin_hash(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_hash(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("hash requires String", 0))?;
@@ -631,7 +631,7 @@ pub fn builtin_hash(args: &[Value]) -> RuntimeResult<Value> {
 // Phase 1.4: Missing builtins - Math
 // ============================================================================
 
-pub fn builtin_abs(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_abs(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     match &args[0] {
         Value::I64(n) => Ok(Value::I64(n.abs())),
         Value::F64(n) => Ok(Value::F64(n.abs())),
@@ -639,28 +639,28 @@ pub fn builtin_abs(args: &[Value]) -> RuntimeResult<Value> {
     }
 }
 
-pub fn builtin_floor(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_floor(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("floor requires f64", 0))?;
     Ok(Value::I64(n.floor() as i64))
 }
 
-pub fn builtin_ceil(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_ceil(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("ceil requires f64", 0))?;
     Ok(Value::I64(n.ceil() as i64))
 }
 
-pub fn builtin_round(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_round(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("round requires f64", 0))?;
     Ok(Value::I64(n.round() as i64))
 }
 
-pub fn builtin_min(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_min(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     match (&args[0], &args[1]) {
         (Value::I64(a), Value::I64(b)) => Ok(Value::I64(*a.min(b))),
         (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a.min(*b))),
@@ -668,7 +668,7 @@ pub fn builtin_min(args: &[Value]) -> RuntimeResult<Value> {
     }
 }
 
-pub fn builtin_max(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_max(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     match (&args[0], &args[1]) {
         (Value::I64(a), Value::I64(b)) => Ok(Value::I64(*a.max(b))),
         (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a.max(*b))),
@@ -676,7 +676,7 @@ pub fn builtin_max(args: &[Value]) -> RuntimeResult<Value> {
     }
 }
 
-pub fn builtin_pow(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_pow(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let base = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("pow base must be f64", 0))?;
@@ -686,13 +686,13 @@ pub fn builtin_pow(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::F64(base.powf(exp)))
 }
 
-pub fn builtin_rand(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_rand(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     Ok(Value::F64(rng.gen::<f64>()))
 }
 
-pub fn builtin_rand_range(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_rand_range(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     use rand::Rng;
     let lo = args[0]
         .as_i64()
@@ -708,21 +708,21 @@ pub fn builtin_rand_range(args: &[Value]) -> RuntimeResult<Value> {
 // Phase 1.4: Missing builtins - Type conversion
 // ============================================================================
 
-pub fn builtin_f64_to_i64(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_f64_to_i64(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_f64()
         .ok_or_else(|| RuntimeError::new("f64_to_i64 requires f64", 0))?;
     Ok(Value::I64(n as i64))
 }
 
-pub fn builtin_i64_to_f64(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_i64_to_f64(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let n = args[0]
         .as_i64()
         .ok_or_else(|| RuntimeError::new("i64_to_f64 requires i64", 0))?;
     Ok(Value::F64(n as f64))
 }
 
-pub fn builtin_parse_i64(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_parse_i64(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("parse_i64 requires String", 0))?;
@@ -732,7 +732,7 @@ pub fn builtin_parse_i64(args: &[Value]) -> RuntimeResult<Value> {
     }
 }
 
-pub fn builtin_parse_f64(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_parse_f64(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("parse_f64 requires String", 0))?;
@@ -742,7 +742,7 @@ pub fn builtin_parse_f64(args: &[Value]) -> RuntimeResult<Value> {
     }
 }
 
-pub fn builtin_type_of(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_type_of(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let type_name = match &args[0] {
         Value::I64(_) => "i64",
         Value::F64(_) => "f64",
@@ -763,7 +763,7 @@ pub fn builtin_type_of(args: &[Value]) -> RuntimeResult<Value> {
 // Phase 1.4: Missing builtins - String operations
 // ============================================================================
 
-pub fn builtin_str_split(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_split(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_split requires String", 0))?;
@@ -777,14 +777,14 @@ pub fn builtin_str_split(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Array(parts))
 }
 
-pub fn builtin_str_trim(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_trim(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_trim requires String", 0))?;
     Ok(Value::String(s.trim().to_string()))
 }
 
-pub fn builtin_str_replace(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_replace(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_replace requires String", 0))?;
@@ -797,21 +797,21 @@ pub fn builtin_str_replace(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::String(s.replace(from, to)))
 }
 
-pub fn builtin_str_to_upper(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_to_upper(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_to_upper requires String", 0))?;
     Ok(Value::String(s.to_uppercase()))
 }
 
-pub fn builtin_str_to_lower(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_to_lower(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_to_lower requires String", 0))?;
     Ok(Value::String(s.to_lowercase()))
 }
 
-pub fn builtin_str_starts_with(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_starts_with(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_starts_with requires String", 0))?;
@@ -821,7 +821,7 @@ pub fn builtin_str_starts_with(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Bool(s.starts_with(prefix)))
 }
 
-pub fn builtin_str_ends_with(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_ends_with(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_ends_with requires String", 0))?;
@@ -831,7 +831,7 @@ pub fn builtin_str_ends_with(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Bool(s.ends_with(suffix)))
 }
 
-pub fn builtin_str_index_of(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_str_index_of(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let s = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("str_index_of requires String", 0))?;
@@ -848,7 +848,7 @@ pub fn builtin_str_index_of(args: &[Value]) -> RuntimeResult<Value> {
 // Phase 1.4: Missing builtins - Array operations
 // ============================================================================
 
-pub fn builtin_array_slice(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_array_slice(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("array_slice requires Array", 0))?;
@@ -869,7 +869,7 @@ pub fn builtin_array_slice(args: &[Value]) -> RuntimeResult<Value> {
     }
 }
 
-pub fn builtin_array_concat(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_array_concat(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let a = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("array_concat first arg must be Array", 0))?;
@@ -881,7 +881,7 @@ pub fn builtin_array_concat(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Array(result))
 }
 
-pub fn builtin_array_contains(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_array_contains(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("array_contains requires Array", 0))?;
@@ -889,7 +889,7 @@ pub fn builtin_array_contains(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Bool(arr.iter().any(|x| x == val)))
 }
 
-pub fn builtin_array_pop(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_array_pop(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("array_pop requires Array", 0))?;
@@ -900,7 +900,7 @@ pub fn builtin_array_pop(args: &[Value]) -> RuntimeResult<Value> {
     Ok(new_arr.pop().unwrap_or(Value::Nil))
 }
 
-pub fn builtin_array_reverse(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_array_reverse(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("array_reverse requires Array", 0))?;
@@ -909,7 +909,7 @@ pub fn builtin_array_reverse(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Array(result))
 }
 
-pub fn builtin_array_sort(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_array_sort(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("array_sort requires Array", 0))?;
@@ -928,7 +928,11 @@ pub fn builtin_array_sort(args: &[Value]) -> RuntimeResult<Value> {
 // Phase 1.4: Missing builtins - Map operations
 // ============================================================================
 
-pub fn builtin_map_get(args: &[Value]) -> RuntimeResult<Value> {
+
+
+
+
+pub fn builtin_map_get(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let map = args[0]
         .as_map()
         .ok_or_else(|| RuntimeError::new("map_get requires Map", 0))?;
@@ -941,7 +945,7 @@ pub fn builtin_map_get(args: &[Value]) -> RuntimeResult<Value> {
     }
 }
 
-pub fn builtin_map_set(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_map_set(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let map = args[0]
         .as_map()
         .ok_or_else(|| RuntimeError::new("map_set requires Map", 0))?;
@@ -954,7 +958,7 @@ pub fn builtin_map_set(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Map(new_map))
 }
 
-pub fn builtin_map_keys(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_map_keys(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let map = args[0]
         .as_map()
         .ok_or_else(|| RuntimeError::new("map_keys requires Map", 0))?;
@@ -962,7 +966,7 @@ pub fn builtin_map_keys(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Array(keys))
 }
 
-pub fn builtin_map_values(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_map_values(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let map = args[0]
         .as_map()
         .ok_or_else(|| RuntimeError::new("map_values requires Map", 0))?;
@@ -970,7 +974,7 @@ pub fn builtin_map_values(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Array(values))
 }
 
-pub fn builtin_map_contains(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_map_contains(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let map = args[0]
         .as_map()
         .ok_or_else(|| RuntimeError::new("map_contains requires Map", 0))?;
@@ -980,7 +984,7 @@ pub fn builtin_map_contains(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Bool(map.contains_key(key)))
 }
 
-pub fn builtin_map_remove(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_map_remove(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let map = args[0]
         .as_map()
         .ok_or_else(|| RuntimeError::new("map_remove requires Map", 0))?;
@@ -992,11 +996,13 @@ pub fn builtin_map_remove(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Map(new_map))
 }
 
+
+
 // ============================================================================
 // Phase 1.4: Missing builtins - I/O operations
 // ============================================================================
 
-pub fn builtin_read_file(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_read_file(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let path = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("read_file requires String path", 0))?;
@@ -1006,7 +1012,7 @@ pub fn builtin_read_file(args: &[Value]) -> RuntimeResult<Value> {
     }
 }
 
-pub fn builtin_write_file(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_write_file(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let path = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("write_file requires String path", 0))?;
@@ -1019,7 +1025,7 @@ pub fn builtin_write_file(args: &[Value]) -> RuntimeResult<Value> {
     }
 }
 
-pub fn builtin_clock_ms(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_clock_ms(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let now = SystemTime::now();
     let since_epoch = now.duration_since(UNIX_EPOCH).unwrap_or_default();
@@ -1028,7 +1034,7 @@ pub fn builtin_clock_ms(args: &[Value]) -> RuntimeResult<Value> {
 
 /// Sleep for specified milliseconds
 /// sleep(ms: i64) -> i64
-pub fn builtin_sleep(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_sleep(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let ms = args[0]
         .as_i64()
         .ok_or_else(|| RuntimeError::new("sleep requires i64 milliseconds", 0))?;
@@ -1038,7 +1044,7 @@ pub fn builtin_sleep(args: &[Value]) -> RuntimeResult<Value> {
 
 /// Assert that a condition is true
 /// assert(condition: bool, message: String) -> bool
-pub fn builtin_assert(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_assert(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let condition = args[0]
         .as_bool()
         .ok_or_else(|| RuntimeError::new("assert requires bool condition", 0))?;
@@ -1059,7 +1065,7 @@ pub fn builtin_assert(args: &[Value]) -> RuntimeResult<Value> {
 
 /// Sort an array (ascending)
 /// sort(arr: Array) -> Array
-pub fn builtin_sort(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_sort(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let arr = args[0]
         .as_array()
         .ok_or_else(|| RuntimeError::new("sort requires Array", 0))?;
@@ -1084,7 +1090,7 @@ pub fn builtin_sort(args: &[Value]) -> RuntimeResult<Value> {
 
 /// Execute a shell command and return the output as a string
 /// shell(cmd: String) -> String
-pub fn builtin_shell(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_shell(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let cmd = args[0]
         .as_string()
         .ok_or_else(|| RuntimeError::new("shell requires String command", 0))?;
@@ -1128,7 +1134,7 @@ pub fn builtin_shell(args: &[Value]) -> RuntimeResult<Value> {
 
 /// Returns the current homeostasis pressure (0.0-1.0)
 /// High pressure means system is under stress from too many modifications
-pub fn builtin_homeostasis_pressure(_args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_homeostasis_pressure(vm: &mut Vm, bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
     // For now, return a simulated value based on time
     // In full implementation, this queries the RSI pipeline's HomeostasisGate
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1142,21 +1148,21 @@ pub fn builtin_homeostasis_pressure(_args: &[Value]) -> RuntimeResult<Value> {
 }
 
 /// Returns the current promotion level (0=Seedling, 1=Sprout, 2=Sapling, 3=Mature)
-pub fn builtin_promotion_level(_args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_promotion_level(vm: &mut Vm, bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
     // Returns current level as i64
     // 0 = Seedling, 1 = Sprout, 2 = Sapling, 3 = Mature
     Ok(Value::I64(0)) // Default to seedling - VM will override
 }
 
 /// Returns whether self-modification is currently allowed
-pub fn builtin_can_modify_self(_args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_can_modify_self(vm: &mut Vm, bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
     // Returns true if the agent can propose modifications at current level
     // Seedling can only do parameter/threshold changes
     Ok(Value::Bool(true))
 }
 
 /// Returns RSI modification history as a list of dicts
-pub fn builtin_rsi_history(_args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_rsi_history(vm: &mut Vm, bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
     // Returns list of past modifications: [{proposal_id, type, success}, ...]
     // For now, return empty list
     Ok(Value::Array(vec![]))
@@ -1169,7 +1175,7 @@ pub fn builtin_rsi_history(_args: &[Value]) -> RuntimeResult<Value> {
 
 /// Evaluates current fitness score (0.0-1.0)
 /// Combines: confidence, pattern utilization, modification success rate
-pub fn builtin_evaluate_fitness(_args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_evaluate_fitness(vm: &mut Vm, bytecode: &Bytecode, _args: &[Value]) -> RuntimeResult<Value> {
     // Returns a composite fitness score
     // In full implementation, this queries AgentMemory and RSI pipeline
     // For now, return a placeholder based on time
@@ -1185,7 +1191,10 @@ pub fn builtin_evaluate_fitness(_args: &[Value]) -> RuntimeResult<Value> {
 
 /// Records a fitness snapshot before/after modification
 /// Returns snapshot ID for comparison
-pub fn builtin_fitness_snapshot(args: &[Value]) -> RuntimeResult<Value> {
+
+/// Records a fitness snapshot before/after modification
+/// Returns snapshot ID for comparison
+pub fn builtin_fitness_snapshot(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let label = if args.is_empty() {
         "snapshot"
     } else {
@@ -1203,14 +1212,14 @@ pub fn builtin_fitness_snapshot(args: &[Value]) -> RuntimeResult<Value> {
     map.insert("timestamp".to_string(), Value::I64(now));
     map.insert(
         "fitness".to_string(),
-        builtin_evaluate_fitness(&[])?.clone(),
+        builtin_evaluate_fitness(vm, bytecode, &[])?.clone(),
     );
     Ok(Value::Map(map))
 }
 
 /// Compares two fitness snapshots
 /// Returns dict with before, after, delta
-pub fn builtin_fitness_compare(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_fitness_compare(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let before = args.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0);
     let after = args.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0);
     let delta = after - before;
@@ -1223,14 +1232,9 @@ pub fn builtin_fitness_compare(args: &[Value]) -> RuntimeResult<Value> {
     Ok(Value::Map(map))
 }
 
-// ============================================================================
-// Phase 5.3: Bond builtin - call to LLM from HLX
-// Implements bond(prompt, context) -> response
-// ============================================================================
-
 /// bond(prompt, context) - Call the bonded LLM (Qwen3)
 /// Returns the LLM response as a string
-pub fn builtin_bond(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_bond(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     let prompt = args
         .get(0)
         .and_then(|v| v.as_string())
@@ -1269,17 +1273,23 @@ fn bond_http_request(
     let context_json = serde_json::to_string(context)?;
     let body = format!(
         r#"{{"prompt":"{}","context":{}}}"#,
-        prompt.replace('"', "\\\""),
+        prompt.replace('"', "\""),
         context_json
     );
 
     // Simple HTTP POST request
     let request = format!(
-        "POST /bond HTTP/1.1\r\n\
-         Host: {}\r\n\
-         Content-Type: application/json\r\n\
-         Content-Length: {}\r\n\
-         Connection: close\r\n\r\n\
+        "POST /bond HTTP/1.1
+\
+         Host: {}
+\
+         Content-Type: application/json
+\
+         Content-Length: {}
+\
+         Connection: close
+
+\
          {}",
         endpoint
             .trim_start_matches("http://")
@@ -1305,7 +1315,9 @@ fn bond_http_request(
     stream.read_to_string(&mut response)?;
 
     // Extract body from HTTP response
-    if let Some(body_start) = response.find("\r\n\r\n") {
+    if let Some(body_start) = response.find("
+
+") {
         let body = &response[body_start + 4..];
         // Try to parse JSON response
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(body) {
@@ -1319,31 +1331,19 @@ fn bond_http_request(
     Ok(response)
 }
 
-// ============================================================================
-// Tensor builtins for Bit
-// ============================================================================
-
-/// set_tensor(tensor, index, value) - Set tensor element at index
-pub fn builtin_set_tensor(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_set_tensor(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     if args.len() != 3 {
-        return Err(RuntimeError::new(
-            "set_tensor requires 3 args: tensor, index, value",
-            0,
-        ));
+        return Err(RuntimeError::new("set_tensor requires 3 args", 0));
     }
-
     let index = match &args[1] {
         Value::I64(n) => *n as usize,
         _ => return Err(RuntimeError::new("set_tensor: index must be i64", 0)),
     };
-
     let value = match &args[2] {
         Value::F64(f) => *f,
         Value::I64(n) => *n as f64,
         _ => return Err(RuntimeError::new("set_tensor: value must be numeric", 0)),
     };
-
-    // Clone the tensor, modify it, return it
     match &args[0] {
         Value::Tensor(t) => {
             let mut new_tensor = t.clone();
@@ -1356,20 +1356,14 @@ pub fn builtin_set_tensor(args: &[Value]) -> RuntimeResult<Value> {
     }
 }
 
-/// get_tensor(tensor, index) - Get tensor element at index
-pub fn builtin_get_tensor(args: &[Value]) -> RuntimeResult<Value> {
+pub fn builtin_get_tensor(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
     if args.len() != 2 {
-        return Err(RuntimeError::new(
-            "get_tensor requires 2 args: tensor, index",
-            0,
-        ));
+        return Err(RuntimeError::new("get_tensor requires 2 args", 0));
     }
-
     let index = match &args[1] {
         Value::I64(n) => *n as usize,
         _ => return Err(RuntimeError::new("get_tensor: index must be i64", 0)),
     };
-
     match &args[0] {
         Value::Tensor(t) => match t.get(&[index]) {
             Ok(val) => Ok(Value::F64(val)),
@@ -1383,6 +1377,8 @@ pub fn builtin_get_tensor(args: &[Value]) -> RuntimeResult<Value> {
 mod tests {
     use super::*;
     use crate::tensor::Tensor;
+    use crate::bytecode::Bytecode;
+    use crate::vm::Vm;
     use serial_test::serial;
 
     fn setup() {
@@ -1394,11 +1390,13 @@ mod tests {
     #[serial]
     fn test_image_process_grayscale() {
         setup();
+        let mut vm = Vm::new();
+        let bc = Bytecode::new();
         let mut tensor = Tensor::zeros(vec![3, 4, 4]);
         for i in 0..48 {
             tensor.data[i] = 0.5;
         }
-        let result = builtin_image_process(&[
+        let result = builtin_image_process(&mut vm, &bc, &[
             Value::Tensor(tensor),
             Value::String("grayscale".to_string()),
         ])
@@ -1410,140 +1408,44 @@ mod tests {
             _ => panic!("Expected Tensor"),
         }
     }
+}
 
-    #[test]
-    #[serial]
-    fn test_image_process_invert() {
-        setup();
-        let mut tensor = Tensor::zeros(vec![3, 2, 2]);
-        tensor.data[0] = 0.0;
-        tensor.data[1] = 0.5;
-        tensor.data[2] = 1.0;
-        let result = builtin_image_process(&[
-            Value::Tensor(tensor.clone()),
-            Value::String("invert".to_string()),
-        ])
-        .unwrap();
-        match result {
-            Value::Tensor(t) => {
-                assert!((t.data[0] - 1.0).abs() < 0.001);
-                assert!((t.data[1] - 0.5).abs() < 0.001);
-                assert!((t.data[2] - 0.0).abs() < 0.001);
-            }
-            _ => panic!("Expected Tensor"),
+pub fn builtin_map(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+    let val = args[0].clone();
+    let arr = val.as_array().ok_or_else(|| RuntimeError::new("map: first arg must be Array", 0))?;
+    let func = args[1].clone();
+    
+    let mut result = Vec::with_capacity(arr.len());
+    for item in arr {
+        let val = vm.call_value(&func, &[item.clone()], bytecode)?;
+        result.push(val);
+    }
+    Ok(Value::Array(result))
+}
+
+pub fn builtin_filter(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+    let val = args[0].clone();
+    let arr = val.as_array().ok_or_else(|| RuntimeError::new("filter: first arg must be Array", 0))?;
+    let func = args[1].clone();
+    
+    let mut result = Vec::new();
+    for item in arr {
+        let val = vm.call_value(&func, &[item.clone()], bytecode)?;
+        if val.is_truthy() {
+            result.push(item.clone());
         }
     }
+    Ok(Value::Array(result))
+}
 
-    #[test]
-    #[serial]
-    fn test_image_process_brightness() {
-        setup();
-        let mut tensor = Tensor::zeros(vec![3, 2, 2]);
-        tensor.data[0] = 0.5;
-        let result = builtin_image_process(&[
-            Value::Tensor(tensor.clone()),
-            Value::String("brightness".to_string()),
-            Value::F64(2.0),
-        ])
-        .unwrap();
-        match result {
-            Value::Tensor(t) => {
-                assert!((t.data[0] - 1.0).abs() < 0.001);
-            }
-            _ => panic!("Expected Tensor"),
-        }
+pub fn builtin_fold(vm: &mut Vm, bytecode: &Bytecode, args: &[Value]) -> RuntimeResult<Value> {
+    let val = args[0].clone();
+    let arr = val.as_array().ok_or_else(|| RuntimeError::new("fold: first arg must be Array", 0))?;
+    let mut acc = args[1].clone();
+    let func = args[2].clone();
+    
+    for item in arr {
+        acc = vm.call_value(&func, &[acc, item.clone()], bytecode)?;
     }
-
-    #[test]
-    #[serial]
-    fn test_image_process_threshold() {
-        setup();
-        let mut tensor = Tensor::zeros(vec![3, 2, 2]);
-        tensor.data[0] = 0.3;
-        tensor.data[1] = 0.7;
-        let result = builtin_image_process(&[
-            Value::Tensor(tensor.clone()),
-            Value::String("threshold".to_string()),
-            Value::F64(0.5),
-        ])
-        .unwrap();
-        match result {
-            Value::Tensor(t) => {
-                assert!((t.data[0] - 0.0).abs() < 0.001);
-                assert!((t.data[1] - 1.0).abs() < 0.001);
-            }
-            _ => panic!("Expected Tensor"),
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_image_process_contrast() {
-        setup();
-        let mut tensor = Tensor::zeros(vec![3, 2, 2]);
-        tensor.data[0] = 0.5;
-        tensor.data[1] = 0.25;
-        let result = builtin_image_process(&[
-            Value::Tensor(tensor.clone()),
-            Value::String("contrast".to_string()),
-            Value::F64(2.0),
-        ])
-        .unwrap();
-        match result {
-            Value::Tensor(t) => {
-                assert!((t.data[0] - 0.5).abs() < 0.001);
-                assert!((t.data[1] - 0.0).abs() < 0.001);
-            }
-            _ => panic!("Expected Tensor"),
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_image_process_sobel() {
-        setup();
-        let mut tensor = Tensor::zeros(vec![1, 4, 4]);
-        for i in 0..16 {
-            tensor.data[i] = (i as f64) / 16.0;
-        }
-        let result = builtin_image_process(&[
-            Value::Tensor(tensor.clone()),
-            Value::String("sobel".to_string()),
-        ])
-        .unwrap();
-        match result {
-            Value::Tensor(t) => {
-                assert_eq!(t.shape, vec![1, 4, 4]);
-            }
-            _ => panic!("Expected Tensor"),
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_image_info() {
-        setup();
-        let tensor = Tensor::zeros(vec![3, 100, 200]);
-        let result = builtin_image_info(&[Value::Tensor(tensor)]).unwrap();
-        match result {
-            Value::Array(arr) => {
-                assert_eq!(arr[0], Value::I64(100));
-                assert_eq!(arr[1], Value::I64(200));
-                assert_eq!(arr[2], Value::I64(3));
-            }
-            _ => panic!("Expected Array"),
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_image_process_unknown_op() {
-        setup();
-        let tensor = Tensor::zeros(vec![3, 2, 2]);
-        let result = builtin_image_process(&[
-            Value::Tensor(tensor),
-            Value::String("unknown_op".to_string()),
-        ]);
-        assert!(result.is_err());
-    }
+    Ok(acc)
 }

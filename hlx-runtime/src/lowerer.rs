@@ -789,16 +789,33 @@ impl Lowerer {
                                 self.emit_u8(12);
                                 self.emit_u32(idx);
                             }
-                            crate::ast::Pattern::Range { start, end, inclusive } => {
+                            crate::ast::Pattern::Range {
+                                start,
+                                end,
+                                inclusive,
+                            } => {
                                 // r10 = (r11 >= start) && (r11 <= end or r11 < end)
                                 let start_idx = self.bytecode.add_constant(Value::I64(start));
-                                self.emit(Opcode::Const); self.emit_u8(12); self.emit_u32(start_idx);
-                                self.emit(Opcode::Ge); self.emit_u8(10); self.emit_u8(11); self.emit_u8(12);
+                                self.emit(Opcode::Const);
+                                self.emit_u8(12);
+                                self.emit_u32(start_idx);
+                                self.emit(Opcode::Ge);
+                                self.emit_u8(10);
+                                self.emit_u8(11);
+                                self.emit_u8(12);
                                 let end_val = if inclusive { end } else { end - 1 };
                                 let end_idx = self.bytecode.add_constant(Value::I64(end_val));
-                                self.emit(Opcode::Const); self.emit_u8(12); self.emit_u32(end_idx);
-                                self.emit(Opcode::Le); self.emit_u8(12); self.emit_u8(11); self.emit_u8(12);
-                                self.emit(Opcode::And); self.emit_u8(10); self.emit_u8(10); self.emit_u8(12);
+                                self.emit(Opcode::Const);
+                                self.emit_u8(12);
+                                self.emit_u32(end_idx);
+                                self.emit(Opcode::Le);
+                                self.emit_u8(12);
+                                self.emit_u8(11);
+                                self.emit_u8(12);
+                                self.emit(Opcode::And);
+                                self.emit_u8(10);
+                                self.emit_u8(10);
+                                self.emit_u8(12);
                                 // skip_pos handled below via JumpIfNot on r10
                                 self.emit(Opcode::JumpIfNot);
                                 self.emit_u8(10);
@@ -1027,32 +1044,51 @@ impl Lowerer {
             ExprKind::BinaryOp { op, left, right } => {
                 match op {
                     BinaryOp::And => {
-                        // Short-circuit: if left is false, skip right (dst retains falsy value)
-                        self.lower_expr(left, dst)?;
-                        self.emit(Opcode::JumpIfNot);
+                        // Short-circuit: if left is false, skip right
+                        let lhs = self.alloc_tmp()?;
+                        self.lower_expr(left, lhs)?;
+
+                        // Copy lhs to dst (result if we short-circuit)
+                        self.emit(Opcode::Move);
                         self.emit_u8(dst);
+                        self.emit_u8(lhs);
+
+                        self.emit(Opcode::JumpIfNot);
+                        self.emit_u8(lhs);
                         let skip_pos = self.current_pc();
                         self.emit_u32(0);
+
                         self.lower_expr(right, dst)?;
+
                         let end_pc = self.current_pc();
                         self.patch_jump(skip_pos, end_pc)?;
                     }
                     BinaryOp::Or => {
-                        // Short-circuit: if left is true, skip right (dst retains truthy value)
-                        self.lower_expr(left, dst)?;
-                        self.emit(Opcode::JumpIf);
+                        // Short-circuit: if left is true, skip right
+                        let lhs = self.alloc_tmp()?;
+                        self.lower_expr(left, lhs)?;
+
+                        // Copy lhs to dst (result if we short-circuit)
+                        self.emit(Opcode::Move);
                         self.emit_u8(dst);
+                        self.emit_u8(lhs);
+
+                        self.emit(Opcode::JumpIf);
+                        self.emit_u8(lhs);
                         let skip_pos = self.current_pc();
                         self.emit_u32(0);
+
                         self.lower_expr(right, dst)?;
+
                         let end_pc = self.current_pc();
                         self.patch_jump(skip_pos, end_pc)?;
                     }
                     _ => {
-                        self.lower_expr(left, dst)?;
+                        let lhs = self.alloc_tmp()?;
+                        self.lower_expr(left, lhs)?;
                         let rhs = self.alloc_tmp()?;
                         self.lower_expr(right, rhs)?;
-                        self.emit_binop(*op, dst, dst, rhs);
+                        self.emit_binop(*op, dst, lhs, rhs);
                     }
                 }
             }

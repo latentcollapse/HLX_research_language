@@ -816,7 +816,7 @@ impl AstParser {
         self.expect(&Token::LParen)?;
 
         let mut parameters = Vec::new();
-        while !matches!(self.current(), Token::RParen) {
+        while !matches!(self.current(), Token::RParen | Token::Eof) {
             if let Token::Ident(n) = self.current().clone() {
                 self.advance();
                 let mut param = Parameter::new(n);
@@ -825,6 +825,13 @@ impl AstParser {
                     param = param.with_type(self.parse_type()?);
                 }
                 parameters.push(param);
+            } else {
+                let span = self.current_span();
+                return Err(ParseError {
+                    message: format!("Expected parameter name or ')', found {:?}", self.current()),
+                    line: span.line,
+                    col: span.col,
+                });
             }
             if matches!(self.current(), Token::Comma) {
                 self.advance();
