@@ -1,112 +1,12 @@
-# HLX — Governed Inference Runtime for Local AI
+# HLX Research Language
 
-> *"You're not building a fast inference engine — llama.cpp already exists.
-> You're building a governed inference engine."*
+HLX is a programming language I've been building where conscience and governance are part of the syntax itself, not something you bolt on after the fact. The idea started as an experiment in recursive self-improvement and kind of evolved from there into something I think is genuinely interesting.
 
-HLX is a runtime that bonds a **symbolic AI** (Klyntar corpus) to a local **GGUF language model**, creating a unified neurosymbolic system governed by conscience predicates, recursive reasoning cycles, and safe self-modification.
-
-**Status:** Active development. Phase 1-3 security hardening complete. 193 runtime tests passing. Formal verification via [Axiom](#axiom--formal-policy-engine) with 6 mechanically verified theorems. Working toward MVP.
+The short version: most languages let you write what a program does. HLX also lets you write what it's allowed to do — and that's enforced at the runtime level, not just as a comment or a convention.
 
 ---
 
-## What This Actually Is
-
-Most local AI setups: `model + system prompt`. That's it.
-
-HLX introduces a **symbiote** — a persistent symbolic layer that attaches to model weights via a formal bond protocol, injects structured knowledge and governing rules into every inference, and persists state across conversations and model swaps.
-
-```
-Without HLX:   GGUF model → responds
-
-With HLX:      Klyntar corpus (rules, memory, conscience)
-                      ↓  bond protocol
-               GGUF model → governed, persistent, recursive
-```
-
-The model doesn't change. The weights don't change. But what it is — does.
-
----
-
-## Quick Start
-
-```bash
-# Clone HLX
-git clone https://github.com/latentcollapse/hlx-compiler
-cd hlx-compiler
-
-# Build the bond CLI
-cd hlx-bond && cargo build --release
-
-# Bond a local GGUF to a Klyntar corpus
-./target/release/hlx-bond ~/models/Qwen3-0.6B.gguf \
-    --corpus ~/klyntar/corpus.db
-```
-
-```
-╔══════════════════════════════════════════════════╗
-║  HLX Bond Protocol v0.1 — Native GGUF + Klyntar  ║
-╚══════════════════════════════════════════════════╝
-
-[HELLO] Initiating bond with model: Qwen3-0.6B
-[HELLO] Capabilities offered: tensor_ops, image_io, governance, rsi, scale
-[SYNC]  Bond accepted — synchronising state...
-[BOND]  Corpus context injected — neurosymbolic link forming...
-[READY] Bond complete. Symbiote is active.
-
-you> Hello. What are you?
-hlx> Hello! I'm a language model designed to help you with questions
-     and tasks. How can I assist you today?
-```
-
-**No Python. No llama.cpp. No ollama. No running daemons.** One binary, one GGUF, one corpus.
-
----
-
-## The Bond Protocol
-
-The handshake between Klyntar (symbolic) and the GGUF model (neural):
-
-```
-HELLO  →  Symbiote presents capabilities to the model
-SYNC   →  Model responds: accepted, context window, vocab size
-BOND   →  Corpus rules + memory injected as governing context
-READY  →  Unified NS-AI enters conversation loop
-```
-
-The bond is **persistent** — responses are stored back into the corpus memory, so the symbiote grows with every conversation. Swap the underlying model; the symbiote survives intact.
-
----
-
-## Klyntar — The Symbiote
-
-[Klyntar](https://github.com/latentcollapse/klyntar) is the symbolic half of the system. Think of it as a `.gguf` file for neurosymbolic AI — a pre-seeded package of:
-
-- **Rules** — governing constraints with confidence scores
-- **Memory** — persistent conversation history
-- **Documents** — ingested knowledge base
-- **Conscience predicates** — alignment primitives that govern what the system will and won't do
-
-`pip install klyntar` gives you an inert SAI.
-`pip install klyntar` + `hlx-bond` gives you a thinking, governed system.
-
----
-
-## TRM Recursive Reasoning
-
-Inspired by [Token Recursive Machines](https://github.com/latentcollapse/HLX/tree/main/TinyRecursiveModels-main), HLX implements H-cycles — recursive reasoning passes where each cycle feeds its output back as input context for the next:
-
-```bash
-# 3 recursive reasoning passes per message
-hlx-bond model.gguf --corpus corpus.db --h-cycles 3
-```
-
-The TRM paper showed 7M parameter models with recursive cycles outperforming larger flat models. HLX applies this at the system level, not the weight level — the recursion is in the bond, not the architecture.
-
----
-
-## HLX as a Language
-
-Beyond the bond CLI, HLX is a self-hosting programming language where **conscience, coordination, and self-modification are syntactic primitives**:
+## What it looks like
 
 ```hlx
 recursive agent Thinker {
@@ -128,13 +28,44 @@ recursive agent Thinker {
 }
 ```
 
-When conscience predicates are first-class syntax, any model trained on HLX code absorbs "conscience" as a fundamental concept — alignment by osmosis, not by RLHF.
+Agents have persistent state across cycles (`latent`), run at multiple scales (`H`, `L`), and carry their own governance rules inline. If a conscience predicate fails, the action doesn't happen — it's not a check you can forget to write, it's part of how the agent is defined.
 
 ---
 
-## Axiom — Formal Policy Engine
+## Getting started
 
-[Axiom](./ape) is HLX's conscience specification layer. A small, embeddable policy verification engine — think SQLite for AI governance. You write a policy file declaring what your agent is and isn't allowed to do, and Axiom checks intentions against it before anything executes.
+You'll need the Rust toolchain. After that it's just:
+
+```bash
+git clone https://github.com/latentcollapse/HLX_research_language
+cd HLX_research_language
+cargo build --release
+
+./target/release/hlx-run your_program.hlx
+```
+
+If you want to see what's happening under the hood:
+
+```bash
+./target/release/hlx-run --debug your_program.hlx
+```
+
+That'll show you a trace with named variables alongside their register values, which is useful when you're trying to figure out why something isn't doing what you expected.
+
+A basic program just to make sure everything's working:
+
+```hlx
+fn main() -> String {
+    let greeting: String = "Hello from HLX";
+    return greeting;
+}
+```
+
+---
+
+## The governance layer
+
+The part I'm probably most proud of is APE — the Axiom Policy Engine. It's a small embeddable policy engine you can drop into any Rust project. You write a policy file describing what your agent is and isn't allowed to do, and APE checks every intent before it executes.
 
 ```axm
 module security_policy {
@@ -152,163 +83,47 @@ let engine = AxiomEngine::from_file("policy.axm")?;
 let verdict = engine.verify("WriteFile", &[("path", "/tmp/output.txt")])?;
 
 if verdict.allowed() {
-    // safe to proceed
+    // proceed
 } else {
     eprintln!("blocked: {}", verdict.reason().unwrap());
 }
 ```
 
-**Formal verification:** 6 governance properties proven mechanically in Rocq (Coq):
+Six core governance properties are mechanically verified in Rocq (Coq) — things like determinism, that trust can only increase and never be downgraded, and that every execution path terminates with a verdict. The red team suite has 15 attack vectors and all 15 are blocked.
 
-| Theorem | Property |
-|---------|----------|
-| G1 Purity | Verification has no side effects |
-| G2 EffectClass | Effect classification is complete and sound |
-| G3 Determinism | Same input always produces same verdict |
-| G4 MonotonicRatchet | Trust increases monotonically — cannot be downgraded |
-| G5 SpecificDenial | Denials are targeted, never overapplied |
-| G6 Totality | All execution paths terminate with a verdict |
+Three modes depending on how strict you want to be:
 
-**Red team tested:** 15/15 attack vectors blocked (path traversal, null byte injection, command injection, unicode homoglyphs, DoS, and more). See [SECURITY_TESTING.md](./ape/SECURITY_TESTING.md).
-
-Three execution modes:
-- **Flow** — infer all trust tags (prototyping)
-- **Guard** — trust must be explicit (production default)
-- **Arx** — everything explicit (formal verification)
+- **Flow** — good for prototyping, infers trust where it can
+- **Guard** — trust has to be explicit, which is what I run in production
+- **Arx** — everything must be explicitly declared, for formal verification contexts
 
 ---
 
-## Architecture
+## The bond protocol
+
+HLX also has a protocol for bonding a symbolic reasoning layer to a local GGUF model. The idea is that the symbolic layer — which holds rules, memory, conscience predicates — governs and persists across conversations, while the GGUF does the language generation. You can swap the underlying model and the symbolic layer stays intact because identity lives there, not in the weights.
 
 ```
-hlx-bond (Rust binary)
-├── candle 0.9 — pure Rust GGUF inference (quantized_qwen3)
-├── hlx-runtime — bond protocol, governance, RSI, SCALE, tensor ops
-├── ape — formal policy verification engine
-└── Klyntar corpus.db (SQLite) — rules, memory, documents
-
-HLX Language Runtime (hlx-runtime/src/)
-├── vm.rs                — bytecode VM
-├── bond.rs              — HELLO→SYNC→BOND→READY protocol
-├── governance.rs        — conscience predicate engine
-├── rsi.rs               — recursive self-improvement pipeline (3-gate)
-├── scale.rs             — multi-agent coordination (barriers, consensus)
-├── tensor.rs            — tensor primitives + image/audio I/O
-├── agent.rs             — agent lifecycle (spawn/halt/dissolve)
-├── bytecode.rs          — serialization with BLAKE3 integrity
-├── shader_attestation.rs — GPU shader verification (SHA-256)
-├── human_auth.rs        — cryptographic human authorization gate
-├── integrity.rs         — corpus integrity + provenance tracking
-├── training_gate.rs     — pre/mid/post-training verification gates
-├── forgetting_guard.rs  — catastrophic forgetting detection
-├── dd_protocol.rs       — Document→Destroy containment protocol
-└── lora_adapter.rs      — LoRA adapter isolation + provenance
-
-Axiom Policy Engine (ape/src/)
-├── engine.rs            — core verification loop
-├── conscience/          — built-in safety predicates
-├── interpreter/         — policy execution
-├── parser/              — .axm file parsing
-├── checker/             — type checking + validation
-├── trust/               — trust algebra (monotonic ratchet)
-├── lcb/                 — content-addressed storage (BLAKE3)
-└── experimental/        — DSF, SCALE, self-modification research
-
-Formal Proofs (ape/axiom rocq proofs/)
-├── G1_Purity.v through G6_Totality.v — mechanically verified
-
-Backends
-├── llvm/                — native code generation
-└── vulkan/              — GPU compute
+HELLO  →  symbolic layer presents its capabilities
+SYNC   →  model responds with context window, vocab size
+BOND   →  corpus rules and memory injected as governing context
+READY  →  the combined system enters the inference loop
 ```
 
 ---
 
-## What's Working
+## Where it's at
 
-| Component | Status | Tests |
-|-----------|--------|-------|
-| Native GGUF inference (candle, pure Rust) | ✅ | — |
-| Bond protocol (HELLO→SYNC→BOND→READY) | ✅ | — |
-| Klyntar corpus injection (rules + memory) | ✅ | — |
-| BPE tokenizer extracted from GGUF metadata | ✅ | — |
-| TRM H-cycles (recursive reasoning) | ✅ | — |
-| Governance engine (conscience predicates) | ✅ | 9 |
-| RSI pipeline (voting, rollback, quorum) | ✅ | 17 |
-| SCALE coordination (barriers, consensus, timeout) | ✅ | 11 |
-| Agent lifecycle (spawn/halt/dissolve, rate limiting) | ✅ | 10 |
-| Tensor ops + size limits + allocation tracking | ✅ | 11 |
-| Bytecode integrity (BLAKE3 tamper detection) | ✅ | 5 |
-| Shader attestation (SHA-256 verification) | ✅ | 7 |
-| Axiom policy engine (verification + conscience) | ✅ | 112 |
-| Axiom formal proofs (G1-G6, Rocq/Coq) | ✅ | 6 theorems |
-| Red team attack suite (15/15 vectors blocked) | ✅ | 15 |
-| LLVM JIT backend | ✅ | — |
-| Vulkan GPU backend | ✅ | — |
-| Human authorization gate | ✅ | — |
-| Corpus integrity + provenance tracking | ✅ | — |
-| Training gates (pre/mid/post) | ✅ | — |
-| Document→Destroy protocol | ✅ | — |
-| HLX self-hosting compiler | 🔄 | Pipeline complete, bootstrap in progress |
-| LoRA weight-level RSI (Phase 2 bond) | 🔮 | Prerequisites documented, not yet implemented |
+This is v0.9 — I'd call it MVP-ready. Language feature completeness is around 95%, 313 tests passing across the workspace, zero critical or warning-level debt. Phases 1 through 3 of the roadmap are done. The stuff that's left is either platform testing (Windows/Mac) or features that are deliberately deferred to a later version.
 
-**Total runtime tests:** 193 passing. **Total Axiom tests:** 112 passing.
-
----
-
-## Supported Models
-
-Any Qwen3 GGUF works. Tested:
-
-| Model | Size | Notes |
-|-------|------|-------|
-| Qwen3-0.6B Q8_K_XL | 844MB | Confirmed working |
-| Qwen3-1.7B Q8_0 | 1.8GB | |
-| Qwen3-4B Q4_K_M | 2.4GB | |
-
-Other GGUF architectures (LLaMA, Mistral, etc.) require a corresponding `quantized_*` module — contributions welcome.
-
----
-
-## Design Philosophy
-
-- **Governed, not fast** — llama.cpp handles throughput. HLX handles what the system is *allowed to think*.
-- **Conscience as syntax** — predicates aren't comments or system prompts. They're grammar.
-- **Structure beats scale** — recursive cycles on small models beat flat inference on large ones.
-- **The symbiote survives** — swap the model, keep the corpus. Identity lives in the symbolic layer.
-- **Prove it or it doesn't count** — safety properties are mechanically verified, not assumed.
-
----
-
-## Roadmap
-
-**Current (v0.2.0):** Phase 1 bond working. Phase 1-3 security hardening complete. Axiom formal policy engine integrated with mechanically verified governance properties. Three-mode architecture (Flow/Guard/Arx) unified.
-
-**In progress:** HLX compiler bootstrap verification. Homeostasis and density gates for RSI self-regulation. MVP target: governed symbiote that knows when to stop modifying itself.
-
-**Phase 2 (next):** LoRA fine-tuning driven by RSI pipeline. The symbiote stops governing the weights and starts reshaping them. Prerequisites are [documented in detail](./PHASE2_PREREQUISITES.md) — 8 safety requirements that must be provably correct before training begins. The conscience layer becomes part of the loss function. That's the paper.
-
----
-
-## Related
-
-- **[Klyntar](https://github.com/latentcollapse/klyntar)** — the symbolic AI package (`pip install klyntar`)
-- **[Axiom](./ape)** — formal policy verification engine
-- **[TinyRecursiveModels](./TinyRecursiveModels-main)** — the TRM paper (theoretical foundation)
-- **[Phase 2 Prerequisites](./PHASE2_PREREQUISITES.md)** — what must be provably correct before LoRA enters HLX
-
----
-
-## Contact
-
-This is a solo research project. If you're interested in the work, have questions, or want to discuss collaboration: check the GitHub profile for contact info.
+It's not production software in the sense that I'd tell you to run it in a hospital or whatever. But it's solid enough to build real things with, and I'm actively using it for research.
 
 ---
 
 ## License
 
-Apache-2.0
+AGPL v3. If you build on this and ship it, your changes stay open. That was a deliberate choice.
 
 ---
 
-*HLX is active research software. The bond works. The governance is formally verified. The experiments are running.*
+*Active research project. Things are moving fast.*
