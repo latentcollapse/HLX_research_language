@@ -223,6 +223,7 @@ pub struct Bytecode {
     /// Line number table: PC -> source line for error reporting
     /// Format: Vec<(pc, line)> sorted by PC
     pub line_table: Vec<(u32, u32)>,
+pub debug_symbols: HashMap<String, HashMap<u8, String>>,
 }
 
 impl Bytecode {
@@ -249,6 +250,7 @@ impl Bytecode {
             strings: Vec::new(),
             exports: HashMap::new(),
             line_table: Vec::new(),
+            debug_symbols: HashMap::new(),
         }
     }
 
@@ -422,6 +424,7 @@ impl Bytecode {
             strings,
             exports: HashMap::new(), // TODO: Phase 3.3 - serialize/deserialize exports
             line_table: Vec::new(),
+            debug_symbols: HashMap::new(),
         })
     }
 

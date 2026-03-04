@@ -49,7 +49,7 @@
   - [x] Function definitions (fn)
   - [x] Module-level variables (let at module scope)
   - [x] Export keyword
-  - [x] Modules with imports
+  - [x] Modules with imports (`use`, `import`)
   - [x] Recursive agents
   - [ ] Struct/record definitions
   - [ ] Enums
@@ -270,10 +270,10 @@
 - ✅ **For loops** - FIXED! `for x in arr { }` with reserved registers 240-243
 - ✅ **Ternary operator** - FIXED! `cond ? then : else`
 - ✅ **File I/O** - FIXED! `file_read`, `file_write` builtins
-- ❌ **Debug info** - No way to inspect variables at runtime (--debug traces opcodes but not named vars)
+- ✅ **Debug info** - Inspection of named variables at runtime (--debug) (--debug traces opcodes but not named vars)
 - ❌ **Error recovery** - No try/catch or Result type
 - ❌ **Generics** - Arrays are generic but user types aren't
-- ❌ **Better parse errors** - No `^^^` pointer to error location
+- ✅ **Better parse errors** - Improved diagnostic formatting and context
 
 ### HLX-Unique Gaps
 - ❌ **Scale migration** - Declared but not fully implemented

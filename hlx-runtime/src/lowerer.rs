@@ -17,11 +17,16 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct LowerError {
     pub message: String,
+    pub span: crate::ast::SourceSpan,
 }
 
 impl std::fmt::Display for LowerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Lower error: {}", self.message)
+        if self.span.start_line > 0 {
+            write!(f, "Lower error at line {}:{}: {}", self.span.start_line, self.span.start_col, self.message)
+        } else {
+            write!(f, "Lower error: {}", self.message)
+        }
     }
 }
 
@@ -29,6 +34,14 @@ impl LowerError {
     fn new(msg: impl Into<String>) -> Self {
         LowerError {
             message: msg.into(),
+            span: crate::ast::SourceSpan::unknown(),
+        }
+    }
+
+    fn with_span(msg: impl Into<String>, span: crate::ast::SourceSpan) -> Self {
+        LowerError {
+            message: msg.into(),
+            span,
         }
     }
 }
@@ -322,6 +335,14 @@ impl Lowerer {
                 this.in_top_level = is_top_level;
                 this.bind_params(&func.parameters);
                 this.lower_body(&func.body)?;
+
+                // Collect debug info: register -> variable name (DEBT-036 extension)
+                let mut reg_map = std::collections::HashMap::new();
+                for (name, &reg) in &this.variables {
+                    reg_map.insert(reg, name.clone());
+                }
+                this.bytecode.debug_symbols.insert(func.name.clone(), reg_map);
+
                 this.emit(Opcode::Return);
                 this.in_top_level = false;
                 Ok(())
@@ -337,6 +358,14 @@ impl Lowerer {
             self.with_scope(|this| {
                 this.bind_params(&func.parameters);
                 this.lower_body(&func.body)?;
+
+                // Collect debug info: register -> variable name (DEBT-036 extension)
+                let mut reg_map = std::collections::HashMap::new();
+                for (name, &reg) in &this.variables {
+                    reg_map.insert(reg, name.clone());
+                }
+                this.bytecode.debug_symbols.insert(func.name.clone(), reg_map);
+
                 this.emit(Opcode::Return);
                 Ok(())
             })?;
@@ -1126,9 +1155,21 @@ impl Lowerer {
                 function,
                 arguments,
             } => {
-                // DEBT-007: Fix concat() register collision
+                // Specialized opcodes for common builtins (DEBT-007)
+                if function == "concat" && arguments.len() == 2 {
+                    let left_reg = self.alloc_tmp()?;
+                    self.lower_expr(&arguments[0], left_reg)?;
+                    let right_reg = self.alloc_tmp()?;
+                    self.lower_expr(&arguments[1], right_reg)?;
+                    self.emit(Opcode::Concat);
+                    self.emit_u8(dst);
+                    self.emit_u8(left_reg);
+                    self.emit_u8(right_reg);
+                    return Ok(());
+                }
+
+                // DEBT-007: Fix register collision for general calls
                 // Use fresh temp registers for each argument instead of hardcoded 150+
-                // This prevents nested calls from overwriting outer call arguments
                 let mut arg_regs = Vec::with_capacity(arguments.len());
                 for arg in arguments.iter() {
                     let reg = self.alloc_tmp()?;
@@ -1212,15 +1253,58 @@ impl Lowerer {
                 method,
                 arguments,
             } => {
-                // Lower as function call with object as first argument
-                self.lower_expr(object, 150)?;
-                for (i, arg) in arguments.iter().enumerate() {
-                    self.lower_expr(arg, 151 + i as u8)?;
+                // DEBT-007: Fix register collision for method calls by using temp registers
+                // and specialized opcodes for common builtins like concat().
+                
+                // Optimized specialized opcodes
+                if method == "concat" && arguments.len() == 1 {
+                    let left_reg = self.alloc_tmp()?;
+                    self.lower_expr(object, left_reg)?;
+                    let right_reg = self.alloc_tmp()?;
+                    self.lower_expr(&arguments[0], right_reg)?;
+                    self.emit(Opcode::Concat);
+                    self.emit_u8(dst);
+                    self.emit_u8(left_reg);
+                    self.emit_u8(right_reg);
+                    return Ok(());
+                } else if (method == "strlen" || method == "len") && arguments.is_empty() {
+                    let src_reg = self.alloc_tmp()?;
+                    self.lower_expr(object, src_reg)?;
+                    self.emit(Opcode::StrLen);
+                    self.emit_u8(dst);
+                    self.emit_u8(src_reg);
+                    return Ok(());
                 }
+
+                // General case: Use fresh temp registers for each argument
+                // to prevent nested calls from overwriting outer call arguments (DEBT-007)
+                let mut arg_regs = Vec::with_capacity(arguments.len() + 1);
+                
+                // Lower object (self) to a temp first
+                let obj_reg = self.alloc_tmp()?;
+                self.lower_expr(object, obj_reg)?;
+                arg_regs.push(obj_reg);
+                
+                for arg in arguments.iter() {
+                    let reg = self.alloc_tmp()?;
+                    self.lower_expr(arg, reg)?;
+                    arg_regs.push(reg);
+                }
+
+                // Pack into call registers 150, 151...
+                for (i, &reg) in arg_regs.iter().enumerate() {
+                    let call_reg = 150 + i as u8;
+                    if reg != call_reg {
+                        self.emit(Opcode::Move);
+                        self.emit_u8(call_reg);
+                        self.emit_u8(reg);
+                    }
+                }
+
                 self.emit(Opcode::Call);
                 let name_idx = self.get_or_add_string(method);
                 self.emit_u32(name_idx);
-                self.emit_u8((arguments.len() + 1) as u8);
+                self.emit_u8(arg_regs.len() as u8);
                 self.emit_u8(dst);
             }
             ExprKind::Collapse(inner) => {

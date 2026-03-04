@@ -370,16 +370,38 @@ impl Vm {
         }
     }
 
-    fn debug_trace(&self, pc: usize, opcode: &str, regs: &[Value]) {
+    fn debug_trace(&self, pc: usize, opcode: &str, regs: &[Value], bytecode: &Bytecode) {
         if self.debug_mode {
+            let func_name = self.call_stack.last().map(|f| f.func_name.as_str()).unwrap_or("main");
+            
+            // Format variable values if symbols are available
+            let var_info = if let Some(reg_map) = bytecode.debug_symbols.get(func_name) {
+                let mut info = Vec::new();
+                // Sort by register index for deterministic output
+                let mut entries: Vec<_> = reg_map.iter().collect();
+                entries.sort_by_key(|e| e.0);
+                
+                for (&reg, name) in entries {
+                    if let Some(val) = regs.get(reg as usize) {
+                        if !matches!(val, Value::Nil) {
+                            info.push(format!("{}={:?}", name, val));
+                        }
+                    }
+                }
+                if info.is_empty() { String::new() } else { format!(" | {}", info.join(" ")) }
+            } else {
+                String::new()
+            };
+
             log::trace!(
                 target: "vm",
-                "PC={:04} | {:<12} | R0={:?} R1={:?} R2={:?} ...",
+                "PC={:04} | {:<12} | R0={:?} R1={:?} R2={:?}{}",
                 pc,
                 opcode,
                 regs.get(0),
                 regs.get(1),
-                regs.get(2)
+                regs.get(2),
+                var_info
             );
         }
     }
@@ -479,7 +501,7 @@ impl Vm {
             // Debug trace before execution
             if self.debug_mode {
                 let op_name = format!("{:?}", op);
-                self.debug_trace(pc, &op_name, &self.registers);
+                self.debug_trace(pc, &op_name, &self.registers, bytecode);
             }
 
             match op {

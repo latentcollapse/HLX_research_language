@@ -230,156 +230,138 @@ class BitSeed:
 
 
     def reason_symbolically(self, question: str) -> tuple[str, float]:
-        """
-        Reason about a question using symbolic knowledge from corpus and learned patterns.
-        
-        Returns:
-            Tuple of (symbolic_answer, confidence_0_to_1)
-        """
+        """Reason about a question using symbolic knowledge from corpus and learned patterns."""
         import string
         import re
+        import sqlite3
         
-        # Tokenize question into word set (underscores → spaces so compound names split)
-        question_lower = re.sub(r'[\W_]+', ' ', question.lower())
+        # Tokenize question into word set
+        question_lower = re.sub(r"[\\W_]+", " ", question.lower())
         question_words = set(question_lower.split())
         
-        if not question_words:
-            return ("", 0.0)
+        if not question_words: return ("", 0.0)
         
         matches = []
         
-        # Query corpus rules
+        # Search in-memory observations
+        for obs in self.observations:
+            if "given" in question_lower and obs.source != "logic_trainer": continue
+            obs_text = f"{obs.source} {obs.content}"
+            obs_words = set(re.sub(r"[\\W_]+", " ", obs_text.lower()).split())
+            overlap = len(question_words & obs_words)
+            if overlap > 0:
+                matches.append({"type": "memory", "source": obs.source, "content": obs.content, "confidence": obs.relevance, "overlap": overlap})
+
+        # Query corpus rules, memory and beliefs
         try:
             conn = sqlite3.connect(self.corpus_path)
             cursor = conn.cursor()
             
-            # Get rules (schema: name, description, confidence — no content column)
-            cursor.execute(
-                "SELECT name, description, confidence FROM rules ORDER BY confidence DESC"
-            )
-            for row in cursor.fetchall():
-                name, description, confidence = row
-                rule_text = f"{name} {description}"
-                rule_words = set(re.sub(r'[\W_]+', ' ', rule_text.lower()).split())
-                overlap = len(question_words & rule_words)
-                if overlap > 0:
-                    matches.append({
-                        'type': 'rule',
-                        'name': name,
-                        'description': description,
-                        'confidence': confidence,
-                        'overlap': overlap
-                    })
-            
-            # Get recent memory (last 30)
-            cursor.execute(
-                "SELECT source, content, relevance FROM memory ORDER BY relevance DESC, created_at DESC LIMIT 30"
-            )
-            for row in cursor.fetchall():
-                source, content, relevance = row
-                mem_text = f"{source} {content}"
-                mem_words = set(re.sub(r'[\W_]+', ' ', mem_text.lower()).split())
-                overlap = len(question_words & mem_words)
-                if overlap > 0:
-                    matches.append({
-                        'type': 'memory',
-                        'source': source,
-                        'content': content,
-                        'confidence': relevance,
-                        'overlap': overlap
-                    })
-            
-            # Get documents (K-12 curriculum, encyclopedia articles)
-            cursor.execute(
-                "SELECT name, content, doc_type FROM documents WHERE length(content) < 2000 ORDER BY created_at DESC LIMIT 20"
-            )
-            for row in cursor.fetchall():
-                name, content, doc_type = row
-                doc_text = f"{name} {content}"
-                doc_words = set(re.sub(r'[\W_]+', ' ', doc_text.lower()).split())
-                overlap = len(question_words & doc_words)
-                if overlap > 0:
-                    matches.append({
-                        'type': 'document', 'name': name, 'content': content,
-                        'confidence': 0.8, 'overlap': overlap
-                    })
+            # Rules table
+            try:
+                cursor.execute("SELECT name, description, confidence FROM rules ORDER BY confidence DESC")
+                for row in cursor.fetchall():
+                    name, description, confidence = row
+                    rule_text = f"{name} {description}"
+                    rule_words = set(re.sub(r"[\\W_]+", " ", rule_text.lower()).split())
+                    overlap = len(question_words & rule_words)
+                    if overlap > 0:
+                        matches.append({'type': 'rule', 'name': name, 'description': description, 'confidence': confidence, 'overlap': overlap})
+            except: pass
 
+            # Logic Beliefs (learned rules)
+            try:
+                cursor.execute("SELECT predicate, object, confidence FROM beliefs WHERE subject = 'logic'")
+                for row in cursor.fetchall():
+                    pred, obj, confidence = row
+                    rule_text = f"{pred} {obj}"
+                    rule_words = set(re.sub(r"[\\W_]+", " ", rule_text.lower()).split())
+                    overlap = len(question_words & rule_words)
+                    if overlap > 0:
+                        matches.append({'type': 'rule', 'name': pred, 'description': obj, 'confidence': confidence, 'overlap': overlap})
+            except: pass
+
+            # Database memory
+            try:
+                sql = "SELECT source, content, relevance FROM memory"
+                if "given" in question_lower:
+                    sql += " WHERE source = 'logic_trainer'"
+                sql += " ORDER BY created_at DESC LIMIT 50"
+                cursor.execute(sql)
+                for row in cursor.fetchall():
+                    source, content, relevance = row
+                    mem_text = f"{source} {content}"
+                    mem_words = set(re.sub(r"[\\W_]+", " ", mem_text.lower()).split())
+                    overlap = len(question_words & mem_words)
+                    if overlap > 0:
+                        matches.append({'type': 'memory', 'source': source, 'content': content, 'confidence': relevance, 'overlap': overlap})
+            except: pass
+
+            # Documents
+            try:
+                cursor.execute("SELECT name, content, doc_type FROM documents WHERE length(content) < 2000 ORDER BY created_at DESC LIMIT 20")
+                for row in cursor.fetchall():
+                    name, content, doc_type = row
+                    doc_text = f"{name} {content}"
+                    doc_words = set(re.sub(r"[\\W_]+", " ", doc_text.lower()).split())
+                    overlap = len(question_words & doc_words)
+                    if overlap > 0:
+                        matches.append({'type': 'document', 'name': name, 'content': content, 'confidence': 0.8, 'overlap': overlap})
+            except: pass
+            
             conn.close()
-        except Exception as e:
-            # If DB fails, continue with learned patterns only
-            pass
+        except: pass
         
         # Score learned patterns
         for pattern in self.learned_patterns:
-            pattern_text = pattern.get('pattern', '')
-            pattern_conf = pattern.get('confidence', 0.5)
-            pattern_words = set(re.sub(r'[\W_]+', ' ', pattern_text.lower()).split())
+            pattern_text = pattern.get("pattern", "")
+            pattern_words = set(re.sub(r"[\\W_]+", " ", pattern_text.lower()).split())
             overlap = len(question_words & pattern_words)
             if overlap > 0:
-                matches.append({
-                    'type': 'pattern',
-                    'content': pattern_text,
-                    'confidence': pattern_conf,
-                    'overlap': overlap
-                })
-        
-        if not matches:
-            return ("", 0.0)
-        
-        # Sort by overlap (best matches first)
-        matches.sort(key=lambda x: x['overlap'], reverse=True)
+                matches.append({"type": "pattern", "content": pattern_text, "confidence": pattern.get("confidence", 0.5), "overlap": overlap})
+
+        # Score matches
+        matches.sort(key=lambda x: x["overlap"], reverse=True)
         
         # Calculate confidence
         confidence = 0.0
-        best_rule = next((m for m in matches if m['type'] == 'rule'), None)
-        best_pattern = next((m for m in matches if m['type'] == 'pattern'), None)
+        best_rule = next((m for m in matches if m["type"] == "rule"), None)
+        best_pattern = next((m for m in matches if m["type"] == "pattern"), None)
+        best_memory = next((m for m in matches if m["type"] == "memory"), None)
         
         if best_rule:
-            rule_contrib = best_rule['confidence'] * min(best_rule['overlap'] / 3.0, 1.0)
-            confidence += rule_contrib
-        
+            confidence += best_rule["confidence"] * min(best_rule["overlap"] / 3.0, 1.0)
         if best_pattern:
-            pattern_contrib = best_pattern['confidence'] * 0.7 * min(best_pattern['overlap'] / 2.0, 1.0)
-            confidence += pattern_contrib
+            confidence += best_pattern["confidence"] * 0.7 * min(best_pattern["overlap"] / 2.0, 1.0)
+        if best_memory: 
+            confidence += best_memory["confidence"] * 0.5 * min(best_memory["overlap"] / 3.0, 1.0)
         
         confidence = min(confidence, 1.0)
         
-        # Build answer from top matches
+        # Build answer
         answer_parts = []
-        
-        # Add top documents (up to 2) - K-12 and encyclopedia
-        documents = [m for m in matches[:5] if m['type'] == 'document'][:2]
+        documents = [m for m in matches[:5] if m["type"] == "document"][:2]
         if documents:
             answer_parts.append("From my knowledge base:")
             for doc in documents:
-                content_preview = doc['content'][:200] + "..." if len(doc['content']) > 200 else doc['content']
+                content_preview = doc["content"][:200] + "..." if len(doc["content"]) > 200 else doc["content"]
                 answer_parts.append(f"  - {content_preview}")
         
-        # Add top rules (up to 3)
-        rules = [m for m in matches[:5] if m['type'] == 'rule'][:3]
+        rules = [m for m in matches[:5] if m["type"] == "rule"][:3]
         if rules:
             answer_parts.append("Based on my conscience rules:")
-            for rule in rules:
-                answer_parts.append(f"  - {rule['name']}: {rule['description']}")
+            for rule in rules: answer_parts.append(f"  - {rule['name']}: {rule['description']}")
         
-        # Add top patterns (up to 2)
-        patterns = [m for m in matches[:5] if m['type'] == 'pattern'][:2]
+        patterns = [m for m in matches[:5] if m["type"] == "pattern"][:2]
         if patterns:
-            if rules:
-                answer_parts.append("\nAnd from learned patterns:")
-            else:
-                answer_parts.append("From my learned patterns:")
-            for pat in patterns:
-                answer_parts.append(f"  - {pat['content']}")
+            answer_parts.append("From learned patterns:")
+            for pat in patterns: answer_parts.append(f"  - {pat['content']}")
         
-        # Add memory context if relevant (up to 1)
-        memory = next((m for m in matches if m['type'] == 'memory'), None)
+        memory = next((m for m in matches if m["type"] == "memory"), None)
         if memory:
             answer_parts.append(f"\nContext from {memory['source']}: {memory['content']}")
 
-        answer = "\n".join(answer_parts) if answer_parts else ""
-        return (answer, confidence)
-
+        return ("\n".join(answer_parts) if answer_parts else "", confidence)
     def ask(self, question: str) -> str:
         """
         Ask Bit a question. She answers from her current knowledge.
@@ -708,7 +690,7 @@ class BitSeed:
 
         question_lower = question.lower()
 
-        if re.search(r'what is your name|who are you', question_lower):
+        if "given" not in question_lower and re.search(r'what is your name|who are you', question_lower):
             beliefs = self.query_beliefs(subject="I", predicate="name", limit=1)
             if beliefs:
                 b = beliefs[0]
@@ -718,7 +700,7 @@ class BitSeed:
                 b = beliefs[0]
                 return (f"I am {b['object']}", b['confidence'])
 
-        if re.search(r'who (built|made|created) you', question_lower):
+        if "given" not in question_lower and re.search(r'who (built|made|created) you', question_lower):
             beliefs = self.query_beliefs(subject="I", limit=100)
             for b in beliefs:
                 if 'built' in b['object'] or 'created' in b['object'] or 'by' in b['object']:
@@ -733,6 +715,7 @@ class BitSeed:
 
         # Generic: look for keyword matches in beliefs
         words = set(re.sub(r'[\W_]+', ' ', question_lower).split())
+        if "given" in question_lower: return ("", 0.0)
         all_beliefs = self.query_beliefs(subject="I", limit=20)
 
         best_match = None

@@ -33,6 +33,7 @@ pub enum Token {
     Program,
     Module,
     Import,
+    Use,
     Export,
     Recursive,
     Agent,
@@ -380,6 +381,7 @@ impl AstParser {
                     "program" => Token::Program,
                     "module" => Token::Module,
                     "import" => Token::Import,
+                    "use" => Token::Use,
                     "export" => Token::Export,
                     "recursive" => Token::Recursive,
                     "agent" => Token::Agent,
@@ -715,7 +717,7 @@ impl AstParser {
             Token::Scale => self.parse_cluster().map(Item::Cluster),
             Token::Module => self.parse_module().map(Item::Module),
             Token::Struct => self.parse_struct().map(Item::Struct),
-            Token::Import => self.parse_import().map(Item::Import),
+            Token::Import | Token::Use => self.parse_import().map(Item::Import),
             Token::Export => {
                 self.advance();
                 let item = self.parse_item()?;
@@ -1359,7 +1361,15 @@ impl AstParser {
     }
 
     fn parse_import(&mut self) -> Result<Import, ParseError> {
-        self.expect(&Token::Import)?;
+        if matches!(self.current(), Token::Import | Token::Use) {
+            self.advance();
+        } else {
+            return Err(ParseError {
+                message: format!("Expected import or use, got {:?}", self.current()),
+                line: self.current_span().line,
+                col: self.current_span().col,
+            });
+        }
 
         // Check for "from" syntax: import { foo, bar } from "module";
         if matches!(self.current(), Token::LBrace) {
