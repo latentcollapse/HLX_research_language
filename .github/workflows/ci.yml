@@ -1,13 +1,29 @@
-name: CI
-on: [push, pull_request]
+name: HLX CI
+
+on:
+  push:
+    branches: [ main, experimental ]
+  pull_request:
+    branches: [ main, experimental ]
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   test:
+    name: Test and Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Run tests
-        run: cargo test --workspace
-      - name: Build release binary
-        run: cargo build --release -p hlx-run
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run Workspace Tests
+        run: cargo test --workspace --verbose
+
+      - name: Build Runtime (Release)
+        run: cargo build --release -p hlx-runtime --verbose

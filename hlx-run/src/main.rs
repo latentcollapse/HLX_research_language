@@ -7,7 +7,7 @@
 //! Reads an HLX source file, compiles to bytecode, and executes.
 
 use anyhow::{Context, Result};
-use ape::AxiomEngine;
+use ape::conscience::{ConscienceKernel, ConscienceVerdict, EffectClass};
 use clap::Parser;
 use rusqlite::Connection;
 use serde_json::json;
@@ -67,11 +67,7 @@ struct Args {
     #[arg(long, default_value_t = 100_000_000)]
     max_steps: usize,
 
-    /// Path to APE policy file (.axm) for governance
-    #[arg(long, default_value = "policy.axm")]
-    ape_policy: String,
-
-    /// Disable APE governance (skip verification)
+    /// Disable APE conscience verification (skip physics checks)
     #[arg(long)]
     no_verify: bool,
 
@@ -327,70 +323,14 @@ fn main() -> Result<()> {
     println!("Source lines: {}", source.lines().count());
     println!();
 
-    // Initialize APE engine for governance
-    let mut ape_engine = if args.no_verify {
+    // Initialize ConscienceKernel — the digital physics engine
+    // Physics are always-on. No config file needed. Gravity doesn't load from disk.
+    let mut conscience = if args.no_verify {
         None
     } else {
-        // Resolve policy path: try CWD first, then binary location, then HLX_ROOT
-        let policy_path = std::path::PathBuf::from(&args.ape_policy);
-        let resolved_path = if policy_path.exists() {
-            policy_path
-        } else if let Ok(exe_path) = std::env::current_exe() {
-            if let Some(exe_dir) = exe_path.parent() {
-                let binary_relative = exe_dir.join(&args.ape_policy);
-                if binary_relative.exists() {
-                    binary_relative
-                } else if let Ok(hlx_root) = std::env::var("HLX_ROOT") {
-                    std::path::PathBuf::from(hlx_root).join(&args.ape_policy)
-                } else {
-                    policy_path
-                }
-            } else {
-                policy_path
-            }
-        } else {
-            policy_path
-        };
-
-        match AxiomEngine::from_file(&resolved_path) {
-            Ok(engine) => {
-                log::info!(target: "ape", "Governance loaded: {}", resolved_path.display());
-                Some(engine)
-            }
-            Err(e) => {
-                log::warn!(
-                    target: "ape",
-                    "Could not load policy '{}': {}. Running without governance.",
-                    resolved_path.display(),
-                    e
-                );
-                None
-            }
-        }
+        log::info!(target: "ape", "Conscience active — genesis predicates installed");
+        Some(ConscienceKernel::new())
     };
-
-    // APE: Verify RunCommand intent before compiling (logged to BLAKE3 audit chain)
-    if let Some(ref mut engine) = ape_engine {
-        let verdict = engine.verify_and_log(
-            "RunCommand",
-            &[("command", "compile"), ("verified", "true")],
-        );
-        match verdict {
-            Ok(v) if !v.allowed() => {
-                let reason = v.reason().unwrap_or("policy violation");
-                return Err(anyhow::anyhow!("[APE] ✗ Compile blocked: {}", reason));
-            }
-            Err(e) => {
-                return Err(anyhow::anyhow!(
-                    "[APE] ⚠ Verification error during compile: {}",
-                    e
-                ));
-            }
-            _ => {
-                log::info!(target: "ape", "Compile verified");
-            }
-        }
-    }
 
     // Compile using canonical pipeline: AstParser -> Lowerer
     print!("Compiling... ");
@@ -758,26 +698,14 @@ fn main() -> Result<()> {
     println!("✓");
     println!();
 
-    // APE: Verify output before displaying (logged to BLAKE3 audit chain)
-    if let Some(ref mut engine) = ape_engine {
-        let result_str = format!("{}", result);
-        let verdict = engine.verify_and_log(
-            "GenerateResponse",
-            &[
-                ("output", &result_str),
-                ("verified", "true"), // Required for Execute-class intents
-            ],
-        );
+    // Conscience: Verify output (the physics gate)
+    if let Some(ref mut kernel) = conscience {
+        let mut fields = std::collections::HashMap::new();
+        fields.insert("output".to_string(), format!("{}", result));
+        let verdict = kernel.evaluate("GenerateResponse", &EffectClass::Write, &fields);
         match verdict {
-            Ok(v) if !v.allowed() => {
-                let reason = v.reason().unwrap_or("policy violation");
+            ConscienceVerdict::Deny(reason) => {
                 return Err(anyhow::anyhow!("[APE] ✗ Output blocked: {}", reason));
-            }
-            Err(e) => {
-                return Err(anyhow::anyhow!(
-                    "[APE] ⚠ Verification error for output: {}",
-                    e
-                ));
             }
             _ => {
                 log::info!(target: "ape", "Output verified");
@@ -789,22 +717,6 @@ fn main() -> Result<()> {
     println!("{}", result);
     println!();
 
-    // APE: Walk the BLAKE3 audit chain at exit — confirms no tampering during the run.
-    if let Some(ref engine) = ape_engine {
-        let n = engine.audit_log_len();
-        match engine.verify_audit_chain() {
-            Ok(()) => log::info!(
-                target: "ape",
-                "Audit chain OK — {} intent(s) logged, chain intact",
-                n
-            ),
-            Err(e) => {
-                // Chain corruption is a hard error — surface it even without --verbose
-                eprintln!("[APE] ⚠ Audit chain BROKEN: {}", e);
-            }
-        }
-    }
-
     Ok(())
 }
 
@@ -814,8 +726,6 @@ fn run_repl(verbose: bool, max_steps: usize) -> Result<()> {
     println!("║  Type HLX code, :help for commands, :quit to exit               ║");
     println!("╚══════════════════════════════════════════════════════════════════════╝");
     println!();
-
-    
 
     let mut source = String::new();
 

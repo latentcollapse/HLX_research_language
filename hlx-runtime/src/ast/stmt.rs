@@ -75,8 +75,10 @@ pub enum StmtKind {
     Continue,
     /// Block: { statements }
     Block(Vec<Statement>),
-    /// Switch/match statement
+    /// Switch statement
     Switch(SwitchStmt),
+    /// Match expression statement
+    Match(MatchStmt),
     /// Module definition
     Module(ModuleDef),
     /// Import statement
@@ -84,10 +86,7 @@ pub enum StmtKind {
     /// Export statement
     Export(Export),
     /// Migrate an agent to a different cluster or host: migrate agent_name to target;
-    Migrate {
-        agent: String,
-        target: String,
-    },
+    Migrate { agent: String, target: String },
 }
 
 /// If statement
@@ -136,6 +135,35 @@ pub struct SwitchCase {
     pub pattern: super::Pattern,
     pub guard: Option<Expression>,
     pub body: Vec<Statement>,
+}
+
+/// Match expression statement
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MatchStmt {
+    pub subject: Expression,
+    pub arms: Vec<MatchArm>,
+}
+
+/// A match arm with pattern, optional guard, and body
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MatchArm {
+    pub id: NodeId,
+    pub pattern: MatchPattern,
+    pub guard: Option<Expression>,
+    pub body: Vec<Statement>,
+}
+
+/// Pattern for match expression
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MatchPattern {
+    /// Literal value: 42, "hello", true
+    Literal(super::Literal),
+    /// Wildcard: _
+    Wildcard,
+    /// Binding pattern that captures the value: n, x, etc
+    Binding(String),
+    /// Range pattern (for future extension)
+    Range { start: i64, end: i64 },
 }
 
 /// Function definition

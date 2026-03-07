@@ -479,7 +479,7 @@ mod tests {
 
     fn setup_governance() -> Governance {
         let mut governance = Governance::new(0);
-        governance.unlock_config();
+        let _ = governance.unlock_config();
         governance.set_confidence(0.99);
         for _ in 0..101 {
             governance.increment_step();

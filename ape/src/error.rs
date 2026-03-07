@@ -1,4 +1,9 @@
-use crate::lexer::token::Span;
+/// Source location for error reporting
+#[derive(Debug, Clone)]
+pub struct Span {
+    pub line: u32,
+    pub col: u32,
+}
 
 #[derive(Debug, Clone)]
 pub struct AxiomError {
@@ -9,37 +14,7 @@ pub struct AxiomError {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErrorKind {
-    // Lexer errors
-    UnexpectedChar,
-    UnterminatedString,
-    InvalidNumber,
-
-    // Parser errors
-    UnexpectedToken,
-    ExpectedToken,
-    ExpectedExpression,
-    ExpectedType,
-    ExpectedDeclaration,
-
-    // Type checker errors
-    TypeMismatch,
-    UndefinedVariable,
-    UndefinedFunction,
-    UndefinedContract,
-    UndefinedField,
-    DuplicateDefinition,
-    ArgumentCount,
-
-    // DSF errors (Dumb Shit Filter)
-    DsfUnboundedLoop,
-    DsfMissingTrustVerify,
-    DsfUnhandledDoFailure,
-    DsfTrustDecayChain,
-    DsfReVerifyGuardMiss,
-    DsfInferenceAmbiguity,
-    DsfEnvConditional,
-
-    // Axiom violations
+    // Axiom violations — the physics
     HaltDeterminism,
     HaltTraceCorrupt,
     HaltContract,

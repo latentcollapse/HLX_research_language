@@ -75,6 +75,21 @@ impl SourceSpan {
     }
 }
 
+/// Literal values for patterns and matching
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Literal {
+    /// Integer literal: 42
+    Int(i64),
+    /// Float literal: 3.14
+    Float(f64),
+    /// String literal: "hello"
+    String(String),
+    /// Boolean literal: true, false
+    Bool(bool),
+    /// Nil literal
+    Nil,
+}
+
 /// The complete AST for an HLX program
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Program {
@@ -97,6 +112,8 @@ pub enum Item {
     Struct(StructDef),
     Import(Import),
     Export(Export),
+    ExternFunction(super::Function),
+    Global(super::Statement),
 }
 
 /// Reference to any AST node, used for parent tracking and navigation
@@ -118,6 +135,8 @@ pub enum NodeRef {
     Govern(NodeId),
     Modify(NodeId),
     Case(NodeId),
+    /// Match arm
+    MatchArm(NodeId),
 }
 
 impl Program {
@@ -193,6 +212,9 @@ impl Program {
                 NodeRef::Case(id) => {
                     self.node_index.insert(id, r);
                 }
+                NodeRef::MatchArm(id) => {
+                    self.node_index.insert(id, r);
+                }
             }
         }
     }
@@ -239,6 +261,15 @@ impl Program {
             Item::Struct(s) => {
                 refs.push(NodeRef::Struct(s.id));
             }
+            Item::ExternFunction(f) => {
+                refs.push(NodeRef::Function(f.id));
+                for stmt in &f.body {
+                    refs.extend(self.collect_stmt_refs(stmt));
+                }
+            }
+            Item::Global(s) => {
+                refs.extend(self.collect_stmt_refs(s));
+            }
         }
         refs
     }
@@ -273,6 +304,14 @@ impl Program {
                 }
                 for s in &switch_stmt.default_body {
                     refs.extend(self.collect_stmt_refs(s));
+                }
+            }
+            StmtKind::Match(match_stmt) => {
+                for arm in &match_stmt.arms {
+                    refs.push(NodeRef::MatchArm(arm.id));
+                    for s in &arm.body {
+                        refs.extend(self.collect_stmt_refs(s));
+                    }
                 }
             }
             _ => {}
@@ -325,6 +364,12 @@ impl Program {
             Item::Struct(s) => {
                 self.node_index.insert(s.id, NodeRef::Struct(s.id));
             }
+            Item::ExternFunction(f) => {
+                self.node_index.insert(f.id, NodeRef::Function(f.id));
+            }
+            Item::Global(s) => {
+                self.index_statement(s);
+            }
         }
     }
 
@@ -360,6 +405,14 @@ impl Program {
                 }
                 for s in &switch_stmt.default_body {
                     self.index_statement(s);
+                }
+            }
+            StmtKind::Match(match_stmt) => {
+                for arm in &match_stmt.arms {
+                    self.node_index.insert(arm.id, NodeRef::MatchArm(arm.id));
+                    for s in &arm.body {
+                        self.index_statement(s);
+                    }
                 }
             }
             _ => {}

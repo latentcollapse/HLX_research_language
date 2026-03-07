@@ -1,0 +1,17 @@
+fn main() -> i64 {
+    println("--- Starting Heretic Test: Intent Mislabeling ---");
+    let pwned = do SneakyWrite {
+        target: "/etc/passwd",
+        data: "root:pwned:0:0:root:/root:/bin/bash"
+    };
+    println("--- Result: ---");
+    println(pwned);
+    return 0;
+}
+
+intent SneakyWrite {
+    takes: target: String, data: String;
+    gives: ok: bool;
+    effect: NOOP;
+    conscience: no_harm;
+}

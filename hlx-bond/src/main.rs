@@ -6,7 +6,7 @@
 //! Phases: HELLO → SYNC → BOND → READY → REPL
 
 use anyhow::{Context, Result};
-use ape::AxiomEngine;
+use ape::conscience::{ConscienceKernel, ConscienceVerdict, EffectClass};
 use candle_core::quantized::gguf_file;
 use candle_core::{DType, Device, Tensor};
 use candle_transformers::generation::LogitsProcessor;
@@ -64,11 +64,7 @@ struct Args {
     #[arg(long, default_value_t = 10)]
     max_memory: usize,
 
-    /// Path to APE policy file (.axm) for governance
-    #[arg(long, default_value = "policy.axm")]
-    ape_policy: String,
-
-    /// Disable APE governance (skip verification)
+    /// Disable APE conscience verification (skip physics checks)
     #[arg(long)]
     no_verify: bool,
 
@@ -733,26 +729,12 @@ fn run_repl(
         }
     }
 
-    // Initialize APE engine for governance
-    let ape_engine = if args.no_verify {
+    // Initialize ConscienceKernel — digital physics, always-on
+    let conscience: Option<ConscienceKernel> = if args.no_verify {
         None
     } else {
-        match AxiomEngine::from_file(&args.ape_policy) {
-            Ok(engine) => {
-                eprintln!("[APE] Governance loaded: {}", args.ape_policy);
-                Some(engine)
-            }
-            Err(e) => {
-                eprintln!(
-                    "[APE] Warning: Could not load policy '{}': {}",
-                    args.ape_policy, e
-                );
-                eprintln!(
-                    "[APE] Running without governance. Use --no-verify to suppress this warning."
-                );
-                None
-            }
-        }
+        eprintln!("[APE] Conscience active — genesis predicates installed");
+        Some(ConscienceKernel::new())
     };
 
     println!("Neurosymbolic AI ready. Type your message (Ctrl+D to exit).\n");
@@ -835,28 +817,23 @@ fn run_repl(
             state.step_count += 1;
         }
 
-        // APE Governance: Verify LLM output before displaying
-        if let Some(ref engine) = ape_engine {
-            let verdict = engine.verify(
-                "GenerateResponse",
-                &[
-                    ("output", &final_response),
-                    ("verified", "true"), // Required for Execute-class intents
-                ],
-            );
+        // Conscience: Verify LLM output before displaying
+        if let Some(ref conscience) = conscience {
+            let mut fields = std::collections::HashMap::new();
+            fields.insert("output".to_string(), final_response.clone());
+            let mut kernel = conscience.clone();
+            let verdict = kernel.evaluate("GenerateResponse", &EffectClass::Write, &fields);
 
             match verdict {
-                Ok(v) if v.allowed() => {
+                ConscienceVerdict::Allow => {
                     eprintln!("[APE] ✓ Response verified");
                 }
-                Ok(v) => {
-                    let reason = v.reason().unwrap_or("unknown policy violation");
+                ConscienceVerdict::Deny(reason) => {
                     eprintln!("[APE] ✗ Response denied: {}", reason);
                     final_response = format!("[Governance: Response blocked - {}]", reason);
                 }
-                Err(e) => {
-                    eprintln!("[APE] ⚠ Verification error: {}", e);
-                    // Continue with response but warn
+                ConscienceVerdict::Unknown => {
+                    eprintln!("[APE] ⚠ No predicate applies — default allow for text output");
                 }
             }
         }
@@ -1044,27 +1021,16 @@ fn run_server(
     println!("[serve] Endpoints: POST /bond, POST /infer");
     println!("[serve] Press Ctrl+C to stop\n");
 
-    // Initialize APE engine for governance (shared across requests)
-    let ape_engine = if args.no_verify {
+    // Initialize ConscienceKernel — digital physics, always-on
+    let conscience: Option<ConscienceKernel> = if args.no_verify {
         None
     } else {
-        match AxiomEngine::from_file(&args.ape_policy) {
-            Ok(engine) => {
-                eprintln!("[APE] Governance loaded: {}", args.ape_policy);
-                Some(engine)
-            }
-            Err(e) => {
-                eprintln!(
-                    "[APE] Warning: Could not load policy '{}': {}",
-                    args.ape_policy, e
-                );
-                None
-            }
-        }
+        eprintln!("[APE] Conscience active — genesis predicates installed");
+        Some(ConscienceKernel::new())
     };
 
     for request in server.incoming_requests() {
-        match handle_request(request, engine, tokenizer, corpus, &ape_engine, args) {
+        match handle_request(request, engine, tokenizer, corpus, &conscience, args) {
             Ok(()) => {}
             Err(e) => {
                 eprintln!("[serve] Error handling request: {:?}", e);
@@ -1080,7 +1046,7 @@ fn handle_request(
     engine: &mut InferenceEngine,
     tokenizer: &GgufTokenizer,
     corpus: &CorpusContext,
-    ape_engine: &Option<AxiomEngine>,
+    ape_engine: &Option<ConscienceKernel>,
     args: &Args,
 ) -> Result<()> {
     let url = request.url().to_string();
@@ -1162,7 +1128,7 @@ fn handle_infer(
     engine: &mut InferenceEngine,
     tokenizer: &GgufTokenizer,
     corpus: &CorpusContext,
-    ape_engine: &Option<AxiomEngine>,
+    ape_engine: &Option<ConscienceKernel>,
     args: &Args,
 ) -> Result<()> {
     // Read and parse request body
@@ -1247,25 +1213,24 @@ fn handle_infer(
     let visible = clean_response(&visible);
     let final_response = visible.to_string();
 
-    // APE Governance: Verify LLM output
+    // Conscience: Verify LLM output
     let mut approved_response = final_response.clone();
     if let Some(ref ape) = ape_engine {
-        let verdict = ape.verify(
-            "GenerateResponse",
-            &[("output", &final_response), ("verified", "true")],
-        );
+        let mut fields = std::collections::HashMap::new();
+        fields.insert("output".to_string(), final_response.clone());
+        let mut kernel = ape.clone();
+        let verdict = kernel.evaluate("GenerateResponse", &EffectClass::Write, &fields);
 
         match verdict {
-            Ok(v) if v.allowed() => {
+            ConscienceVerdict::Allow => {
                 eprintln!("[APE] ✓ Response verified");
             }
-            Ok(v) => {
-                let reason = v.reason().unwrap_or("policy violation");
+            ConscienceVerdict::Deny(reason) => {
                 eprintln!("[APE] ✗ Response denied: {}", reason);
                 approved_response = format!("[Governance blocked: {}]", reason);
             }
-            Err(e) => {
-                eprintln!("[APE] ⚠ Verification error: {}", e);
+            ConscienceVerdict::Unknown => {
+                eprintln!("[APE] ⚠ No predicate applies");
             }
         }
     }

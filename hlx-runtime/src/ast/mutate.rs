@@ -244,6 +244,14 @@ impl MutationContext {
                 self.positions.insert(e.id, pos);
             }
             super::Item::Struct(_) => {} // No children to index
+            super::Item::ExternFunction(f) => {
+                self.parents.insert(f.id, parent);
+                self.positions.insert(f.id, pos);
+            }
+            super::Item::Global(s) => {
+                self.parents.insert(s.id, parent);
+                self.positions.insert(s.id, pos);
+            }
         }
     }
 

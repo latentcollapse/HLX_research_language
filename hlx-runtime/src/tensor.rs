@@ -757,6 +757,96 @@ impl Tensor {
             _ => None,
         }
     }
+
+    /// Native FFT engine for HRR Turbocharging
+    fn fft(data: &mut [f64], inverse: bool) {
+        let n = data.len();
+        if n <= 1 { return; }
+        
+        let mut j = 0;
+        for i in 1..n {
+            let mut bit = n >> 1;
+            while j & bit != 0 {
+                j ^= bit;
+                bit >>= 1;
+            }
+            j ^= bit;
+            if i < j { data.swap(i, j); }
+        }
+
+        let mut len = 2;
+        while len <= n {
+            let ang = 2.0 * std::f64::consts::PI / len as f64 * (if inverse { -1.0 } else { 1.0 });
+            let wlen_re = ang.cos();
+            let wlen_im = ang.sin();
+            for i in (0..n).step_by(len) {
+                let mut w_re = 1.0;
+                let mut w_im = 0.0;
+                for k in 0..len/2 {
+                    let u_re = data[i + k];
+                    let v_re = data[i + k + len/2] * w_re; // Simplified Real-only FFT for HRR
+                    data[i + k] = u_re + v_re;
+                    data[i + k + len/2] = u_re - v_re;
+                    let next_w_re = w_re * wlen_re - w_im * wlen_im;
+                    w_im = w_re * wlen_im + w_im * wlen_re;
+                    w_re = next_w_re;
+                }
+            }
+            len <<= 1;
+        }
+
+        if inverse {
+            for x in data.iter_mut() { *x /= n as f64; }
+        }
+    }
+
+    pub fn circular_convolve(&self, other: &Self) -> RuntimeResult<Self> {
+        if self.data.len() != other.data.len() {
+            return Err(RuntimeError::new("Circular convolution requires same-sized tensors", 0));
+        }
+        let n = self.data.len();
+        // Turbo-mode: Use FFT if N is power of two and large
+        if n >= 128 && (n & (n - 1)) == 0 {
+            let mut a = self.data.clone();
+            let mut b = other.data.clone();
+            Self::fft(&mut a, false);
+            Self::fft(&mut b, false);
+            for i in 0..n { a[i] *= b[i]; }
+            Self::fft(&mut a, true);
+            return Ok(Self::from_flat(a));
+        }
+        let mut result = vec![0.0; n];
+        for i in 0..n {
+            for j in 0..n {
+                result[i] += self.data[j] * other.data[(n + i - j) % n];
+            }
+        }
+        Ok(Self::from_flat(result))
+    }
+
+    pub fn circular_correlate(&self, other: &Self) -> RuntimeResult<Self> {
+        if self.data.len() != other.data.len() {
+            return Err(RuntimeError::new("Circular correlation requires same-sized tensors", 0));
+        }
+        let n = self.data.len();
+        // Turbo-mode: Use FFT if N is power of two and large
+        if n >= 128 && (n & (n - 1)) == 0 {
+            let mut a = self.data.clone();
+            let mut b = other.data.clone();
+            Self::fft(&mut a, false);
+            Self::fft(&mut b, false);
+            for i in 0..n { a[i] *= b[i]; } // Simplified for real-only correlation
+            Self::fft(&mut a, true);
+            return Ok(Self::from_flat(a));
+        }
+        let mut result = vec![0.0; n];
+        for i in 0..n {
+            for j in 0..n {
+                result[i] += self.data[j] * other.data[(i + j) % n];
+            }
+        }
+        Ok(Self::from_flat(result))
+    }
 }
 
 impl fmt::Display for Tensor {
@@ -785,6 +875,8 @@ impl fmt::Display for Tensor {
         }
     }
 }
+
+
 
 #[cfg(test)]
 mod tests {
@@ -1125,4 +1217,6 @@ mod tests {
         let result = tensor.to_audio_bytes(44100);
         assert!(result.is_err());
     }
+
+
 }

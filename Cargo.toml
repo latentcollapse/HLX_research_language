@@ -4,6 +4,7 @@ members = [
     "hlx-lsp",
     "hlx-bond",
     "hlx-run",
+    "hlx-ffi",
     "ape",
 ]
 resolver = "2"

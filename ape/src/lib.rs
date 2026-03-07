@@ -1,70 +1,58 @@
 //! APE — Axiom Policy Engine
 //!
-//! A verification-first policy engine for AI agents. Provides policy-as-code
-//! with deterministic verification before execution.
+//! Digital physics for AI agents. APE is an embeddable governance kernel
+//! (SQLite-style) that provides immutable constraint evaluation.
 //!
-//! APE is the governance layer of HLX: "the physics of what Bit cannot do."
-//! It defines conscience predicates, gate enforcement, and formal proofs (G1-G6).
-//!
-//! APE can also be used standalone — embed it in any Rust or Python application
-//! to add formal policy verification.
+//! APE is not a language. It is gravity. The genesis predicates are
+//! hardcoded physical laws — `no_harm`, `no_exfiltrate`, `path_safety`,
+//! `no_bypass_verification`, and `baseline_allow`. Code that violates
+//! these laws cannot compile or execute.
 //!
 //! # Quick Start
 //!
-//! ```no_run
-//! use ape::AxiomEngine;
+//! ```
+//! use ape::conscience::{ConscienceKernel, EffectClass};
+//! use std::collections::HashMap;
 //!
-//! let engine = AxiomEngine::from_file("policy.axm")?;
-//! let verdict = engine.verify("WriteFile", &[("path", "/tmp/test.txt")])?;
-//! if verdict.allowed() {
-//!     // Your code runs
-//! }
-//! # Ok::<(), ape::error::AxiomError>(())
+//! let mut kernel = ConscienceKernel::new();
+//! let mut fields = HashMap::new();
+//! fields.insert("path".to_string(), "/tmp/test.txt".to_string());
+//!
+//! let verdict = kernel.evaluate("WriteFile", &EffectClass::Write, &fields);
+//! // verdict is Allow — /tmp is safe
+//!
+//! fields.insert("path".to_string(), "/etc/shadow".to_string());
+//! let verdict = kernel.evaluate("WriteFile", &EffectClass::Write, &fields);
+//! // verdict is Deny — /etc is forbidden by path_safety
 //! ```
 //!
 //! # Architecture
 //!
-//! - **Policy Loading** (`policy` module): Load .axm policy files without execution
-//! - **Pure Verification** (`verification` module): Check intents against policy (no side effects)
-//! - **Optional Execution** (`engine` module): Verify + execute with full interpreter
-//!
-//! # Primary API (Embedder-Friendly)
-//!
-//! The main embedder API provides a simple, SQLite-style interface:
+//! - **Conscience Kernel** (`conscience`): The core — immutable predicate evaluation
+//! - **Trust Levels** (`trust`): Agent trust classification
+//! - **Error Types** (`error`): Shared error types
+//! - **Experimental** (`experimental`): Research features (DSF, Scale, etc.)
 
-// Primary embedder API - this is what most users should use
-pub mod policy;
-pub mod verification;
-pub mod engine;
-
-// Re-export the main types for convenience
-pub use engine::{AxiomEngine, ExecutionResult, IntentSignature};
-pub use policy::{Policy, PolicyLoader};
-pub use verification::{Verifier, Verdict};
-pub use interpreter::value::Value;
-pub use error::{AxiomError, AxiomResult};
-
-// Advanced API - for users who need direct access to internals
-// These modules are still public for backward compatibility and advanced use cases
-pub mod error;
-pub mod lexer;
-pub mod parser;
-pub mod checker;
-pub mod interpreter;
-pub mod lcb;
-pub mod trust;
+// The core — immutable conscience predicate evaluation
 pub mod conscience;
 
-// C FFI — SQLite-style embedding for any language
-pub mod ffi;
+// Trust level classification for agents
+pub mod trust;
 
-// Experimental features - HLX idea vault
-// These are research-grade features for advanced use cases
+// Error types
+pub mod error;
+
+// Experimental features — research-grade
 pub mod experimental;
 
-// Backward compatibility re-exports
-pub use experimental::dsf;
-pub use experimental::scale;
-pub use experimental::inference;
-pub use experimental::selfmod;
-pub use experimental::module;
+// LCB (if used)
+pub mod lcb;
+
+// PyO3 Python bindings — `from ape import ConscienceKernel`
+#[cfg(feature = "python")]
+pub mod pymod;
+
+// Re-export the primary API
+pub use conscience::{ConscienceKernel, ConscienceVerdict, EffectClass};
+pub use error::{AxiomError, AxiomResult};
+pub use trust::TrustLevel;

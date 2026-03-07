@@ -1,0 +1,17 @@
+// Governance and Messaging Standard Library
+
+// Reload governance policy from a file path
+extern fn reload_governance(path: String) -> bool;
+
+// Reload governance policy from a source string
+extern fn reload_governance_str(source: String) -> bool;
+
+// Send a payload to a target agent's mailbox
+extern fn send_message(target_id: i64, payload: any) -> bool;
+
+// Receive a payload from the current agent's mailbox (non-blocking)
+// Returns nil if mailbox is empty
+extern fn receive_message() -> any;
+
+// Wait for a message with timeout in milliseconds
+extern fn await_message(timeout_ms: i64) -> any;

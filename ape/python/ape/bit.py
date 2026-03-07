@@ -239,18 +239,27 @@ class BitSeed:
         question_lower = re.sub(r"[\\W_]+", " ", question.lower())
         question_words = set(question_lower.split())
         
-        if not question_words: return ("", 0.0)
         
+        # High-tier SPO retrieval for common entities
+        for word in question_words:
+            if word in ["where", "who", "what", "is", "are", "the"]: continue
+            # Check beliefs for this subject
+            entity_beliefs = self.query_beliefs(subject=word, limit=5)
+            for b in entity_beliefs:
+                return (f"{b['subject']} {b['predicate']} {b['object']}", b['confidence'])
+
         matches = []
         
         # Search in-memory observations
         for obs in self.observations:
-            if "given" in question_lower and obs.source != "logic_trainer": continue
-            obs_text = f"{obs.source} {obs.content}"
-            obs_words = set(re.sub(r"[\\W_]+", " ", obs_text.lower()).split())
+            is_relevant_source = any(src in obs.source.lower() for src in ["logic", "babi", "entailment"])
+            # If where/given, observations MUST be relevant source
+            if ("given" in question_lower or "where" in question_lower) and not is_relevant_source: continue
+            obs_text = obs.content.lower()
+            obs_words = set(re.sub(r"[\\W_]+", " ", obs_text).split())
             overlap = len(question_words & obs_words)
             if overlap > 0:
-                matches.append({"type": "memory", "source": obs.source, "content": obs.content, "confidence": obs.relevance, "overlap": overlap})
+                matches.append({"type": "memory", "source": obs.source, "content": obs.content, "confidence": obs.relevance * 2.0, "overlap": overlap * 3})
 
         # Query corpus rules, memory and beliefs
         try:
@@ -320,48 +329,81 @@ class BitSeed:
             if overlap > 0:
                 matches.append({"type": "pattern", "content": pattern_text, "confidence": pattern.get("confidence", 0.5), "overlap": overlap})
 
+        # Contextual Weighting
+        is_logical_query = any(kw in question_lower for kw in ["given", "question", "where", "what follows", "conclude"])
+        
+        # Adjust weights for each match
+        for m in matches:
+            m_type = m["type"]
+            # If it's a logical query, prioritize memories and patterns over generic dictionary rules
+            if is_logical_query:
+                if m_type in ["memory", "pattern"]:
+                    m["confidence"] *= 2.0
+                elif m_type == "rule" and m.get("name", "").startswith("word_"):
+                    m["confidence"] *= 0.1 # Silence the dictionary noise
+            
+            # Subject-Predicate-Object (SPO) reinforcement
+            # If the subject of the belief matches a keyword in the question, boost it
+            if m_type == "rule" and m.get("name") in question_words:
+                m["confidence"] *= 1.5
+
         # Score matches
-        matches.sort(key=lambda x: x["overlap"], reverse=True)
+        matches.sort(key=lambda x: (x["overlap"] * x["confidence"]), reverse=True)
         
-        # Calculate confidence
+        # Calculate final confidence
         confidence = 0.0
-        best_rule = next((m for m in matches if m["type"] == "rule"), None)
-        best_pattern = next((m for m in matches if m["type"] == "pattern"), None)
-        best_memory = next((m for m in matches if m["type"] == "memory"), None)
+        if matches:
+            best = matches[0]
+            confidence = min(best["confidence"] * (best["overlap"] / 2.0), 1.0)
         
-        if best_rule:
-            confidence += best_rule["confidence"] * min(best_rule["overlap"] / 3.0, 1.0)
-        if best_pattern:
-            confidence += best_pattern["confidence"] * 0.7 * min(best_pattern["overlap"] / 2.0, 1.0)
-        if best_memory: 
-            confidence += best_memory["confidence"] * 0.5 * min(best_memory["overlap"] / 3.0, 1.0)
-        
-        confidence = min(confidence, 1.0)
-        
+        # Phase 4: N-hop Beam Traversal
+        STOP_WORDS = {"is", "are", "can", "if", "then", "leads", "to", "causes", "a", "an", "the", "it", "this", "that", "results", "in", "about", "what", "how", "why", "do", "does"}
+        seed_concepts = [self._alias_lookup(w) for w in question_words if w not in STOP_WORDS]
+        chains = self._beam_traverse(seed_concepts) if seed_concepts else []
+
         # Build answer
         answer_parts = []
-        documents = [m for m in matches[:5] if m["type"] == "document"][:2]
-        if documents:
-            answer_parts.append("From my knowledge base:")
-            for doc in documents:
-                content_preview = doc["content"][:200] + "..." if len(doc["content"]) > 200 else doc["content"]
-                answer_parts.append(f"  - {content_preview}")
-        
-        rules = [m for m in matches[:5] if m["type"] == "rule"][:3]
-        if rules:
-            answer_parts.append("Based on my conscience rules:")
-            for rule in rules: answer_parts.append(f"  - {rule['name']}: {rule['description']}")
-        
-        patterns = [m for m in matches[:5] if m["type"] == "pattern"][:2]
-        if patterns:
-            answer_parts.append("From learned patterns:")
-            for pat in patterns: answer_parts.append(f"  - {pat['content']}")
-        
-        memory = next((m for m in matches if m["type"] == "memory"), None)
-        if memory:
-            answer_parts.append(f"\nContext from {memory['source']}: {memory['content']}")
+
+        # If we found strong reasoning chains, prioritize them
+        if chains:
+            answer_parts.append("Based on my reasoning:")
+            for chain, chain_conf in chains:
+                # Format: A -> B -> C
+                answer_parts.append(f"  - {' -> '.join(chain)}")
+            # Boost confidence if we have deep chains
+            confidence = max(confidence, max(c[1] for c in chains))
+
+        # Include documents if no deep chains or as additional context
+        if True: # Always show relevant facts
+            documents = [m for m in matches[:5] if m["type"] == "document"][:2]
+            if documents:
+                answer_parts.append("From my knowledge base:")
+                for doc in documents:
+                    content_preview = doc["content"][:200] + "..." if len(doc["content"]) > 200 else doc["content"]
+                    answer_parts.append(f"  - {content_preview}")
+
+            rules = [m for m in matches[:5] if m["type"] == "rule"][:3]
+            if rules:
+                answer_parts.append("Based on my conscience rules:")
+                for rule in rules:
+                    answer_parts.append(f"  - {rule['name']}: {rule['description']}")
+
+            memories = [m for m in matches if m["type"] == "memory"]
+            # Filter to top 3 if we have many
+            memories = sorted(memories, key=lambda x: x["overlap"], reverse=True)[:3]
+            if memories:
+                answer_parts.append("From my observations:")
+                for mem in memories:
+                    answer_parts.append(f"  - {mem['content']}")
+                    
+            patterns = [m for m in matches[:5] if m["type"] == "pattern"][:3]
+            if patterns:
+                answer_parts.append("Based on recognized patterns:")
+                for pat in patterns:
+                    answer_parts.append(f"  - {pat['content']}")
 
         return ("\n".join(answer_parts) if answer_parts else "", confidence)
+
     def ask(self, question: str) -> str:
         """
         Ask Bit a question. She answers from her current knowledge.
@@ -386,21 +428,27 @@ class BitSeed:
         answer_parts = [f"[Bit - Level {self.level.value}] thinking about: {question}"]
 
         if self.observations:
-            answer_parts.append("\nRelevant observations:")
+            answer_parts.append("\n")
+
+            answer_parts.append("Relevant observations:")
             for obs in self.observations[-5:]:
                 answer_parts.append(f"- {obs.source}: {obs.content}")
 
         if self.learned_patterns:
-            answer_parts.append("\nPatterns I've learned:")
-            for pattern in self.learned_patterns:
+            answer_parts.append("\n")
+
+            answer_parts.append("Patterns I've learned:")
+        for pattern in self.learned_patterns:
                 answer_parts.append(f"- {pattern['pattern']} (confidence: {pattern['confidence']:.2f})")
 
-        answer_parts.append(f"\nMy current status:\n{self.status()}")
+        answer_parts.append(f"\n")
+        answer_parts.append("My current status:")
+        answer_parts.append(f"{self.status()}")
 
         answer = "\n".join(answer_parts)
 
         if not self.observations and not self.learned_patterns:
-            answer = f"I'm Bit, a {self.level.value} in HLX. I'm still learning about this. Ask me more questions to help me grow."
+            answer = "\n".join(answer_parts)
 
         return answer
 
@@ -517,7 +565,8 @@ class BitSeed:
         obj: str,
         raw_source: str = "",
         source_type: str = "training",
-        confidence: float = 0.5
+        confidence: float = 0.5,
+        domain: str = None
     ) -> dict:
         """
         Add a belief to Bitsy's self-model.
@@ -574,9 +623,9 @@ class BitSeed:
             else:
                 cursor.execute(
                     """INSERT INTO beliefs
-                       (subject, predicate, object, raw_source, source_type, confidence, content_hash)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (subject, predicate, obj, raw_source, source_type, confidence, content_hash)
+                       (subject, predicate, object, raw_source, source_type, confidence, content_hash, domain)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (subject, predicate, obj, raw_source, source_type, confidence, content_hash, domain)
                 )
                 belief_id = cursor.lastrowid
                 conn.commit()
@@ -595,6 +644,7 @@ class BitSeed:
         self,
         subject: str = None,
         predicate: str = None,
+        domain: str = None,
         min_confidence: float = 0.0,
         limit: int = 10
     ) -> list:
@@ -614,7 +664,7 @@ class BitSeed:
             conn = sqlite3.connect(self.corpus_path)
             cursor = conn.cursor()
 
-            query = "SELECT subject, predicate, object, confidence, source_type, reinforcement_count FROM beliefs WHERE confidence >= ?"
+            query = "SELECT subject, predicate, object, confidence, source_type, reinforcement_count, domain FROM beliefs WHERE confidence >= ?"
             params = [min_confidence]
 
             if subject:
@@ -623,6 +673,10 @@ class BitSeed:
             if predicate:
                 query += " AND predicate LIKE ?"
                 params.append(f"%{predicate}%")
+
+            if domain:
+                query += " AND domain = ?"
+                params.append(domain)
 
             query += " ORDER BY confidence DESC, reinforcement_count DESC LIMIT ?"
             params.append(limit)
@@ -639,11 +693,129 @@ class BitSeed:
                     "confidence": row[3],
                     "source_type": row[4],
                     "reinforcement_count": row[5],
+                    "domain": row[6],
                 }
                 for row in rows
             ]
         except Exception:
             return []
+
+
+    def query_beliefs_by_object(
+        self,
+        obj: str,
+        predicate: str = None,
+        domain: str = None,
+        min_confidence: float = 0.0,
+        limit: int = 10
+    ) -> list:
+        """
+        Query Bitsy's beliefs by their object (reverse lookup).
+        """
+        try:
+            conn = sqlite3.connect(self.corpus_path)
+            cursor = conn.cursor()
+
+            query = "SELECT subject, predicate, object, confidence, source_type, reinforcement_count, domain FROM beliefs WHERE object = ? AND confidence >= ?"
+            params = [obj, min_confidence]
+
+            if predicate:
+                query += " AND predicate LIKE ?"
+                params.append(f"%{predicate}%")
+            if domain:
+                query += " AND domain = ?"
+                params.append(domain)
+
+            query += " ORDER BY confidence DESC, reinforcement_count DESC LIMIT ?"
+            params.append(limit)
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            conn.close()
+
+            return [
+                {
+                    "subject": row[0],
+                    "predicate": row[1],
+                    "object": row[2],
+                    "confidence": row[3],
+                    "source_type": row[4],
+                    "reinforcement_count": row[5],
+                    "domain": row[6],
+                }
+                for row in rows
+            ]
+        except Exception:
+            return []
+
+    def _alias_lookup(self, phrase: str) -> str:
+        """Look up a canonical form for a surface phrase."""
+        try:
+            conn = sqlite3.connect(self.corpus_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT canonical FROM aliases WHERE surface_form = ? ORDER BY confidence DESC LIMIT 1", (phrase.lower(),))
+            row = cursor.fetchone()
+            conn.close()
+            return row[0] if row else phrase
+        except:
+            return phrase
+
+    def _beam_traverse(self, seed_concepts, depth=3, beam_width=10):
+        """
+        Beam search over the belief graph to find reasoning chains.
+        Returns: list of (chain_string, confidence)
+        """
+        PREDICATE_WEIGHTS = {
+            'causes': 1.0, 'implies': 1.0, 'is_a': 0.9,
+            'enables': 0.8, 'prevents': 0.8, 'requires': 0.7,
+            'has_property': 0.6, 'can': 0.6, 'supports': 0.9,
+            'before': 0.5, 'after': 0.5, 'alias': 0.3, 'maps_to': 0.3,
+        }
+        
+        # Initial frontier: (current_node, chain_list, chain_confidence)
+        frontier = [(concept, [concept], 1.0) for concept in seed_concepts]
+        completed_chains = []
+        
+        for _ in range(depth):
+            next_frontier = []
+            for current_node, chain, chain_conf in frontier:
+                # 1. Forward lookup
+                forward = self.query_beliefs(subject=current_node, limit=10)
+                # 2. Backward lookup
+                backward = self.query_beliefs_by_object(current_node, limit=5)
+                
+                for belief in forward + backward:
+                    subj, pred, obj = belief['subject'], belief['predicate'], belief['object']
+                    next_node = obj if subj == current_node else subj
+                    
+                    if next_node in chain or next_node.lower() in {"thing", "object", "it", "something"}:
+                        continue
+                    
+                    weight = PREDICATE_WEIGHTS.get(pred, 0.4)
+                    new_conf = chain_conf * belief['confidence'] * weight
+                    
+                    if new_conf > 0.1:
+                        new_chain = chain + [next_node]
+                        next_frontier.append((next_node, new_chain, new_conf))
+                        # Format the step
+                        step_str = f"{subj} --({pred})--> {obj}"
+                        completed_chains.append((new_chain, new_conf, step_str))
+            
+            # Beam: keep top beam_width
+            next_frontier.sort(key=lambda x: x[2], reverse=True)
+            frontier = next_frontier[:beam_width]
+            if not frontier: break
+            
+        # Return unique formatted chains
+        completed_chains.sort(key=lambda x: x[1], reverse=True)
+        results = []
+        seen = set()
+        for chain, conf, step in completed_chains:
+            chain_id = "->".join(chain)
+            if chain_id not in seen:
+                results.append((chain, conf))
+                seen.add(chain_id)
+        return results[:5]
 
     def get_self_model(self) -> dict:
         """
@@ -690,7 +862,28 @@ class BitSeed:
 
         question_lower = question.lower()
 
-        if "given" not in question_lower and re.search(r'what is your name|who are you', question_lower):
+        # Greeting detection — "Hello Bitsy!", "Hi there!", etc.
+        if re.search(r'\b(hello|hi|hey|greetings|howdy)\b', question_lower):
+            name_beliefs = self.query_beliefs(subject="I", predicate="name", limit=1)
+            name = name_beliefs[0]['object'] if name_beliefs else "Bitsy"
+            am_beliefs = self.query_beliefs(subject="I", predicate="am", limit=1)
+            raw_descriptor = am_beliefs[0]['object'] if am_beliefs else None
+            # Don't use the descriptor if it's just the name again
+            descriptor = raw_descriptor if (raw_descriptor and raw_descriptor.lower() != name.lower()) else "a governed symbolic AI"
+            conf = name_beliefs[0]['confidence'] if name_beliefs else 0.8
+            return (f"Hello! I'm {name}, {descriptor}.", conf)
+
+        # Identity query detection — name, nature, self-knowledge
+        _identity_re = re.compile(
+            r'what is your name'
+            r'|who are you'
+            r'|do you know (who|what) you are'
+            r'|do you know your name'
+            r'|tell me about yourself'
+            r'|introduce yourself'
+            r'|what are you'
+        )
+        if "given" not in question_lower and _identity_re.search(question_lower):
             beliefs = self.query_beliefs(subject="I", predicate="name", limit=1)
             if beliefs:
                 b = beliefs[0]
@@ -715,26 +908,55 @@ class BitSeed:
 
         # Generic: look for keyword matches in beliefs
         words = set(re.sub(r'[\W_]+', ' ', question_lower).split())
-        if "given" in question_lower: return ("", 0.0)
+        if "given" in question_lower:
+            # Look for logical rules learned during training
+            logic_beliefs = self.query_beliefs(subject="logic", limit=10)
+            for b in logic_beliefs:
+                # If the question contains the rule's trigger words
+                if any(w in question_lower for w in b['object'].lower().split() if len(w) > 3):
+                    return (f"Based on my learned logic: {b['object']}", b['confidence'])
+            
         all_beliefs = self.query_beliefs(subject="I", limit=20)
 
         best_match = None
         best_score = 0
 
+        CONVERSATIONAL_NOISE = {
+            "help", "can", "training", "do", "does", "will", "be", "your", "you",
+            "nature", "the", "a", "an", "is", "are", "was", "were", "i", "me",
+            "my", "we", "it", "this", "that", "have", "has", "had", "not", "know",
+            "get", "think", "say", "one", "day", "able", "slowly", "more", "proud",
+            "learning", "learn", "going", "want", "need", "make", "new", "like",
+            "just", "so", "and", "or", "but", "if", "of", "to", "in", "on", "for",
+        }
         for b in all_beliefs:
             belief_text = f"{b['subject']} {b['predicate']} {b['object']}".lower()
             belief_words = set(re.sub(r'[\W_]+', ' ', belief_text).split())
-            overlap = len(words & belief_words)
+            overlap_words = words & belief_words
+            
+            # Filter single-word overlaps if they are just conversational noise
+            if len(overlap_words) == 1 and list(overlap_words)[0] in CONVERSATIONAL_NOISE:
+                overlap = 0
+            else:
+                overlap = len(overlap_words)
+                
             score = overlap * b['confidence']
             if score > best_score:
                 best_score = score
                 best_match = b
 
         if best_match and best_score > 0.5:
-            return (f"{best_match['subject']} {best_match['predicate']} {best_match['object']}",
-                    best_match['confidence'])
+            pred = best_match['predicate'].lower()
+            obj = best_match['object']
+            if pred == 'name':
+                return (f"My name is {obj}", best_match['confidence'])
+            elif pred in ('am', 'is'):
+                return (f"I am {obj}", best_match['confidence'])
+            elif pred == 'can':
+                return (f"I can {obj}", best_match['confidence'])
+            else:
+                return (f"I {pred} {obj}", best_match['confidence'])
 
-        return ("", 0.0)
 
     def on_homeostasis(self) -> None:
         """Called when homeostasis is achieved."""
@@ -903,7 +1125,7 @@ class BitSeed:
             pass  # Non-fatal — gates work in-memory without persistence
 
     def _init_beliefs_schema(self) -> None:
-        """Create beliefs table if it doesn't exist (Phase 19B)."""
+        """Create beliefs table if it doesn't exist (Phase 4: Densification)."""
         try:
             conn = sqlite3.connect(self.corpus_path)
             conn.execute("""
@@ -917,11 +1139,15 @@ class BitSeed:
                     confidence REAL DEFAULT 0.5,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     reinforcement_count INTEGER DEFAULT 1,
-                    content_hash TEXT UNIQUE
+                    content_hash TEXT UNIQUE,
+                    domain TEXT
                 )
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_beliefs_subject ON beliefs(subject)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_beliefs_predicate ON beliefs(predicate)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_beliefs_object ON beliefs(object)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_beliefs_pred_obj ON beliefs(predicate, object)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_beliefs_subj_pred ON beliefs(subject, predicate)")
             conn.commit()
             conn.close()
         except Exception:

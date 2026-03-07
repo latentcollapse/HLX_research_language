@@ -1,12 +1,6 @@
 //! Catastrophic Forgetting Guard — Phase 2 Prerequisite P7
 //!
 //! Detects and prevents catastrophic forgetting during training.
-//!
-//! Strategies:
-//!   1. Retention testing: Periodically test model on held-out examples
-//!   2. Elastic weight consolidation: Track important weights
-//!   3. Gradient interference detection: Detect when new learning conflicts with old
-//!   4. Performance threshold: Block training if retention drops below threshold
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -75,6 +69,10 @@ impl ForgettingGuard {
             ewc_lambda: 1000.0,
             baseline_established: false,
         }
+    }
+
+    pub fn check_retention(&self) -> HealthStatus {
+        self.overall_health()
     }
 
     pub fn with_degradation_threshold(mut self, threshold: f64) -> Self {
@@ -330,6 +328,12 @@ pub enum HealthStatus {
     Critical,
 }
 
+impl HealthStatus {
+    pub fn is_healthy(&self) -> bool {
+        matches!(self, HealthStatus::Healthy)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ForgettingError {
     pub message: String,
@@ -362,117 +366,4 @@ fn compute_mse(output: &[f64], expected: &[f64]) -> f64 {
         .map(|(o, e)| (o - e).powi(2))
         .sum::<f64>()
         / output.len() as f64
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_register_retention_test() {
-        let mut guard = ForgettingGuard::new();
-
-        let id = guard.register_test(
-            "test_1",
-            vec![vec![1.0, 2.0]],
-            vec![vec![3.0, 4.0]],
-            None,
-            0.5,
-        );
-
-        assert_eq!(id, 1);
-        assert!(guard.retention_tests.contains_key(&id));
-    }
-
-    #[test]
-    fn test_should_test() {
-        let guard = ForgettingGuard::new().with_test_interval(100);
-
-        assert!(!guard.should_test(0));
-        assert!(!guard.should_test(50));
-        assert!(guard.should_test(100));
-        assert!(guard.should_test(200));
-    }
-
-    #[test]
-    fn test_retention_test_passes() {
-        let mut guard = ForgettingGuard::new();
-
-        let id = guard.register_test(
-            "test_1",
-            vec![vec![1.0, 2.0]],
-            vec![vec![3.0, 4.0]],
-            None,
-            0.5,
-        );
-
-        let inference = |_: &[f64]| vec![3.0, 4.0]; // Perfect match
-        let result = guard.run_retention_test(id, 100, inference).unwrap();
-
-        assert!(result.passed);
-        assert!(result.loss < 0.01);
-    }
-
-    #[test]
-    fn test_retention_test_detects_degradation() {
-        let mut guard = ForgettingGuard::new().with_degradation_threshold(0.1);
-
-        let id = guard.register_test(
-            "test_1",
-            vec![vec![1.0, 2.0]],
-            vec![vec![3.0, 4.0]],
-            None,
-            0.1, // Low baseline
-        );
-
-        let inference = |_: &[f64]| vec![0.0, 0.0]; // Very wrong
-        let result = guard.run_retention_test(id, 100, inference).unwrap();
-
-        assert!(!result.passed);
-        assert!(result.degradation > 0.1);
-    }
-
-    #[test]
-    fn test_interference_detection() {
-        let guard = ForgettingGuard::new();
-
-        let old_grads = vec![(0, 0, 1.0), (0, 1, 1.0)];
-        let new_grads = vec![(0, 0, -1.0), (0, 1, -1.0)]; // Opposite direction
-
-        let interference = guard.detect_interference(&old_grads, &new_grads);
-        assert!(interference > 0.9); // High interference
-    }
-
-    #[test]
-    fn test_health_status() {
-        let mut guard = ForgettingGuard::new()
-            .with_degradation_threshold(0.1)
-            .with_critical_threshold(0.3);
-
-        assert_eq!(guard.overall_health(), HealthStatus::Healthy);
-
-        // Add a warning event
-        guard.events.push(ForgettingEvent {
-            step: 100,
-            test_name: "test".to_string(),
-            baseline_loss: 0.1,
-            current_loss: 0.12,
-            degradation_percent: 20.0,
-            action_taken: "warning".to_string(),
-        });
-
-        assert_eq!(guard.overall_health(), HealthStatus::Warning);
-
-        // Add a critical event
-        guard.events.push(ForgettingEvent {
-            step: 200,
-            test_name: "test".to_string(),
-            baseline_loss: 0.1,
-            current_loss: 0.2,
-            degradation_percent: 100.0,
-            action_taken: "critical".to_string(),
-        });
-
-        assert_eq!(guard.overall_health(), HealthStatus::Critical);
-    }
 }

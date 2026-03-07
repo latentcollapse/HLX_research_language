@@ -1,101 +1,22 @@
-//! Simple Verification Example - The "SQLite Moment"
+//! Example: Embedding APE as a verification library
 //!
-//! This example shows how easy it is to get started with Axiom.
-//! Just 5 lines to verify agent code before execution.
-//!
-//! Run with: cargo run --example embed_verify
+//! APE is digital physics — embed it like SQLite.
 
-use ape::{AxiomEngine, AxiomResult};
+use ape::conscience::{ConscienceKernel, EffectClass};
+use std::collections::HashMap;
 
-fn main() -> AxiomResult<()> {
-    println!("=== Axiom Verification Example ===\n");
+fn main() {
+    let mut kernel = ConscienceKernel::new();
 
-    // -------------------- THE SQLITE MOMENT --------------------
-    // Just 5 lines, instant value, no complex setup
+    // Verify a safe operation
+    let mut fields = HashMap::new();
+    fields.insert("path".to_string(), "/tmp/output.txt".to_string());
+    let verdict = kernel.evaluate("WriteFile", &EffectClass::Write, &fields);
+    println!("Write to /tmp/output.txt: {:?}", verdict);
 
-    let engine = AxiomEngine::from_file("examples/policies/security.axm")?;
-
-    let verdict = engine.verify("WriteFile", &[
-        ("path", "/tmp/data.txt"),
-        ("content", "hello world"),
-    ])?;
-
-    if verdict.allowed() {
-        println!("✓ Policy allows this write");
-        println!("  Guidance: {}", verdict.guidance());
-
-        // Your code runs here
-        // In a real application, you would execute the actual file write
-        println!("\n[Simulated] Writing to /tmp/data.txt...");
-    } else {
-        println!("✗ Policy denied: {}", verdict.reason().unwrap());
-    }
-
-    // -----------------------------------------------------------
-
-    println!("\n=== Testing More Intents ===\n");
-
-    // Test 1: Safe read operation
-    println!("1. Testing safe file read:");
-    let verdict = engine.verify("ReadFile", &[("path", "/tmp/input.txt")])?;
-    if verdict.allowed() {
-        println!("   ✓ Safe path allowed");
-    } else {
-        println!("   ✗ Denied: {}", verdict.reason().unwrap());
-    }
-
-    // Test 2: Dangerous path (should be denied)
-    println!("\n2. Testing dangerous path:");
-    let verdict = engine.verify("ReadFile", &[("path", "/etc/shadow")])?;
-    if verdict.allowed() {
-        println!("   ✓ Allowed (unexpected!)");
-    } else {
-        println!("   ✗ Correctly denied: {}", verdict.reason().unwrap());
-    }
-
-    // Test 3: Network operation (should be denied without declared channel)
-    println!("\n3. Testing network operation:");
-    let verdict = engine.verify("SendData", &[
-        ("url", "http://example.com"),
-        ("data", "test payload"),
-    ])?;
-    if verdict.allowed() {
-        println!("   ✓ Allowed");
-    } else {
-        println!("   ✗ Denied: {}", verdict.reason().unwrap());
-    }
-
-    // Test 4: Safe data processing (NOOP effect)
-    println!("\n4. Testing safe data processing:");
-    let verdict = engine.verify("ProcessData", &[("input", "test data")])?;
-    if verdict.allowed() {
-        println!("   ✓ Safe operation allowed");
-    } else {
-        println!("   ✗ Denied: {}", verdict.reason().unwrap());
-    }
-
-    println!("\n=== Introspection ===\n");
-
-    // List all available intents
-    println!("Available intents in policy:");
-    for intent in engine.intents() {
-        println!("  - {}", intent);
-    }
-
-    // Get signature of an intent
-    if let Some(sig) = engine.intent_signature("WriteFile") {
-        println!("\nWriteFile signature:");
-        println!("  Takes:");
-        for (name, ty) in &sig.takes {
-            println!("    {} : {}", name, ty);
-        }
-        println!("  Gives:");
-        for (name, ty) in &sig.gives {
-            println!("    {} : {}", name, ty);
-        }
-        println!("  Effect: {}", sig.effect);
-        println!("  Conscience: {:?}", sig.conscience);
-    }
-
-    Ok(())
+    // Verify a dangerous operation — physics will deny this
+    let mut fields = HashMap::new();
+    fields.insert("path".to_string(), "/etc/shadow".to_string());
+    let verdict = kernel.evaluate("WriteFile", &EffectClass::Write, &fields);
+    println!("Write to /etc/shadow: {:?}", verdict);
 }

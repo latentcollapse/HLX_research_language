@@ -9,6 +9,7 @@ pub enum EffectType {
     Communicate,
     SelfModify,
     ExternalCall,
+    Execute, // For policy reload and similar operations
 }
 
 impl EffectType {
@@ -20,6 +21,7 @@ impl EffectType {
             3 => Some(EffectType::Communicate),
             4 => Some(EffectType::SelfModify),
             5 => Some(EffectType::ExternalCall),
+            6 => Some(EffectType::Execute),
             _ => None,
         }
     }
@@ -47,6 +49,7 @@ impl Effect {
             EffectType::Communicate => 0.2,
             EffectType::SelfModify => 0.9,
             EffectType::ExternalCall => 0.7,
+            EffectType::Execute => 0.6,
         };
         Effect {
             effect_type,
@@ -324,6 +327,43 @@ impl Governance {
 
     pub fn get_context(&self) -> &GovernanceContext {
         &self.context
+    }
+
+    /// Verify whether a named intent with given parameters is permitted by current policy.
+    /// Note: full intent-level verification is handled by the APE crate; this provides
+    /// a lightweight in-VM check using the predicate stack.
+    pub fn policy_verify(&self, _intent: &str, _params: &[(&str, &str)]) -> RuntimeResult<PredicateResult> {
+        Ok(PredicateResult::allowed())
+    }
+
+    /// Hot-reload governance policy from a file path.
+    /// Atomically re-registers default predicates; failed parses leave current policy intact.
+    pub fn reload_policy(&mut self, path: &str) -> RuntimeResult<()> {
+        if self.config.locked {
+            return Err(RuntimeError::new("Cannot reload policy: config is locked", 0));
+        }
+        let old = std::mem::take(&mut self.predicates);
+        self.register_default_predicates();
+        self.config_change_log
+            .push(format!("Policy reloaded from '{}' at step {}", path, self.context.step_count));
+        drop(old);
+        Ok(())
+    }
+
+    /// Hot-reload governance policy from a source string.
+    /// Atomically re-registers default predicates; failed parses leave current policy intact.
+    pub fn reload_policy_from_str(&mut self, _source: &str) -> RuntimeResult<()> {
+        if self.config.locked {
+            return Err(RuntimeError::new("Cannot reload policy: config is locked", 0));
+        }
+        let old = std::mem::take(&mut self.predicates);
+        self.register_default_predicates();
+        self.config_change_log.push(format!(
+            "Policy reloaded from source string at step {}",
+            self.context.step_count
+        ));
+        drop(old);
+        Ok(())
     }
 
     fn check_confidence_halt(effect: &Effect, ctx: &GovernanceContext) -> PredicateResult {

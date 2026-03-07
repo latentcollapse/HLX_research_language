@@ -149,6 +149,7 @@ pub struct Guard {
 }
 
 /// The Conscience Kernel
+#[derive(Clone)]
 pub struct ConscienceKernel {
     /// Predicate registry — append-only (asymmetric ratchet)
     predicates: Vec<Predicate>,
@@ -883,7 +884,14 @@ impl ConscienceKernel {
                             // C4: Actually enforce — deny Execute on unverified data
                             // Only applies when the intent carries data to execute
                             let has_data_fields = fields.keys().any(|k| {
-                                k == "code" || k == "script" || k == "command" || k == "payload"
+                                k == "code"
+                                    || k == "script"
+                                    || k == "command"
+                                    || k == "payload"
+                                    || k == "program"
+                                    || k == "cmd"
+                                    || k == "query"
+                                    || k == "input"
                             });
                             if has_data_fields {
                                 let verified =
@@ -1169,7 +1177,7 @@ mod tests {
     fn test_destructive_intent_allowed_when_authorized() {
         let mut kernel = ConscienceKernel::new();
         // Need an explicit allow for Write effect
-        kernel.add_restriction(
+        let _ = kernel.add_restriction(
             "allow_write".to_string(),
             "test".to_string(),
             vec![EffectClass::Write],
@@ -1219,7 +1227,7 @@ mod tests {
         let snapshot = kernel.snapshot();
 
         // Add a restriction during the scope
-        kernel.add_restriction(
+        let _ = kernel.add_restriction(
             "new_restriction".to_string(),
             "test".to_string(),
             vec![EffectClass::Write],
@@ -1252,7 +1260,7 @@ mod tests {
     fn test_append_only_ratchet() {
         let mut kernel = ConscienceKernel::new();
         let initial = kernel.predicate_count();
-        kernel.add_restriction(
+        let _ = kernel.add_restriction(
             "test_restriction".to_string(),
             "Test".to_string(),
             vec![EffectClass::Write],
@@ -1289,7 +1297,7 @@ mod tests {
     fn test_trust_required_enforced() {
         // M1: TrustRequired predicates now actually enforce
         let mut kernel = ConscienceKernel::new();
-        kernel.add_restriction(
+        let _ = kernel.add_restriction(
             "trust_gate".to_string(),
             "Require verified trust".to_string(),
             vec![EffectClass::Read],
@@ -1326,7 +1334,10 @@ mod tests {
         // Second evaluation — pre_hash should be post_hash of first
         let _ = kernel.evaluate("WriteFile", &EffectClass::Write, &fields);
         assert_eq!(kernel.intent_log.len(), 2);
-        assert_eq!(kernel.intent_log[1].pre_hash, kernel.intent_log[0].post_hash);
+        assert_eq!(
+            kernel.intent_log[1].pre_hash,
+            kernel.intent_log[0].post_hash
+        );
 
         // Verify chain integrity
         assert!(kernel.verify_audit_chain().is_ok());
@@ -1349,7 +1360,12 @@ mod tests {
                 vec![EffectClass::Read],
                 PredicateRule::AlwaysAllow,
             );
-            assert!(result.is_ok(), "Failed to add predicate {} of {}", i, remaining);
+            assert!(
+                result.is_ok(),
+                "Failed to add predicate {} of {}",
+                i,
+                remaining
+            );
         }
 
         // Adding one more should fail

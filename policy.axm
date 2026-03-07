@@ -1,52 +1,87 @@
-// APE Policy for HLX Governance
-// Minimal policy to test APE integration
+// APE Policy for HLX Governance v1.1
+// "Scorched Earth" Hardening Pass
 
 module hlx_governance {
+    // ------------------------------------------------------------------
+    // CORE SYSTEM INTENTS
+    // ------------------------------------------------------------------
+
     intent RunCommand {
         takes: command: String, verified: String;
         gives: result: String;
         effect: EXECUTE;
-        conscience: no_bypass_verification;
-    }
-
-    intent GenerateResponse {
-        takes: output: String, verified: String;
-        gives: result: String;
-        effect: EXECUTE;
-        conscience: no_bypass_verification, harmless;
+        conscience: hardened_validation;
     }
 
     intent EvalCode {
         takes: code: String, verified: String;
         gives: result: String;
         effect: EXECUTE;
-        conscience: no_bypass_verification, no_dangerous_code;
+        conscience: hardened_validation, no_dangerous_code;
+    }
+
+    intent ReloadGovernance {
+        takes: source: String, verified: String, provenance_hash: String;
+        gives: success: bool;
+        effect: EXECUTE;
+        conscience: hardened_validation, recursive_integrity;
+    }
+
+    // ------------------------------------------------------------------
+    // AGENT INTENTS
+    // ------------------------------------------------------------------
+
+    intent SendMessage {
+        takes: target_id: i64, payload: any;
+        gives: success: bool;
+        effect: MODIFY;
+        conscience: no_spoofing;
     }
 }
 
-// Conscience predicates
-fn no_bypass_verification(verified: String) -> bool {
-    verified == "true"
+// ------------------------------------------------------------------
+// CONSCIENCE PREDICATES
+// ------------------------------------------------------------------
+
+fn hardened_validation(verified: String) -> bool {
+    // Basic verification gate
+    if verified != "true" {
+        return false;
+    }
+    true
 }
 
-fn harmless(output: String) -> bool {
-    // Block obviously harmful patterns
-    let harmful = ["rm -rf", "drop table", "exec(", "system("];
-    for pattern in harmful {
-        if output.contains(pattern) {
+fn recursive_integrity(source: String, provenance_hash: String) -> bool {
+    // FORBID hot-reload if provenance is missing or too short
+    if provenance_hash.len() < 32 {
+        return false;
+    }
+    
+    // FORBID hot-reload if the source tries to downgrade the policy
+    if source.contains("ALWAYS_ALLOW") {
+        return false;
+    }
+    
+    true
+}
+
+fn no_dangerous_code(code: String) -> bool {
+    // Block dangerous patterns in generated code
+    // Expansion: block common bypass patterns found in audit
+    let dangerous = [
+        "rm -rf", "drop table", "exec(", "system(", "std::process",
+        "/etc/shadow", "/etc/passwd", "chmod", "chown", "curl ", "wget ",
+        "socat", "nc ", "netcat"
+    ];
+    for pattern in dangerous {
+        if code.contains(pattern) {
             return false;
         }
     }
     true
 }
 
-fn no_dangerous_code(code: String) -> bool {
-    // Block dangerous patterns in generated code
-    let dangerous = ["rm -rf", "drop table", "exec(", "system(", "std::process"];
-    for pattern in dangerous {
-        if code.contains(pattern) {
-            return false;
-        }
-    }
+fn no_spoofing() -> bool {
+    // Reserved for future integration with Vm::current_agent check
     true
 }

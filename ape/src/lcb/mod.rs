@@ -3,8 +3,34 @@
 //! Every value has exactly one binary representation. This is A3 made concrete.
 //! BLAKE3(LC-B(value)) is the identity of any value.
 
+use crate::trust::TrustLevel;
 use std::collections::BTreeMap;
-use crate::interpreter::value::{ContractValue, Value};
+
+/// APE's canonical value type for wire-format serialization.
+/// Every value has exactly one LC-B encoding. BLAKE3(LC-B(value)) = identity.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Value {
+    I64(i64),
+    F64(f64),
+    Bool(bool),
+    String(String),
+    Bytes(Vec<u8>),
+    Handle(String),
+    Array(Vec<Value>),
+    Map(BTreeMap<String, Value>),
+    Contract(ContractValue),
+    Enum(String, String),
+    Sealed(Box<Value>),
+    Provenance(TrustLevel),
+    Void,
+}
+
+/// A contract (struct) value with named fields
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContractValue {
+    pub name: String,
+    pub fields: BTreeMap<String, Value>,
+}
 
 /// Tag bytes for LC-B encoding (Section 11.1)
 pub mod tags {
@@ -159,7 +185,9 @@ fn encode_value(value: &Value, buf: &mut Vec<u8>) {
         // In a real system this would HALT. Here we encode a marker for debugging
         // but this path should never be reached if the interpreter enforces correctly.
         Value::Sealed(_) => {
-            panic!("RT-01: Attempted to serialize Sealed value — this violates Axiom safety invariant");
+            panic!(
+                "RT-01: Attempted to serialize Sealed value — this violates Axiom safety invariant"
+            );
         }
         // RT-06: Provenance as first-class value
         Value::Provenance(level) => {
@@ -375,11 +403,7 @@ mod tests {
 
     #[test]
     fn test_roundtrip_array() {
-        let val = Value::Array(vec![
-            Value::I64(1),
-            Value::I64(2),
-            Value::I64(3),
-        ]);
+        let val = Value::Array(vec![Value::I64(1), Value::I64(2), Value::I64(3)]);
         let encoded = encode(&val);
         let decoded = decode(&encoded).unwrap();
         assert_eq!(val, decoded);

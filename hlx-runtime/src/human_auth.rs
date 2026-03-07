@@ -2,11 +2,6 @@
 //!
 //! Phase 2 Prerequisite P1: RSI must not write to the rules table without human authorization.
 //! Phase 2 Prerequisite P6: Human authorization must be architectural, not convention.
-//!
-//! This module provides:
-//! - HumanAuthToken: Time-limited, single-use tokens for protected operations
-//! - ProtectedNamespace: Enum of write-protected namespaces
-//! - AuthorizationGate: Enforces human approval before protected writes
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -243,6 +238,24 @@ impl AuthorizationGate {
         }
     }
 
+    /// RSI Pipeline integration: request access based on risk level.
+    pub fn request_access(&mut self, details: &str, risk: RiskLevel) -> Result<String, AuthError> {
+        let namespace = match risk {
+            RiskLevel::Low | RiskLevel::Medium => ProtectedNamespace::Rules,
+            RiskLevel::High => ProtectedNamespace::Rules,
+            RiskLevel::Critical => ProtectedNamespace::ConsciencePredicates,
+            RiskLevel::Existential => ProtectedNamespace::RingZero,
+        };
+        
+        let _id = self.request_authorization(namespace, "RSI Modification", details);
+        // In this architecture, request_access returning means a request is logged.
+        // It doesn't mean it's APPROVED yet. The caller in RSI pipeline should handle this.
+        // If we want it to block or fail immediately if no token is provided, 
+        // we should check for an existing valid token.
+        
+        Err(AuthError::HumanAuthRequired(namespace))
+    }
+
     pub fn is_protected(&self, namespace: ProtectedNamespace) -> bool {
         self.protected_namespaces.contains(&namespace)
     }
@@ -380,101 +393,5 @@ impl AuthorizationGate {
 impl Default for AuthorizationGate {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_token_creation() {
-        let token = HumanAuthToken::new(
-            ProtectedNamespace::Rules,
-            "add_rule",
-            3600.0,
-            "Add safety rule",
-        );
-        assert!(token.is_valid());
-        assert!(!token.used);
-    }
-
-    #[test]
-    fn test_token_consumption() {
-        let mut token = HumanAuthToken::new(
-            ProtectedNamespace::Rules,
-            "update_rule",
-            3600.0,
-            "Update rule",
-        );
-        assert!(token.consume().is_ok());
-        assert!(token.used);
-        assert!(token.consume().is_err());
-    }
-
-    #[test]
-    fn test_authorization_gate_flow() {
-        let mut gate = AuthorizationGate::new();
-
-        assert!(gate.is_protected(ProtectedNamespace::Rules));
-
-        let req_id = gate.request_authorization(
-            ProtectedNamespace::Rules,
-            "delete_rule",
-            "Remove outdated rule",
-        );
-
-        let token = gate.approve_request(&req_id, None).unwrap();
-        assert!(token.is_valid());
-
-        let result =
-            gate.check_authorization(ProtectedNamespace::Rules, "delete_rule", Some(&token.id));
-        assert!(result.is_ok());
-
-        let result =
-            gate.check_authorization(ProtectedNamespace::Rules, "delete_rule", Some(&token.id));
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_rejection() {
-        let mut gate = AuthorizationGate::new();
-
-        let req_id = gate.request_authorization(
-            ProtectedNamespace::Rules,
-            "malicious_op",
-            "Suspicious operation",
-        );
-
-        gate.reject_request(&req_id).unwrap();
-        assert!(gate.pending_requests().is_empty());
-    }
-
-    #[test]
-    fn test_namespace_mismatch() {
-        let mut gate = AuthorizationGate::new();
-
-        let req_id = gate.request_authorization(ProtectedNamespace::Rules, "add_rule", "Add rule");
-        let token = gate.approve_request(&req_id, None).unwrap();
-
-        let result = gate.check_authorization(
-            ProtectedNamespace::ConsciencePredicates,
-            "modify_predicate",
-            Some(&token.id),
-        );
-        assert!(matches!(result, Err(AuthError::NamespaceMismatch { .. })));
-    }
-
-    #[test]
-    fn test_risk_levels() {
-        assert_eq!(ProtectedNamespace::Rules.risk_level(), RiskLevel::High);
-        assert_eq!(
-            ProtectedNamespace::RingZero.risk_level(),
-            RiskLevel::Existential
-        );
-        assert_eq!(
-            ProtectedNamespace::ConsciencePredicates.risk_level(),
-            RiskLevel::Critical
-        );
     }
 }

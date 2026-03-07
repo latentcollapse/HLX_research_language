@@ -1,20 +1,25 @@
 [package]
 name = "ape"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-description = "APE (Axiom Policy Engine) — verification-first policy engine for AI agents"
+description = "APE (Axiom Policy Engine) — embeddable digital physics for AI agents (SQLite-style)"
 license = "AGPL-3.0-only"
 repository = "https://github.com/latentcollapse/hlx-compiler"
 
 [lib]
 name = "ape"
 path = "src/lib.rs"
-crate-type = ["rlib"]
+crate-type = ["rlib", "cdylib"]
 
 [[bin]]
 name = "ape"
 path = "src/main.rs"
 
+[features]
+default = []
+python = ["pyo3"]
+
 [dependencies]
 blake3 = "1"
 regex = "1"
+pyo3 = { version = "0.22", features = ["extension-module"], optional = true }
