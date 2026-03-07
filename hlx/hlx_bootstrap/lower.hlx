@@ -70,6 +70,10 @@ fn INST_EFFECT_CLASSIFY() -> i64 { return 251; }
 fn INST_TRUST_VERIFY() -> i64 { return 252; }
 fn INST_MODIFY_PROPOSE() -> i64 { return 253; }
 fn INST_MODIFY_APPLY() -> i64 { return 254; }
+// Phase 5 (Ouroboros): Exception handling opcodes
+fn INST_TRY() -> i64 { return 310; }
+fn INST_ENDTRY() -> i64 { return 311; }
+fn INST_THROW() -> i64 { return 312; }
 
 // AST Node Type Constants (from parser.hlx)
 fn EXPR_INT() -> i64 { return 1; }
@@ -401,6 +405,26 @@ fn make_inst_return(val: i64) -> [i64] {
     let inst = [0, 0];
     inst = set_at(inst, 0, INST_RETURN());
     inst = set_at(inst, 1, val);
+    return inst;
+}
+
+fn make_inst_try(catch_pc: i64) -> [i64] {
+    let inst = [0, 0];
+    inst = set_at(inst, 0, INST_TRY());
+    inst = set_at(inst, 1, catch_pc);
+    return inst;
+}
+
+fn make_inst_endtry() -> [i64] {
+    let inst = [0];
+    inst = set_at(inst, 0, INST_ENDTRY());
+    return inst;
+}
+
+fn make_inst_throw(value_reg: i64) -> [i64] {
+    let inst = [0, 0];
+    inst = set_at(inst, 0, INST_THROW());
+    inst = set_at(inst, 1, value_reg);
     return inst;
 }
 
@@ -1311,6 +1335,257 @@ fn lower_stmt(state: [i64], stmt_node: [i64]) -> [i64] {
                 state = patch_instruction(state, jump_pc, end_jump);
                 p = p + 1;
             }
+        },
+        // ============================================================================
+        // PHASE 5 (OUROBOROS): AXIOMATIC SYNTAX
+        // ============================================================================
+        50 => {  // STMT_TRY — try/catch block
+            // [50, error_var_i64, try_body_ptr, catch_body_ptr]
+            let error_var = get_at(stmt_node, 1);
+            let try_body = int_to_ptr(get_at(stmt_node, 2));
+            let catch_body = int_to_ptr(get_at(stmt_node, 3));
+
+            // Emit TRY instruction — catch_pc placeholder (patched below)
+            let try_pc = get_pc(state);
+            let try_placeholder = make_inst_try(0);
+            state = emit(state, try_placeholder);
+
+            // Lower try body
+            let i = 0;
+            let try_len = array_len(try_body);
+            loop(i < try_len, 1000) {
+                let s = int_to_ptr(get_at(try_body, i));
+                state = lower_stmt(state, s);
+                i = i + 1;
+            }
+
+            // Emit ENDTRY (normal exit from try block)
+            let endtry_inst = make_inst_endtry();
+            state = emit(state, endtry_inst);
+
+            // Emit jump to skip over catch block
+            let skip_pc = get_pc(state);
+            let skip_placeholder = make_inst_jump(0);
+            state = emit(state, skip_placeholder);
+
+            // Patch TRY to point here (catch handler start)
+            let catch_start = get_pc(state);
+            let try_inst = make_inst_try(catch_start);
+            state = patch_instruction(state, try_pc, try_inst);
+
+            // Bind error variable if present
+            if error_var != 0 {
+                let err_name = int_to_ptr(error_var);
+                let alloc_result = alloc_reg(state);
+                let err_reg = get_at(alloc_result, 0);
+                state = int_to_ptr(get_at(alloc_result, 1));
+                state = bind_var(state, err_name, err_reg);
+            }
+
+            // Lower catch body
+            i = 0;
+            let catch_len = array_len(catch_body);
+            loop(i < catch_len, 1000) {
+                let s = int_to_ptr(get_at(catch_body, i));
+                state = lower_stmt(state, s);
+                i = i + 1;
+            }
+
+            // Patch skip jump to after catch block
+            let exit_pc = get_pc(state);
+            let skip_inst = make_inst_jump(exit_pc);
+            state = patch_instruction(state, skip_pc, skip_inst);
+        },
+        51 => {  // STMT_THROW
+            // [51, value_expr_ptr, 0, 0]
+            let value_node = int_to_ptr(get_at(stmt_node, 1));
+            let value_result = lower_expr(state, value_node);
+            let value_reg = get_at(value_result, 0);
+            state = int_to_ptr(get_at(value_result, 1));
+
+            let inst = make_inst_throw(value_reg);
+            state = emit(state, inst);
+        },
+        52 => {  // STMT_INTENT — governance intent declaration
+            // [52, intent_name_i64, intent_body_ptr, 0]
+            let intent_body = int_to_ptr(get_at(stmt_node, 2));
+
+            // Intent declarations emit a govern check tagged as "intent"
+            let effect_label = "intent";
+            let conscience = [];
+            let inst = make_inst_govern_check(effect_label, conscience);
+            state = emit(state, inst);
+
+            // Lower intent body (typically govern clauses)
+            let i = 0;
+            let body_len = array_len(intent_body);
+            loop(i < body_len, 1000) {
+                let s = int_to_ptr(get_at(intent_body, i));
+                state = lower_stmt(state, s);
+                i = i + 1;
+            }
+        },
+        53 => {  // STMT_FOR — for x in iterable { ... }
+            // [53, var_name_i64, iterable_expr_ptr, for_body_ptr]
+            let var_name = get_at(stmt_node, 1);
+            let iterable_node = int_to_ptr(get_at(stmt_node, 2));
+            let for_body = int_to_ptr(get_at(stmt_node, 3));
+
+            // Lower iterable expression
+            let iter_result = lower_expr(state, iterable_node);
+            let iter_reg = get_at(iter_result, 0);
+            state = int_to_ptr(get_at(iter_result, 1));
+
+            // Allocate index register, initialize to 0
+            let idx_result = alloc_reg(state);
+            let idx_reg = get_at(idx_result, 0);
+            state = int_to_ptr(get_at(idx_result, 1));
+            let zero_inst = make_inst_constant(idx_reg, 0, 0);
+            state = emit(state, zero_inst);
+
+            // Allocate len register, call array_len(iter)
+            let len_result = alloc_reg(state);
+            let len_reg = get_at(len_result, 0);
+            state = int_to_ptr(get_at(len_result, 1));
+            let len_args = [iter_reg];
+            let len_call = make_inst_call(len_reg, "array_len", len_args);
+            state = emit(state, len_call);
+
+            // Allocate element register (bound to loop variable)
+            let elem_result = alloc_reg(state);
+            let elem_reg = get_at(elem_result, 0);
+            state = int_to_ptr(get_at(elem_result, 1));
+            if var_name != 0 {
+                let vn = int_to_ptr(var_name);
+                state = bind_var(state, vn, elem_reg);
+            }
+
+            // Loop start: compute condition idx < len
+            let loop_start = get_pc(state);
+            let cond_result = alloc_reg(state);
+            let cond_reg = get_at(cond_result, 0);
+            state = int_to_ptr(get_at(cond_result, 1));
+            let cmp_inst = make_inst_binop(INST_LT(), cond_reg, idx_reg, len_reg);
+            state = emit(state, cmp_inst);
+
+            // Reserve loop instruction slot
+            let loop_pc = get_pc(state);
+            let loop_placeholder = make_inst_jump(0);
+            state = emit(state, loop_placeholder);
+            state = push_loop(state, loop_start);
+
+            // Body start: load element at current index
+            let body_pc = get_pc(state);
+            let get_inst = make_inst_get_element(elem_reg, iter_reg, idx_reg);
+            state = emit(state, get_inst);
+
+            // Lower for body
+            let i = 0;
+            let body_len = array_len(for_body);
+            loop(i < body_len, 1000) {
+                let s = int_to_ptr(get_at(for_body, i));
+                state = lower_stmt(state, s);
+                i = i + 1;
+            }
+
+            // Increment index
+            let one_result = alloc_reg(state);
+            let one_reg = get_at(one_result, 0);
+            state = int_to_ptr(get_at(one_result, 1));
+            let one_inst = make_inst_constant(one_reg, 1, 0);
+            state = emit(state, one_inst);
+
+            let new_idx_result = alloc_reg(state);
+            let new_idx_reg = get_at(new_idx_result, 0);
+            state = int_to_ptr(get_at(new_idx_result, 1));
+            let inc_inst = make_inst_binop(INST_ADD(), new_idx_reg, idx_reg, one_reg);
+            state = emit(state, inc_inst);
+            let mov_inst = make_inst_move(idx_reg, new_idx_reg);
+            state = emit(state, mov_inst);
+
+            // Jump back to condition
+            let back_jump = make_inst_jump(loop_start);
+            state = emit(state, back_jump);
+            let exit_pc = get_pc(state);
+
+            // Patch loop instruction
+            let loop_inst = make_inst_loop(cond_reg, body_pc, 100000);
+            state = patch_instruction(state, loop_pc, loop_inst);
+
+            // Patch break statements
+            let loop_entry = get_current_loop(state);
+            let patches = int_to_ptr(get_at(loop_entry, 1));
+            i = 0;
+            let patches_len = array_len(patches);
+            loop(i < patches_len, 1000) {
+                let patch_pc = get_at(patches, i);
+                let break_jump = make_inst_jump(exit_pc);
+                state = patch_instruction(state, patch_pc, break_jump);
+                i = i + 1;
+            }
+            state = pop_loop(state);
+        },
+        54 => {  // STMT_WHILE — while condition { ... }
+            // [54, cond_expr_ptr, while_body_ptr, 0]
+            let cond_node = int_to_ptr(get_at(stmt_node, 1));
+            let while_body = int_to_ptr(get_at(stmt_node, 2));
+
+            let loop_start = get_pc(state);
+
+            // Lower condition
+            let cond_result = lower_expr(state, cond_node);
+            let cond_reg = get_at(cond_result, 0);
+            state = int_to_ptr(get_at(cond_result, 1));
+
+            // Reserve loop instruction slot
+            let loop_pc = get_pc(state);
+            let loop_placeholder = make_inst_jump(0);
+            state = emit(state, loop_placeholder);
+            state = push_loop(state, loop_start);
+
+            // Lower body
+            let body_pc = get_pc(state);
+            let i = 0;
+            let body_len = array_len(while_body);
+            loop(i < body_len, 1000) {
+                let s = int_to_ptr(get_at(while_body, i));
+                state = lower_stmt(state, s);
+                i = i + 1;
+            }
+
+            // Jump back to condition
+            let back_jump = make_inst_jump(loop_start);
+            state = emit(state, back_jump);
+            let exit_pc = get_pc(state);
+
+            // Patch loop instruction
+            let loop_inst = make_inst_loop(cond_reg, body_pc, 1000000);
+            state = patch_instruction(state, loop_pc, loop_inst);
+
+            // Patch break statements
+            let loop_entry = get_current_loop(state);
+            let patches = int_to_ptr(get_at(loop_entry, 1));
+            i = 0;
+            let patches_len = array_len(patches);
+            loop(i < patches_len, 1000) {
+                let patch_pc = get_at(patches, i);
+                let break_jump = make_inst_jump(exit_pc);
+                state = patch_instruction(state, patch_pc, break_jump);
+                i = i + 1;
+            }
+            state = pop_loop(state);
+        },
+        55 => {  // STMT_STRUCT — struct type declaration
+            // [55, struct_name_i64, fields_ptr, 0]
+            // Struct definitions are compile-time type declarations;
+            // no runtime instructions are emitted in the bootstrap compiler.
+        },
+        56 => {  // STMT_EXTERN — extern function declaration
+            // [56, fn_stmt_ptr, 0, 0]
+            // Lower the wrapped function statement normally;
+            // external linkage is resolved at load time.
+            let fn_stmt = int_to_ptr(get_at(stmt_node, 1));
+            state = lower_stmt(state, fn_stmt);
         },
         _ => {
             print("Error: unknown statement type ");

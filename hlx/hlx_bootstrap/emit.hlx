@@ -37,6 +37,10 @@ fn INST_CONTRACT_GET() -> i64 { return 91; }
 fn INST_CONTRACT_SET() -> i64 { return 92; }
 fn INST_COLLAPSE() -> i64 { return 93; }
 fn INST_RESOLVE() -> i64 { return 94; }
+// Phase 5 (Ouroboros): Exception handling opcodes
+fn INST_TRY() -> i64 { return 310; }
+fn INST_ENDTRY() -> i64 { return 311; }
+fn INST_THROW() -> i64 { return 312; }
 
 // ============================================================================
 // Binary Emission Helpers
@@ -285,6 +289,22 @@ fn emit_instruction(output: [i64], inst: [i64]) -> [i64] {
 
             output = emit_u32(output, out);
             output = emit_u32(output, handle);
+        },
+        // ============================================================================
+        // PHASE 5 (OUROBOROS): EXCEPTION HANDLING OPCODES
+        // ============================================================================
+        310 => {  // INST_TRY — push exception handler
+            // Operand: catch_pc (u32)
+            let catch_pc = get_at(inst, 1);
+            output = emit_u32(output, catch_pc);
+        },
+        311 => {  // INST_ENDTRY — pop exception handler (normal exit)
+            // No operands
+        },
+        312 => {  // INST_THROW — raise exception
+            // Operand: value_reg (u32)
+            let value_reg = get_at(inst, 1);
+            output = emit_u32(output, value_reg);
         },
         _ => {
             print("Error: unknown opcode ");
