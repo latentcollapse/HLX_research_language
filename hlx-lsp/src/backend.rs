@@ -106,7 +106,8 @@ impl LanguageServer for HlxBackend {
         if let Some(content) = docs.get(&params.text_document_position_params.text_document.uri) {
             let position = params.text_document_position_params.position;
             
-            if let Some(location) = analysis::goto_definition(content, position.line, position.character) {
+            let uri = params.text_document_position_params.text_document.uri.clone();
+            if let Some(location) = analysis::goto_definition(content, position.line, position.character, uri) {
                 return Ok(Some(GotoDefinitionResponse::Scalar(location)));
             }
         }

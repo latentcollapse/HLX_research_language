@@ -116,6 +116,12 @@ pub enum Opcode {
     MemoryAddWeight = 293,
     MapCreate = 300,
     MapSet = 301,
+    /// Try: push exception handler. Operands: catch_pc (u32), error_reg (u8)
+    Try = 310,
+    /// EndTry: pop exception handler (normal completion of try block)
+    EndTry = 311,
+    /// Throw: raise a catchable error from error_reg (u8)
+    Throw = 312,
 }
 
 impl Opcode {
@@ -208,6 +214,9 @@ impl Opcode {
             293 => Some(Opcode::MemoryAddWeight),
             300 => Some(Opcode::MapCreate),
             301 => Some(Opcode::MapSet),
+            310 => Some(Opcode::Try),
+            311 => Some(Opcode::EndTry),
+            312 => Some(Opcode::Throw),
             _ => None,
         }
     }

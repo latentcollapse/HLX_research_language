@@ -9,6 +9,8 @@ use crate::{Bytecode, Lowerer};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+// Phase 25: blake3 for source hash computation
+
 /// Compiled module with bytecode and export table (Phase 3.1)
 #[derive(Debug, Clone)]
 pub struct CompiledModule {
@@ -18,6 +20,11 @@ pub struct CompiledModule {
     pub exports: HashMap<String, (u32, u32)>,
     /// AST functions for re-export (used when this module is imported by another)
     pub ast_functions: HashMap<String, Function>,
+    /// Phase 25: Module version — incremented on each recompilation/hot-swap.
+    /// Prevents zombie bytecode from conflicting with new logic during SMI.
+    pub version: u64,
+    /// Phase 25: Source hash for change detection.
+    pub source_hash: String,
 }
 
 /// Module cache for multi-file compilation (Phase 3.1)
@@ -27,6 +34,8 @@ pub struct ModuleCache {
     modules: HashMap<PathBuf, CompiledModule>,
     /// Track modules currently being compiled (for cycle detection)
     in_progress: HashSet<PathBuf>,
+    /// Phase 25: Global version counter — monotonically increasing
+    next_version: u64,
 }
 
 impl ModuleCache {
@@ -34,7 +43,28 @@ impl ModuleCache {
         ModuleCache {
             modules: HashMap::new(),
             in_progress: HashSet::new(),
+            next_version: 1,
         }
+    }
+
+    /// Phase 25: Allocate the next version number
+    fn alloc_version(&mut self) -> u64 {
+        let v = self.next_version;
+        self.next_version += 1;
+        v
+    }
+
+    /// Phase 25: Check if a module needs recompilation (source hash changed)
+    pub fn needs_recompile(&self, path: &Path, source_hash: &str) -> bool {
+        match self.modules.get(path) {
+            Some(m) => m.source_hash != source_hash,
+            None => true,
+        }
+    }
+
+    /// Phase 25: Get the version of a cached module
+    pub fn get_version(&self, path: &Path) -> Option<u64> {
+        self.modules.get(path).map(|m| m.version)
     }
 
     /// Get compiled module from cache
@@ -139,12 +169,18 @@ impl ModuleCache {
             }
         }
 
+        // Phase 25: Compute source hash and allocate version
+        let source_hash = blake3::hash(source.as_bytes()).to_hex().to_string();
+        let version = self.alloc_version();
+
         // Create compiled module
         let module = CompiledModule {
             path: file_path.to_path_buf(),
             bytecode,
             exports,
             ast_functions,
+            version,
+            source_hash,
         };
 
         // Cache and return

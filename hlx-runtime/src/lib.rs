@@ -10,6 +10,7 @@ mod dd_protocol;
 mod debugger;
 mod forgetting_guard;
 mod governance;
+mod gpu_dispatch;
 mod homeostasis;
 mod human_auth;
 mod integrity;
@@ -17,6 +18,9 @@ mod lora_adapter;
 mod lowerer;
 mod memory_pool;
 mod module_cache;
+mod network;
+mod parallel_runner;
+mod proof_trace;
 mod promotion;
 mod resolver;
 mod rsi;
@@ -29,9 +33,9 @@ mod vm;
 
 pub use agent::{Agent, AgentPool, AgentState};
 pub use ast::{
-    walk_program, AgentDef, AstDiffBatch, ClusterDef, Function, Item, ModificationTarget, Mutation,
-    MutationBatch, NodeCounter, NodeId, Program, Render, Statement, TypeAnnotation, VisitResult,
-    Visitor,
+    walk_program, AgentDef, AstDiffBatch, ClusterDef, Function, Item, ModificationTarget,
+    ModuleDef, Mutation, MutationBatch, NodeCounter, NodeId, Program, Render, Statement,
+    StructDef, TypeAnnotation, VisitResult, Visitor,
 };
 pub use ast_parser::{AstParser, ParseError, Token};
 pub use bond::{
@@ -51,6 +55,7 @@ pub use forgetting_guard::{
     ForgettingError, ForgettingEvent, ForgettingGuard, HealthStatus, RetentionResult,
     RetentionTest, WeightImportance,
 };
+pub use gpu_dispatch::{ComputeBackend, GpuDispatch, GpuInfo};
 pub use governance::{
     ConfigError, Effect, EffectType, Governance, GovernanceConfig, GovernanceContext,
     GovernanceRegistry, PredicateResult,
@@ -74,6 +79,9 @@ pub use memory_pool::{
     Question,
 };
 pub use module_cache::{CompiledModule, ImportStyle, ModuleCache};
+pub use network::{NetworkTransport, NodeId as NetNodeId, Peer, WireMessage, WireMessageType};
+pub use parallel_runner::{ParallelRunner};
+pub use proof_trace::{ConscienceRecord, ProofAction, ProofStep, ProofTrace};
 pub use promotion::{
     CriteriaProgress, ModificationTypeClass, PromotionCriteria, PromotionGate, PromotionLevel,
 };
@@ -99,6 +107,9 @@ pub struct RuntimeError {
     pub line: u32,
     /// HLX call stack at the time of error (innermost first)
     pub call_stack: Vec<String>,
+    /// Fatal errors (MaxSteps, MemoryExhaustion, Shutdown) bypass try/catch handlers.
+    /// Only logical/intent errors are catchable.
+    pub fatal: bool,
 }
 
 impl RuntimeError {
@@ -108,6 +119,17 @@ impl RuntimeError {
             pc,
             line: 0,
             call_stack: Vec::new(),
+            fatal: false,
+        }
+    }
+
+    pub fn fatal(message: impl Into<String>, pc: usize) -> Self {
+        RuntimeError {
+            message: message.into(),
+            pc,
+            line: 0,
+            call_stack: Vec::new(),
+            fatal: true,
         }
     }
 }

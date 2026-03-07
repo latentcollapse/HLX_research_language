@@ -130,6 +130,10 @@ impl AgentPool {
         id
     }
 
+    pub fn all_agent_ids(&self) -> Vec<u64> {
+        self.agents.keys().copied().collect()
+    }
+
     pub fn get(&self, id: u64) -> Option<&Agent> {
         self.agents.get(&id)
     }

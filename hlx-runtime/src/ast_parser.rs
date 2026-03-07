@@ -52,6 +52,7 @@ pub enum Token {
     OnDissolve,
     Lifetime,
     Generation,
+    Extern,
     Modify,
     Gate,
     Proof,
@@ -109,6 +110,11 @@ pub enum Token {
     // Delimiters
     LParen,
     RParen,
+    Intent,
+    Do,
+    Contract,
+    Effect,
+    Conscience,
     LBrace,
     RBrace,
     LBracket,
@@ -370,6 +376,11 @@ impl AstParser {
                 }
                 let word: String = chars[start..pos].iter().collect();
                 let tok = match word.as_str() {
+                    "intent" => Token::Intent,
+                    "do" => Token::Do,
+                    "contract" => Token::Contract,
+                    "effect" => Token::Effect,
+                    "conscience" => Token::Conscience,
                     "let" => Token::Let,
                     "fn" => Token::Fn,
                     "return" => Token::Return,
@@ -399,6 +410,7 @@ impl AstParser {
                     "on_dissolve" => Token::OnDissolve,
                     "lifetime" => Token::Lifetime,
                     "generation" => Token::Generation,
+                    "extern" => Token::Extern,
                     "modify" => Token::Modify,
                     "gate" => Token::Gate,
                     "proof" => Token::Proof,
@@ -740,6 +752,7 @@ impl AstParser {
                     is_exported: false,
                 }))
             }
+            Token::Extern => self.parse_extern_function().map(Item::ExternFunction),
             _ => {
                 let stmt = self.parse_statement()?;
                 Ok(Item::Function(crate::ast::Function {
@@ -802,6 +815,63 @@ impl AstParser {
                 }
             }
         }
+    }
+
+    fn parse_extern_function(&mut self) -> Result<Function, ParseError> {
+        self.expect(&Token::Extern)?;
+        self.expect(&Token::Fn)?;
+
+        let name = match self.current().clone() {
+            Token::Ident(n) => {
+                self.advance();
+                n
+            }
+            _ => {
+                let span = self.current_span();
+                return Err(ParseError {
+                    message: format!("Expected extern function name, got {:?}", self.current()),
+                    line: span.line,
+                    col: span.col,
+                })
+            }
+        };
+
+        self.expect(&Token::LParen)?;
+
+        let mut parameters = Vec::new();
+        while !matches!(self.current(), Token::RParen | Token::Eof) {
+            if let Token::Ident(n) = self.current().clone() {
+                self.advance();
+                let mut param = Parameter::new(n);
+                if matches!(self.current(), Token::Colon) {
+                    self.advance();
+                    param = param.with_type(self.parse_type()?);
+                }
+                parameters.push(param);
+            } else {
+                let span = self.current_span();
+                return Err(ParseError {
+                    message: format!("Expected parameter name or ')', found {:?}", self.current()),
+                    line: span.line,
+                    col: span.col,
+                });
+            }
+            if matches!(self.current(), Token::Comma) {
+                self.advance();
+            }
+        }
+        self.expect(&Token::RParen)?;
+
+        let return_type = if matches!(self.current(), Token::Arrow) {
+            self.advance();
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        self.expect(&Token::Semi)?;
+
+        Ok(Function::new(name, parameters, Vec::new()).with_return_type_opt(return_type))
     }
 
     fn parse_function(&mut self) -> Result<Function, ParseError> {
@@ -1014,8 +1084,17 @@ impl AstParser {
         let mut trust_threshold = 0.5;
 
         while !matches!(self.current(), Token::RBrace) {
-            match self.current().clone() {
-                Token::Ident(n) if n == "effect" => {
+            // Normalize keyword tokens to field name strings for govern block parsing
+            let field_name = match self.current() {
+                Token::Effect => Some("effect"),
+                Token::Conscience => Some("conscience"),
+                Token::Ident(n) if n == "effect" || n == "conscience" || n == "trust" => {
+                    Some(n.as_str())
+                }
+                _ => None,
+            };
+            match field_name {
+                Some("effect") => {
                     self.advance();
                     self.expect(&Token::Colon)?;
                     let eff = self
@@ -1032,7 +1111,7 @@ impl AstParser {
                     };
                     self.expect(&Token::Semi)?;
                 }
-                Token::Ident(n) if n == "conscience" => {
+                Some("conscience") => {
                     self.advance();
                     self.expect(&Token::Colon)?;
                     self.expect(&Token::LBracket)?;
@@ -1069,7 +1148,7 @@ impl AstParser {
                     self.expect(&Token::RBracket)?;
                     self.expect(&Token::Semi)?;
                 }
-                Token::Ident(n) if n == "trust" => {
+                Some("trust") => {
                     self.advance();
                     self.expect(&Token::Colon)?;
                     if let Token::Float(t) = self.current().clone() {
@@ -1082,6 +1161,7 @@ impl AstParser {
                     self.expect(&Token::Semi)?;
                 }
                 _ => {
+                    // Unknown field or non-field token — skip
                     self.advance();
                 }
             }
@@ -1624,6 +1704,7 @@ impl AstParser {
                 Ok(Statement::continue_())
             }
             Token::Switch => self.parse_switch(),
+            Token::Match => self.parse_match(),
             Token::Migrate => self.parse_migrate(),
             Token::LBrace => {
                 self.advance();
@@ -1866,20 +1947,35 @@ impl AstParser {
         let span = self.current_span();
         self.expect(&Token::Migrate)?;
         let agent = match self.current().clone() {
-            Token::Ident(name) => { self.advance(); name }
-            tok => return Err(ParseError {
-                message: format!("Expected agent name after 'migrate', got {:?}", tok),
-                line: span.line, col: span.col,
-            }),
+            Token::Ident(name) => {
+                self.advance();
+                name
+            }
+            tok => {
+                return Err(ParseError {
+                    message: format!("Expected agent name after 'migrate', got {:?}", tok),
+                    line: span.line,
+                    col: span.col,
+                })
+            }
         };
         self.expect(&Token::To)?;
         let target = match self.current().clone() {
-            Token::Ident(name) => { self.advance(); name }
-            Token::String(s)   => { self.advance(); s }
-            tok => return Err(ParseError {
-                message: format!("Expected target after 'to', got {:?}", tok),
-                line: span.line, col: span.col,
-            }),
+            Token::Ident(name) => {
+                self.advance();
+                name
+            }
+            Token::String(s) => {
+                self.advance();
+                s
+            }
+            tok => {
+                return Err(ParseError {
+                    message: format!("Expected target after 'to', got {:?}", tok),
+                    line: span.line,
+                    col: span.col,
+                })
+            }
         };
         self.expect(&Token::Semi)?;
         Ok(Statement::new(StmtKind::Migrate { agent, target }))
@@ -1967,6 +2063,102 @@ impl AstParser {
             cases,
             default_body,
         })))
+    }
+
+    fn parse_match(&mut self) -> Result<Statement, ParseError> {
+        self.expect(&Token::Match)?;
+
+        let subject = self.parse_expression()?;
+
+        self.expect(&Token::LBrace)?;
+
+        let mut arms = Vec::new();
+
+        while !matches!(self.current(), Token::RBrace) {
+            // Parse pattern
+            let pattern = self.parse_match_pattern()?;
+
+            // Optional guard: if condition
+            let guard = if matches!(self.current(), Token::If) {
+                self.advance();
+                Some(self.parse_expression()?)
+            } else {
+                None
+            };
+
+            self.expect(&Token::FatArrow)?;
+
+            // Parse arm body - can be expression or block
+            let body = if matches!(self.current(), Token::LBrace) {
+                self.advance();
+                let b = self.parse_block_body()?;
+                self.expect(&Token::RBrace)?;
+                b
+            } else {
+                // Single expression becomes a statement
+                let expr = self.parse_expression()?;
+                // Wrap in Expr statement, but we need to handle semicolon
+                let stmt = Statement::new(StmtKind::Expr(expr));
+                // Check for semicolon
+                if matches!(self.current(), Token::Semi) {
+                    self.advance();
+                }
+                vec![stmt]
+            };
+
+            arms.push(MatchArm {
+                id: NodeId::new(),
+                pattern,
+                guard,
+                body,
+            });
+
+            // Optional comma between arms
+            if matches!(self.current(), Token::Comma) {
+                self.advance();
+            }
+        }
+
+        self.expect(&Token::RBrace)?;
+
+        Ok(Statement::new(StmtKind::Match(MatchStmt { subject, arms })))
+    }
+
+    fn parse_match_pattern(&mut self) -> Result<MatchPattern, ParseError> {
+        match self.current().clone() {
+            Token::Int(n) => {
+                self.advance();
+                Ok(MatchPattern::Literal(Literal::Int(n)))
+            }
+            Token::Float(f) => {
+                self.advance();
+                Ok(MatchPattern::Literal(Literal::Float(f)))
+            }
+            Token::String(s) => {
+                self.advance();
+                Ok(MatchPattern::Literal(Literal::String(s)))
+            }
+            Token::Bool(b) => {
+                self.advance();
+                Ok(MatchPattern::Literal(Literal::Bool(b)))
+            }
+            Token::Ident(n) if n == "_" => {
+                self.advance();
+                Ok(MatchPattern::Wildcard)
+            }
+            Token::Ident(name) => {
+                self.advance();
+                Ok(MatchPattern::Binding(name))
+            }
+            _ => {
+                let span = self.current_span();
+                Err(ParseError {
+                    message: "Expected pattern (literal, _, or identifier)".to_string(),
+                    line: span.line,
+                    col: span.col,
+                })
+            }
+        }
     }
 
     fn parse_pattern(&mut self) -> Result<Pattern, ParseError> {
@@ -2236,6 +2428,31 @@ impl AstParser {
                 let name = format!("{:?}", self.current()).to_lowercase();
                 self.advance();
                 Ok(Expression::identifier(name))
+            }
+            Token::Do => {
+                // do IntentName { field: value, ... }
+                self.advance();
+                let intent_name = self
+                    .try_consume_name()
+                    .ok_or_else(|| ParseError { message: "Expected intent name after 'do'".into(), line: 0, col: 0 })?;
+                self.expect(&Token::LBrace)?;
+                let mut fields = Vec::new();
+                while !matches!(self.current(), Token::RBrace) {
+                    let field_name = self
+                        .try_consume_name()
+                        .ok_or_else(|| ParseError { message: "Expected field name".into(), line: 0, col: 0 })?;
+                    self.expect(&Token::Colon)?;
+                    let value = self.parse_expression()?;
+                    fields.push((field_name, value));
+                    if matches!(self.current(), Token::Comma) {
+                        self.advance();
+                    }
+                }
+                self.expect(&Token::RBrace)?;
+                Ok(Expression::new(ExprKind::Do {
+                    intent_name,
+                    fields,
+                }))
             }
             Token::LParen => {
                 self.advance();

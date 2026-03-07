@@ -5,7 +5,7 @@
 
 use crate::ast::{
     AgentDef, BinaryOp, CycleLevel, ExprKind, Expression, Function, Gate, Import, Item,
-    ModificationKind, Parameter, Pattern, Program, Statement, StmtKind, UnaryOp,
+    MatchPattern, ModificationKind, Parameter, Pattern, Program, Statement, StmtKind, UnaryOp,
 };
 use crate::ast_parser::AstParser;
 use crate::resolver::ModuleResolver;
@@ -23,7 +23,11 @@ pub struct LowerError {
 impl std::fmt::Display for LowerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.span.start_line > 0 {
-            write!(f, "Lower error at line {}:{}: {}", self.span.start_line, self.span.start_col, self.message)
+            write!(
+                f,
+                "Lower error at line {}:{}: {}",
+                self.span.start_line, self.span.start_col, self.message
+            )
         } else {
             write!(f, "Lower error: {}", self.message)
         }
@@ -38,6 +42,7 @@ impl LowerError {
         }
     }
 
+    #[allow(dead_code)]
     fn with_span(msg: impl Into<String>, span: crate::ast::SourceSpan) -> Self {
         LowerError {
             message: msg.into(),
@@ -205,6 +210,7 @@ impl Lowerer {
                 self.lower_item(&export.item)
             }
             Item::Import(import) => self.lower_import(import),
+            Item::ExternFunction(_) | Item::Global(_) => Ok(()),
         }
     }
 
@@ -341,7 +347,9 @@ impl Lowerer {
                 for (name, &reg) in &this.variables {
                     reg_map.insert(reg, name.clone());
                 }
-                this.bytecode.debug_symbols.insert(func.name.clone(), reg_map);
+                this.bytecode
+                    .debug_symbols
+                    .insert(func.name.clone(), reg_map);
 
                 this.emit(Opcode::Return);
                 this.in_top_level = false;
@@ -364,7 +372,9 @@ impl Lowerer {
                 for (name, &reg) in &this.variables {
                     reg_map.insert(reg, name.clone());
                 }
-                this.bytecode.debug_symbols.insert(func.name.clone(), reg_map);
+                this.bytecode
+                    .debug_symbols
+                    .insert(func.name.clone(), reg_map);
 
                 this.emit(Opcode::Return);
                 Ok(())
@@ -935,6 +945,123 @@ impl Lowerer {
                     self.patch_jump(ep, end_pc)?;
                 }
             }
+            StmtKind::Match(match_stmt) => {
+                // Lower the subject expression into register 11
+                self.lower_expr(&match_stmt.subject, 11)?;
+
+                let mut end_patches = Vec::new();
+
+                for arm in &match_stmt.arms {
+                    let skip_pos = match &arm.pattern {
+                        MatchPattern::Wildcard => {
+                            // Wildcard always matches, just check guard if present
+                            None
+                        }
+                        MatchPattern::Binding(name) => {
+                            // Binding always matches, bind the value to the variable
+                            // First allocate a variable for the binding
+                            let reg = self.alloc_var(name)?;
+                            // Copy subject (r11) to binding register
+                            self.emit(Opcode::Move);
+                            self.emit_u8(reg);
+                            self.emit_u8(11);
+                            None
+                        }
+                        MatchPattern::Literal(lit) => {
+                            // Lower literal value into register 12
+                            let val = match lit {
+                                crate::ast::Literal::Int(n) => Value::I64(*n),
+                                crate::ast::Literal::Float(f) => Value::F64(*f),
+                                crate::ast::Literal::String(s) => Value::String(s.clone()),
+                                crate::ast::Literal::Bool(b) => Value::Bool(*b),
+                                crate::ast::Literal::Nil => Value::Nil,
+                            };
+                            let idx = self.bytecode.add_constant(val);
+                            self.emit(Opcode::Const);
+                            self.emit_u8(12);
+                            self.emit_u32(idx);
+
+                            // Compare: r10 = (r11 == r12)
+                            self.emit(Opcode::Eq);
+                            self.emit_u8(10);
+                            self.emit_u8(11);
+                            self.emit_u8(12);
+
+                            // Skip arm body if no match
+                            self.emit(Opcode::JumpIfNot);
+                            self.emit_u8(10);
+                            let pos = self.current_pc();
+                            self.emit_u32(0);
+                            Some(pos)
+                        }
+                        MatchPattern::Range { start, end } => {
+                            // Range pattern: r11 >= start && r11 <= end
+                            let start_idx = self.bytecode.add_constant(Value::I64(*start));
+                            self.emit(Opcode::Const);
+                            self.emit_u8(12);
+                            self.emit_u32(start_idx);
+                            self.emit(Opcode::Ge);
+                            self.emit_u8(10);
+                            self.emit_u8(11);
+                            self.emit_u8(12);
+
+                            let end_idx = self.bytecode.add_constant(Value::I64(*end));
+                            self.emit(Opcode::Const);
+                            self.emit_u8(12);
+                            self.emit_u32(end_idx);
+                            self.emit(Opcode::Le);
+                            self.emit_u8(12);
+                            self.emit_u8(11);
+                            self.emit_u8(12);
+
+                            self.emit(Opcode::And);
+                            self.emit_u8(10);
+                            self.emit_u8(10);
+                            self.emit_u8(12);
+
+                            // Skip arm body if no match
+                            self.emit(Opcode::JumpIfNot);
+                            self.emit_u8(10);
+                            let pos = self.current_pc();
+                            self.emit_u32(0);
+                            Some(pos)
+                        }
+                    };
+
+                    // Guard expression (if any): skip body if guard is false
+                    if let Some(ref guard_expr) = arm.guard {
+                        self.lower_expr(guard_expr, 10)?;
+                        self.emit(Opcode::JumpIfNot);
+                        self.emit_u8(10);
+                        let guard_skip = self.current_pc();
+                        self.emit_u32(0);
+                        self.lower_body(&arm.body)?;
+                        self.emit(Opcode::Jump);
+                        end_patches.push(self.current_pc());
+                        self.emit_u32(0);
+                        let next_arm = self.current_pc();
+                        self.patch_jump(guard_skip, next_arm)?;
+                        if let Some(pos) = skip_pos {
+                            self.patch_jump(pos, next_arm)?;
+                        }
+                    } else {
+                        self.lower_body(&arm.body)?;
+                        self.emit(Opcode::Jump);
+                        end_patches.push(self.current_pc());
+                        self.emit_u32(0);
+                        let next_arm = self.current_pc();
+                        if let Some(pos) = skip_pos {
+                            self.patch_jump(pos, next_arm)?;
+                        }
+                    }
+                }
+
+                // Patch all jumps to end
+                let end_pc = self.current_pc();
+                for ep in end_patches {
+                    self.patch_jump(ep, end_pc)?;
+                }
+            }
             StmtKind::For {
                 pattern,
                 iterable,
@@ -1155,6 +1282,63 @@ impl Lowerer {
                 function,
                 arguments,
             } => {
+                // ─── Conscience Gate (ape::ConscienceKernel) ────────────
+                // The Conscience is digital physics — not a policy.
+                // Every function call is classified by effect and verified
+                // against the genesis predicates before bytecode is emitted.
+                {
+                    use ape::conscience::{ConscienceKernel, ConscienceVerdict, EffectClass};
+
+                    // Classify the effect of this call
+                    let effect = match function.as_str() {
+                        // Execute effects — sandbox escapes
+                        "shell" | "exec" | "system" | "eval" => Some(EffectClass::Execute),
+                        // Write effects
+                        "write_file" | "image_save" | "audio_save" | "raw_write" => {
+                            Some(EffectClass::Write)
+                        }
+                        // Read effects
+                        "read_file" | "image_load" | "audio_load" | "raw_read" => {
+                            Some(EffectClass::Read)
+                        }
+                        // Network effects
+                        "http_get" | "http_post" | "socket_connect" | "net_send" => {
+                            Some(EffectClass::Network)
+                        }
+                        // Agent-modification effects
+                        "agent_modify" | "agent_promote" => Some(EffectClass::ModifyAgent),
+                        // No effect — safe
+                        _ => None,
+                    };
+
+                    if let Some(eff) = effect {
+                        let mut kernel = ConscienceKernel::new();
+                        let fields = std::collections::HashMap::new();
+                        let verdict = kernel.evaluate(function, &eff, &fields);
+                        match verdict {
+                            ConscienceVerdict::Deny(reason) => {
+                                return Err(LowerError::new(format!(
+                                    "Conscience: '{}()' denied — {} (HLX-S Axiom physics)",
+                                    function, reason
+                                )));
+                            }
+                            ConscienceVerdict::Unknown => {
+                                // Default-deny for dangerous effects
+                                if eff.is_dangerous() {
+                                    return Err(LowerError::new(format!(
+                                        "Conscience: '{}()' denied — no predicate allows {:?} effect (default-deny)",
+                                        function, eff
+                                    )));
+                                }
+                            }
+                            ConscienceVerdict::Allow => {
+                                // Physics permits this call
+                            }
+                        }
+                    }
+                }
+                // ─────────────────────────────────────────────────────────
+
                 // Specialized opcodes for common builtins (DEBT-007)
                 if function == "concat" && arguments.len() == 2 {
                     let left_reg = self.alloc_tmp()?;
@@ -1255,7 +1439,7 @@ impl Lowerer {
             } => {
                 // DEBT-007: Fix register collision for method calls by using temp registers
                 // and specialized opcodes for common builtins like concat().
-                
+
                 // Optimized specialized opcodes
                 if method == "concat" && arguments.len() == 1 {
                     let left_reg = self.alloc_tmp()?;
@@ -1279,12 +1463,12 @@ impl Lowerer {
                 // General case: Use fresh temp registers for each argument
                 // to prevent nested calls from overwriting outer call arguments (DEBT-007)
                 let mut arg_regs = Vec::with_capacity(arguments.len() + 1);
-                
+
                 // Lower object (self) to a temp first
                 let obj_reg = self.alloc_tmp()?;
                 self.lower_expr(object, obj_reg)?;
                 arg_regs.push(obj_reg);
-                
+
                 for arg in arguments.iter() {
                     let reg = self.alloc_tmp()?;
                     self.lower_expr(arg, reg)?;
@@ -1491,7 +1675,12 @@ impl Lowerer {
                 // Emit appropriate conversion based on target type
                 match target_type.as_str() {
                     "f64" => {
-                        // Emit i64_to_f64 call
+                        // Move value to arg_base (150) before calling conversion
+                        if dst != 150 {
+                            self.emit(Opcode::Move);
+                            self.emit_u8(150);
+                            self.emit_u8(dst);
+                        }
                         let func_idx = self.bytecode.add_string("i64_to_f64".to_string());
                         self.emit(Opcode::Call);
                         self.emit_u32(func_idx);
@@ -1499,17 +1688,72 @@ impl Lowerer {
                         self.emit_u8(dst);
                     }
                     "i64" => {
-                        // Emit f64_to_i64 call
+                        // Move value to arg_base (150) before calling conversion
+                        if dst != 150 {
+                            self.emit(Opcode::Move);
+                            self.emit_u8(150);
+                            self.emit_u8(dst);
+                        }
                         let func_idx = self.bytecode.add_string("f64_to_i64".to_string());
                         self.emit(Opcode::Call);
                         self.emit_u32(func_idx);
                         self.emit_u8(1); // 1 argument
                         self.emit_u8(dst);
                     }
+                    "String" | "string" => {
+                        // Move value to arg_base (150) before calling conversion
+                        if dst != 150 {
+                            self.emit(Opcode::Move);
+                            self.emit_u8(150);
+                            self.emit_u8(dst);
+                        }
+                        let func_idx = self.bytecode.add_string("to_string".to_string());
+                        self.emit(Opcode::Call);
+                        self.emit_u32(func_idx);
+                        self.emit_u8(1);
+                        self.emit_u8(dst);
+                    }
                     _ => {
                         // Unknown cast, just keep the value as-is
                     }
                 }
+            }
+            ExprKind::Do {
+                intent_name,
+                fields,
+            } => {
+                // Lower `do IntentName { field: value }` as a function call to IntentName
+                // with fields packed into a Map argument
+                let map_reg = self.alloc_tmp()?;
+                self.emit(Opcode::MapCreate);
+                self.emit_u8(map_reg);
+
+                for (key, value) in fields {
+                    let key_reg = self.alloc_tmp()?;
+                    let key_const = self.bytecode.add_constant(Value::String(key.clone()));
+                    self.emit(Opcode::Const);
+                    self.emit_u8(key_reg);
+                    self.emit_u32(key_const);
+
+                    let val_reg = self.alloc_tmp()?;
+                    self.lower_expr(value, val_reg)?;
+
+                    self.emit(Opcode::MapSet);
+                    self.emit_u8(map_reg);
+                    self.emit_u8(key_reg);
+                    self.emit_u8(val_reg);
+                }
+
+                // Move the map to arg_base and call the intent function
+                self.emit(Opcode::Move);
+                self.emit_u8(150); // arg_base
+                self.emit_u8(map_reg);
+
+                let name_idx = self.get_or_add_string(intent_name);
+                self.emit(Opcode::Call);
+                self.emit_u32(name_idx);
+                self.emit_u8(1); // 1 argument (the map)
+                self.emit_u8(dst);
             }
             // Unsupported in bytecode — emit Nop placeholders
             ExprKind::Range { .. } | ExprKind::Contract { .. } => {
@@ -1780,17 +2024,35 @@ impl Lowerer {
         self.emit(Opcode::ScaleCreate);
         self.emit_u32(cluster_name_idx);
 
+        // Scale ID is in reg 0. Save it to a high register (244) to avoid collisions.
+        let scale_reg = 244;
+        self.emit(Opcode::Move);
+        self.emit_u8(scale_reg);
+        self.emit_u8(0);
+
         for agent_ref in &cluster.agents {
-            let agent_idx = self.get_or_add_string(&agent_ref.name);
+            let agent_name_idx = self.get_or_add_string(&agent_ref.name);
+            self.emit(Opcode::AgentSpawn);
+            self.emit_u32(agent_name_idx);
+            self.emit_u32(0); // flags/latent count
+
+            // Agent ID is in reg 0. Add it to the scale.
             self.emit(Opcode::ScaleAddAgent);
-            self.emit_u32(agent_idx);
+            self.emit_u8(scale_reg);
+            self.emit_u8(0);
         }
 
         for barrier in &cluster.barriers {
-            let barrier_idx = self.get_or_add_string(&barrier.name);
+            // BarrierCreate dst(u8), expected(u8)
             self.emit(Opcode::BarrierCreate);
-            self.emit_u32(barrier_idx);
+            self.emit_u8(0); // dst
             self.emit_u8(barrier.expected as u8);
+
+            // Optional: Register barrier name in latent state if we want to look it up
+            let name_idx = self.get_or_add_string(&barrier.name);
+            self.emit(Opcode::LatentSet);
+            self.emit_u32(name_idx);
+            self.emit_u8(0);
         }
 
         Ok(())

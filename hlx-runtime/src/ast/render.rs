@@ -6,8 +6,8 @@
 use super::expr::{ExprKind, Pattern};
 use super::rsi::{GovernDef, ModifyDef};
 use super::{
-    AgentDef, ClusterDef, Function, Item, LoopStmt, Parameter, Program, Statement, StmtKind,
-    SwitchStmt,
+    AgentDef, ClusterDef, Function, Item, Literal, LoopStmt, MatchPattern, MatchStmt, Parameter,
+    Program, Statement, StmtKind, SwitchStmt,
 };
 
 /// Render AST to source code
@@ -88,6 +88,46 @@ impl Render for Item {
                 output.push_str(&format!("{}}}\n", ind));
                 output
             }
+            Item::ExternFunction(f) => {
+                let ind = "    ".repeat(indent);
+                let mut output = format!("{}extern fn {}(", ind, f.name);
+                for (idx, param) in f.parameters.iter().enumerate() {
+                    if idx > 0 { output.push_str(", "); }
+                    output.push_str(&param.name);
+                    output.push_str(": ");
+                    if let Some(ref ty) = param.ty {
+                        output.push_str(&ty.render(0));
+                    } else {
+                        output.push_str("Any");
+                    }
+                }
+                output.push_str(")");
+                if let Some(ref ty) = f.return_type {
+                    output.push_str(" -> ");
+                    output.push_str(&ty.render(0));
+                }
+                output.push_str(";\n");
+                output
+            }
+            Item::Global(s) => s.render(indent),
+        }
+    }
+}
+
+impl Render for super::TypeAnnotation {
+    fn render(&self, _indent: usize) -> String {
+        if self.parameters.is_empty() {
+            self.name.clone()
+        } else {
+            let mut output = format!("{}<", self.name);
+            for (idx, param) in self.parameters.iter().enumerate() {
+                if idx > 0 {
+                    output.push_str(", ");
+                }
+                output.push_str(&param.render(0));
+            }
+            output.push('>');
+            output
         }
     }
 }
@@ -427,6 +467,7 @@ impl Render for Statement {
                 output
             }
             StmtKind::Switch(switch) => switch.render(indent),
+            StmtKind::Match(m) => m.render(indent),
             StmtKind::Module(m) => {
                 let mut output = format!("{}module {} {{\n", ind, m.name);
                 for item in &m.items {
@@ -468,6 +509,43 @@ impl Render for SwitchStmt {
         if !self.default_body.is_empty() {
             output.push_str(&format!("{}    default => {{\n", ind));
             for stmt in &self.default_body {
+                output.push_str(&stmt.render(indent + 2));
+            }
+            output.push_str(&format!("{}    }}\n", ind));
+        }
+
+        output.push_str(&format!("{}}}\n", ind));
+        output
+    }
+}
+
+impl Render for MatchStmt {
+    fn render(&self, indent: usize) -> String {
+        let ind = "    ".repeat(indent);
+        let mut output = format!("{}match {} {{\n", ind, self.subject.render(0));
+
+        for arm in &self.arms {
+            let pattern_str = match &arm.pattern {
+                MatchPattern::Literal(lit) => match lit {
+                    Literal::Int(n) => n.to_string(),
+                    Literal::Float(f) => f.to_string(),
+                    Literal::String(s) => format!("\"{}\"", s),
+                    Literal::Bool(b) => b.to_string(),
+                    Literal::Nil => "nil".to_string(),
+                },
+                MatchPattern::Wildcard => "_".to_string(),
+                MatchPattern::Binding(name) => name.clone(),
+                MatchPattern::Range { start, end } => format!("{}..{}", start, end),
+            };
+
+            let guard_str = if let Some(g) = &arm.guard {
+                format!(" if {}", g.render(0))
+            } else {
+                String::new()
+            };
+
+            output.push_str(&format!("{}    {} =>{}", ind, pattern_str, guard_str));
+            for stmt in &arm.body {
                 output.push_str(&stmt.render(indent + 2));
             }
             output.push_str(&format!("{}    }}\n", ind));
@@ -573,6 +651,16 @@ impl Render for super::Expression {
             ExprKind::Resolve(inner) => format!("resolve {}", inner.render(0)),
             ExprKind::Cast { expr, target_type } => {
                 format!("{} as {}", expr.render(0), target_type)
+            }
+            ExprKind::Do {
+                intent_name,
+                fields,
+            } => {
+                let fields_str: Vec<String> = fields
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, v.render(0)))
+                    .collect();
+                format!("do {} {{ {} }}", intent_name, fields_str.join(", "))
             }
         }
     }

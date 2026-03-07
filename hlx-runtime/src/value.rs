@@ -98,6 +98,28 @@ impl Value {
             _ => vec![],
         }
     }
+
+    /// Compute the nesting depth of this value (for stack overflow prevention).
+    /// Returns 0 for scalars, max(child_depths)+1 for containers.
+    /// Capped at `limit` to avoid stack overflow during the depth check itself.
+    pub fn depth(&self, limit: usize) -> usize {
+        if limit == 0 {
+            return 0;
+        }
+        match self {
+            Value::Array(elems) => elems
+                .iter()
+                .map(|e| e.depth(limit - 1))
+                .max()
+                .map_or(1, |d| d + 1),
+            Value::Map(entries) => entries
+                .values()
+                .map(|v| v.depth(limit - 1))
+                .max()
+                .map_or(1, |d| d + 1),
+            _ => 0,
+        }
+    }
 }
 
 impl fmt::Display for Value {

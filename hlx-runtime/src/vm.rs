@@ -5,6 +5,8 @@ use crate::rsi::{AgentMemory, ModificationType, RSIPipeline};
 use crate::scale::ScalePool;
 use crate::tensor::Tensor;
 use crate::{Bytecode, Opcode, RuntimeError, RuntimeResult, Value};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -122,6 +124,41 @@ struct LoopFrame {
     iterations: i64,
 }
 
+/// Sync events emitted by RSIApply, promotions, etc.
+/// The Python bridge polls these and flushes to corpus.db via SQLite WAL.
+#[derive(Debug, Clone, serde::Serialize)]
+pub enum SyncEvent {
+    /// An RSI proposal was applied — sync modified agent state to corpus
+    RSIApplied {
+        agent_id: u64,
+        proposal_id: u64,
+    },
+    /// An agent was promoted to a new level
+    Promotion {
+        agent_id: u64,
+        new_level: String,
+    },
+    /// A memory entry was learned
+    MemoryLearned {
+        pattern: String,
+        confidence: f64,
+    },
+}
+
+/// Exception handler installed by Try opcode.
+/// Only catches logical/intent errors — fatal errors (MemoryExhaustion, MaxSteps) propagate.
+#[derive(Debug, Clone)]
+struct ExceptionHandler {
+    /// PC to jump to on catch
+    catch_pc: usize,
+    /// Register to store the error message string
+    error_reg: usize,
+    /// Call stack depth at time of Try (for unwinding)
+    call_depth: usize,
+    /// Loop stack depth at time of Try (for unwinding)
+    loop_depth: usize,
+}
+
 #[derive(Debug, Clone)]
 struct CycleFrame {
     #[allow(dead_code)]
@@ -142,6 +179,7 @@ pub struct Vm {
     registers: Vec<Value>,
     call_stack: Vec<CallFrame>,
     loop_stack: Vec<LoopFrame>,
+    exception_handlers: Vec<ExceptionHandler>,
     cycle_stack: Vec<CycleFrame>,
     agent_pool: AgentPool,
     scale_pool: ScalePool,
@@ -155,7 +193,7 @@ pub struct Vm {
     functions_by_pc: HashMap<usize, (usize, String)>,
     #[allow(dead_code)]
     globals: HashMap<String, Value>,
-    latent_states: HashMap<String, Value>,
+    pub(crate) latent_states: HashMap<String, Value>,
     halted: bool,
     max_steps: usize,
     steps: usize,
@@ -166,9 +204,12 @@ pub struct Vm {
     /// Functions get &mut Vm so they can access VM state (memory, etc.)
     natives: HashMap<String, Box<dyn Fn(&mut Vm, &Bytecode, Vec<Value>) -> Value + Send + Sync>>,
     /// In-memory storage for HIL learn/recall (Phase 10)
-    memory: Vec<MemEntry>,
+    pub(crate) memory: Vec<MemEntry>,
+    /// Working memory pool with vector embeddings for semantic search
+    pub memory_pool: crate::memory_pool::MemoryPool,
     /// Debug mode: trace execution
     debug_mode: bool,
+    pub substrate_pressure: f64,
     /// Memory limits
     max_array_size: usize,
     max_string_size: usize,
@@ -179,10 +220,33 @@ pub struct Vm {
     max_memory_entries: usize,
     /// Shutdown flag: set by Ctrl+C handler to halt VM cleanly
     shutdown_flag: Option<Arc<AtomicBool>>,
+    /// Sync events queue: RSIApply, promotions, etc. that need to be flushed to corpus.db
+    /// The Python bridge polls this via FFI and writes to SQLite asynchronously (WAL mode).
+    pub(crate) sync_events: Vec<SyncEvent>,
     exec_nesting: usize,
     /// Dirty-register bitset: bit i set iff register[i] was written since last call frame push.
     /// 256 bits → 4 × u64 words (covers all 256 registers).
     dirty_bits: [u64; 4],
+    /// Seeded PRNG for deterministic execution (HLX-S Axiom 1: Determinism).
+    /// All `rand`/`rand_range`/`native_rand` calls use this instead of thread_rng().
+    pub(crate) rng: StdRng,
+    /// Phase 24: The seed used to initialize the current PRNG state.
+    /// Saved/restored with snapshots for perfect cold-restart determinism.
+    pub(crate) rng_seed: u64,
+    /// Logical clock — replaces SystemTime::now() for deterministic builtins.
+    /// Incremented on each clock_ms() call.
+    pub(crate) logical_clock: u64,
+    /// Phase 26: Per-turn instruction limit (0 = unlimited).
+    pub(crate) turn_instruction_limit: u64,
+    /// Phase 26: Per-turn memory allocation limit in bytes (0 = unlimited).
+    pub(crate) turn_memory_limit: usize,
+    /// Phase 26: Instructions executed in the current turn.
+    pub(crate) turn_instructions: u64,
+    /// Phase 26: Memory allocated in the current turn.
+    pub(crate) turn_memory_used: usize,
+    /// Phase 21: Tether inbox for async message polling.
+    /// Python bridge or other external callers push messages here; HLX code polls via poll_inbox().
+    pub(crate) inbox: std::collections::VecDeque<std::collections::BTreeMap<String, Value>>,
 }
 
 impl Vm {
@@ -195,6 +259,7 @@ impl Vm {
             registers: vec![Value::Nil; config.register_count],
             call_stack: Vec::new(),
             loop_stack: Vec::new(),
+            exception_handlers: Vec::new(),
             cycle_stack: Vec::new(),
             agent_pool: AgentPool::new(),
             scale_pool: ScalePool::new(),
@@ -218,15 +283,26 @@ impl Vm {
             config,
             natives: HashMap::new(),
             memory: Vec::new(),
+            memory_pool: crate::memory_pool::MemoryPool::new(),
             debug_mode: false,
+            substrate_pressure: 0.0,
             max_array_size: 1_000_000,   // 1 million elements
             max_string_size: 10_000_000, // 10 MB
             start_time: None,
             max_duration: None,
             max_memory_entries: 50_000,
             shutdown_flag: None,
+            sync_events: Vec::new(),
             exec_nesting: 0,
             dirty_bits: [0u64; 4],
+            rng: StdRng::seed_from_u64(0x484C5835454544), // 0xHLX5EED
+            rng_seed: 0x484C5835454544,
+            logical_clock: 0,
+            turn_instruction_limit: 0,
+            turn_memory_limit: 0,
+            turn_instructions: 0,
+            turn_memory_used: 0,
+            inbox: std::collections::VecDeque::new(),
         }
     }
 
@@ -290,6 +366,98 @@ impl Vm {
     pub fn with_max_steps(mut self, max: usize) -> Self {
         self.max_steps = max;
         self
+    }
+
+    /// Reset execution state without wiping persistent memory.
+    ///
+    /// Clears: halted flag, step counter, call/loop/cycle stacks, registers, timers.
+    /// Preserves: memory, memory_pool, latent_states, functions, natives, globals.
+    /// This is called between FFI invocations to allow re-execution while
+    /// maintaining Bitsy's cognitive state (z_brain, semantic manifolds, etc.).
+    pub fn reset_execution_state(&mut self) {
+        self.halted = false;
+        self.steps = 0;
+        self.start_time = None;
+        self.call_stack.clear();
+        self.loop_stack.clear();
+        self.exception_handlers.clear();
+        self.cycle_stack.clear();
+        self.dirty_bits = [0u64; 4];
+        // Zero registers — drops tensor values held in registers
+        for reg in &mut self.registers {
+            *reg = Value::Nil;
+        }
+        // Prune weight matrices from dissolved/inactive agents to prevent ghost tensor leak.
+        // Active agents keep their weights; only orphaned entries are cleaned.
+        let active_agents: Vec<u64> = self.agent_pool.all_agent_ids();
+        self.agent_memories
+            .retain(|id, _| active_agents.contains(id));
+    }
+
+    /// Deterministic GC sweep. Called at end of cycle/turn.
+    ///
+    /// 1. Prunes orphaned agent memories (agents that were dissolved)
+    /// 2. Evicts oldest memory pool entries if over capacity
+    /// 3. Nils out registers beyond the working set
+    ///
+    /// This is synchronous and deterministic per HLX-S Axiom 1.
+    pub fn gc_sweep(&mut self) {
+        // 1. Prune orphaned agent memories
+        let active_agents = self.agent_pool.all_agent_ids();
+        self.agent_memories
+            .retain(|id, _| active_agents.contains(id));
+
+        // 2. Evict oldest memory pool entries if over capacity
+        while self.memory.len() > self.max_memory_entries {
+            self.memory.remove(0);
+        }
+    }
+
+    /// Reseed the PRNG with a unique stream derived from agent identity.
+    ///
+    /// Computes `blake3::hash(agent_id || logical_clock)` and uses the first
+    /// 8 bytes as the seed. This ensures each agent in a multi-agent run gets
+    /// a unique, deterministic random stream (no Clone Army).
+    pub fn reseed(&mut self, agent_id: &str) {
+        let input = format!("{}{}", agent_id, self.logical_clock);
+        let hash = blake3::hash(input.as_bytes());
+        let bytes = hash.as_bytes();
+        let seed = u64::from_le_bytes([
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        ]);
+        self.rng_seed = seed;
+        self.rng = StdRng::seed_from_u64(seed);
+    }
+
+    /// Phase 26: Set per-turn resource limits.
+    /// instruction_limit=0 means unlimited. memory_limit=0 means unlimited.
+    pub fn set_turn_limits(&mut self, instruction_limit: u64, memory_limit: usize) {
+        self.turn_instruction_limit = instruction_limit;
+        self.turn_memory_limit = memory_limit;
+    }
+
+    /// Phase 26: Reset turn counters (call at start of each turn/cycle).
+    pub fn reset_turn_counters(&mut self) {
+        self.turn_instructions = 0;
+        self.turn_memory_used = 0;
+    }
+
+    /// Phase 26: Check if a resource limit has been exceeded.
+    /// Returns an error message if exceeded, None otherwise.
+    pub fn check_turn_limits(&self) -> Option<String> {
+        if self.turn_instruction_limit > 0 && self.turn_instructions >= self.turn_instruction_limit {
+            return Some(format!(
+                "ResourceExceeded: {} instructions (limit: {})",
+                self.turn_instructions, self.turn_instruction_limit
+            ));
+        }
+        if self.turn_memory_limit > 0 && self.turn_memory_used >= self.turn_memory_limit {
+            return Some(format!(
+                "ResourceExceeded: {} bytes allocated (limit: {})",
+                self.turn_memory_used, self.turn_memory_limit
+            ));
+        }
+        None
     }
 
     pub fn with_spawn_rate_limit(mut self, max_spawns: usize, window_secs: u64) -> Self {
@@ -372,15 +540,19 @@ impl Vm {
 
     fn debug_trace(&self, pc: usize, opcode: &str, regs: &[Value], bytecode: &Bytecode) {
         if self.debug_mode {
-            let func_name = self.call_stack.last().map(|f| f.func_name.as_str()).unwrap_or("main");
-            
+            let func_name = self
+                .call_stack
+                .last()
+                .map(|f| f.func_name.as_str())
+                .unwrap_or("main");
+
             // Format variable values if symbols are available
             let var_info = if let Some(reg_map) = bytecode.debug_symbols.get(func_name) {
                 let mut info = Vec::new();
                 // Sort by register index for deterministic output
                 let mut entries: Vec<_> = reg_map.iter().collect();
                 entries.sort_by_key(|e| e.0);
-                
+
                 for (&reg, name) in entries {
                     if let Some(val) = regs.get(reg as usize) {
                         if !matches!(val, Value::Nil) {
@@ -388,7 +560,11 @@ impl Vm {
                         }
                     }
                 }
-                if info.is_empty() { String::new() } else { format!(" | {}", info.join(" ")) }
+                if info.is_empty() {
+                    String::new()
+                } else {
+                    format!(" | {}", info.join(" "))
+                }
             } else {
                 String::new()
             };
@@ -409,7 +585,7 @@ impl Vm {
     fn check_timeout(&self) -> RuntimeResult<()> {
         if let (Some(start), Some(max)) = (self.start_time, self.max_duration) {
             if std::time::Instant::now().duration_since(start) > max {
-                return Err(RuntimeError::new(
+                return Err(RuntimeError::fatal(
                     format!("Wall-clock timeout exceeded: {:?}", max),
                     0,
                 ));
@@ -475,23 +651,27 @@ impl Vm {
         res
     }
 
-    fn run_from_pc_internal(&mut self, bytecode: &Bytecode, start_pc: usize) -> RuntimeResult<Value> {
+    fn run_from_pc_internal(
+        &mut self,
+        bytecode: &Bytecode,
+        start_pc: usize,
+    ) -> RuntimeResult<Value> {
         let mut pc: usize = start_pc;
 
         while pc < bytecode.code.len() && !self.halted {
-            // Check timeout and shutdown every 1000 steps
+            // Check timeout and shutdown every 1000 steps (fatal — uncatchable)
             if self.steps % 1000 == 0 {
                 self.check_timeout()?;
                 if let Some(ref flag) = self.shutdown_flag {
                     if flag.load(Ordering::Relaxed) {
-                        return Err(RuntimeError::new("Shutdown requested", pc));
+                        return Err(RuntimeError::fatal("Shutdown requested", pc));
                     }
                 }
             }
 
             self.steps += 1;
             if self.steps > self.max_steps {
-                return Err(RuntimeError::new("Max steps exceeded", pc));
+                return Err(RuntimeError::fatal("Max steps exceeded", pc));
             }
 
             let op_byte = bytecode.read_u16(&mut pc)?;
@@ -681,10 +861,16 @@ impl Vm {
                         // instrumentation first) — sparse_restore uses count-based zero.
                         let callee_dirty = self.dirty_bits;
                         self.dirty_bits = frame.caller_dirty_bits;
-                        self.sparse_restore(self.config.saved_register_count, callee_dirty, &frame.saved_regs);
+                        self.sparse_restore(
+                            self.config.saved_register_count,
+                            callee_dirty,
+                            &frame.saved_regs,
+                        );
                         self.registers[frame.base_reg] = return_val.clone();
                         pc = frame.return_pc;
-                        if pc == usize::MAX {  return Ok(return_val.clone()); }
+                        if pc == usize::MAX {
+                            return Ok(return_val.clone());
+                        }
                     } else {
                         // GC: release arg-passing zone (150-199) and temp zone (200-249)
                         // Only when returning to native host — intermediate returns
@@ -692,7 +878,7 @@ impl Vm {
                         for i in 150..250 {
                             self.registers[i] = Value::Nil;
                         }
-                         return Ok(return_val);
+                        return Ok(return_val);
                     }
                 }
 
@@ -704,7 +890,11 @@ impl Vm {
                     if let Value::Array(ref a) = arr {
                         self.check_array_size(a.len() + 1)?;
                     }
-                    let new_arr = builtins::builtin_push(self, bytecode, &[arr, self.get_register_cloned(val)])?;
+                    let new_arr = builtins::builtin_push(
+                        self,
+                        bytecode,
+                        &[arr, self.get_register_cloned(val)],
+                    )?;
                     self.set_register(dst, new_arr);
                 }
 
@@ -715,7 +905,9 @@ impl Vm {
                     let container = self.get_register_cloned(arr);
                     let key = self.get_register_cloned(idx);
                     let val = match &container {
-                        Value::Array(_) => builtins::builtin_get_at(self, bytecode, &[container, key])?,
+                        Value::Array(_) => {
+                            builtins::builtin_get_at(self, bytecode, &[container, key])?
+                        }
                         Value::Map(map) => {
                             let field = key
                                 .as_string()
@@ -736,7 +928,8 @@ impl Vm {
                     let value = self.get_register_cloned(val);
                     match container {
                         Value::Array(_) => {
-                            let new_arr = builtins::builtin_set_at(self, bytecode, &[container, key, value])?;
+                            let new_arr =
+                                builtins::builtin_set_at(self, bytecode, &[container, key, value])?;
                             self.set_register(dst, new_arr);
                         }
                         Value::Map(mut map) => {
@@ -765,7 +958,11 @@ impl Vm {
                 Opcode::Len => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    let len = builtins::builtin_array_len(self, bytecode, &[self.get_register_cloned(src)])?;
+                    let len = builtins::builtin_array_len(
+                        self,
+                        bytecode,
+                        &[self.get_register_cloned(src)],
+                    )?;
                     self.set_register(dst, len);
                 }
 
@@ -794,7 +991,8 @@ impl Vm {
                 Opcode::StrLen => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    let len = builtins::builtin_strlen(self, bytecode, &[self.get_register_cloned(src)])?;
+                    let len =
+                        builtins::builtin_strlen(self, bytecode, &[self.get_register_cloned(src)])?;
                     self.set_register(dst, len);
                 }
 
@@ -803,11 +1001,15 @@ impl Vm {
                     let s = bytecode.read_u8(&mut pc)? as usize;
                     let start = bytecode.read_u8(&mut pc)? as usize;
                     let len = bytecode.read_u8(&mut pc)? as usize;
-                    let result = builtins::builtin_substring(self, bytecode, &[
-                        self.get_register_cloned(s),
-                        self.get_register_cloned(start),
-                        self.get_register_cloned(len),
-                    ])?;
+                    let result = builtins::builtin_substring(
+                        self,
+                        bytecode,
+                        &[
+                            self.get_register_cloned(s),
+                            self.get_register_cloned(start),
+                            self.get_register_cloned(len),
+                        ],
+                    )?;
                     self.set_register(dst, result);
                 }
 
@@ -829,24 +1031,27 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let a = bytecode.read_u8(&mut pc)? as usize;
                     let b = bytecode.read_u8(&mut pc)? as usize;
-                    let result = builtins::builtin_strcmp(self, bytecode, &[
-                        self.get_register_cloned(a),
-                        self.get_register_cloned(b),
-                    ])?;
+                    let result = builtins::builtin_strcmp(
+                        self,
+                        bytecode,
+                        &[self.get_register_cloned(a), self.get_register_cloned(b)],
+                    )?;
                     self.set_register(dst, result);
                 }
 
                 Opcode::Ord => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    let result = builtins::builtin_ord(self, bytecode, &[self.get_register_cloned(src)])?;
+                    let result =
+                        builtins::builtin_ord(self, bytecode, &[self.get_register_cloned(src)])?;
                     self.set_register(dst, result);
                 }
 
                 Opcode::Char => {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
                     let src = bytecode.read_u8(&mut pc)? as usize;
-                    let result = builtins::builtin_char(self, bytecode, &[self.get_register_cloned(src)])?;
+                    let result =
+                        builtins::builtin_char(self, bytecode, &[self.get_register_cloned(src)])?;
                     self.set_register(dst, result);
                 }
 
@@ -925,6 +1130,11 @@ impl Vm {
                             agent.end_cycle(&name);
                         }
                     }
+
+                    // Deterministic GC sweep at end of each completed cycle
+                    if !should_continue {
+                        self.gc_sweep();
+                    }
                 }
 
                 Opcode::LatentGet => {
@@ -988,6 +1198,7 @@ impl Vm {
                         .unwrap_or_else(|| "AnonymousAgent".to_string());
 
                     let id = self.agent_pool.spawn(&name);
+                    self.reseed(&name); // Kill the Clone Army: unique PRNG per agent
                     self.current_agent = Some(id);
                     self.set_register(0, Value::I64(id as i64));
                 }
@@ -1054,12 +1265,10 @@ impl Vm {
                 }
 
                 Opcode::BarrierArrive => {
-                    let barrier_id = bytecode.read_u32(&mut pc)? as u64;
-                    let agent_id = bytecode.read_u8(&mut pc)? as usize;
-                    let agent = match &self.registers[agent_id] {
-                        Value::I64(id) => *id as u64,
-                        _ => return Err(RuntimeError::new("BarrierArrive requires agent ID", pc)),
-                    };
+                    let barrier_reg = bytecode.read_u8(&mut pc)? as usize;
+                    let agent_reg = bytecode.read_u8(&mut pc)? as usize;
+                    let barrier_id = self.registers[barrier_reg].as_i64().unwrap_or(0) as u64;
+                    let agent = self.registers[agent_reg].as_i64().unwrap_or(0) as u64;
                     if let Some(scale_id) = self.current_scale {
                         if let Some(scale) = self.scale_pool.get_mut(scale_id) {
                             let released = scale.arrive_barrier(barrier_id, agent)?;
@@ -1069,7 +1278,8 @@ impl Vm {
                 }
 
                 Opcode::BarrierCheck => {
-                    let barrier_id = bytecode.read_u32(&mut pc)? as u64;
+                    let barrier_reg = bytecode.read_u8(&mut pc)? as usize;
+                    let barrier_id = self.registers[barrier_reg].as_i64().unwrap_or(0) as u64;
                     if let Some(scale_id) = self.current_scale {
                         if let Some(scale) = self.scale_pool.get(scale_id) {
                             let released = scale.check_barrier(barrier_id)?;
@@ -1132,12 +1342,17 @@ impl Vm {
                     let agent_idx = bytecode.read_u32(&mut pc)? as usize;
                     let target_idx = bytecode.read_u32(&mut pc)? as usize;
                     let agent_name = bytecode.strings.get(agent_idx).cloned().unwrap_or_default();
-                    let target_name = bytecode.strings.get(target_idx).cloned().unwrap_or_default();
+                    let target_name = bytecode
+                        .strings
+                        .get(target_idx)
+                        .cloned()
+                        .unwrap_or_default();
                     log::debug!(target: "hlx", "migrate {} to {}", agent_name, target_name);
                     // Find the agent ID by name from current scale, then migrate
                     if let Some(src_id) = self.current_scale {
                         // Collect agent IDs to migrate (agents whose registered name matches)
-                        let agent_ids: Vec<u64> = self.scale_pool
+                        let agent_ids: Vec<u64> = self
+                            .scale_pool
                             .get(src_id)
                             .map(|s| s.agents.clone())
                             .unwrap_or_default();
@@ -1580,11 +1795,18 @@ impl Vm {
                         .or_insert_with(AgentMemory::new);
                     self.rsi_pipeline.apply_proposal(proposal_id, memory)?;
 
+                    // Emit sync event for corpus.db update
+                    self.sync_events.push(SyncEvent::RSIApplied {
+                        agent_id,
+                        proposal_id,
+                    });
+
                     // Phase 4.4: Auto-promotion after successful RSIApply
-                    // Check if promotion criteria are met
                     if let Some(new_level) = self.rsi_pipeline.check_promotion() {
-                        // Promotion occurred - log it (could emit an event in the future)
-                        let _ = new_level; // Use the promotion level if needed
+                        self.sync_events.push(SyncEvent::Promotion {
+                            agent_id,
+                            new_level: new_level.name().to_string(),
+                        });
                     }
                 }
 
@@ -1784,8 +2006,13 @@ impl Vm {
                             let args: Vec<Value> = (0..arg_count)
                                 .map(|i| self.registers[arg_base + i].clone())
                                 .collect();
-                            let result = self.call_builtin_by_name(func_name, &args, bytecode)?;
-                            self.registers[dst] = result;
+                            match self.call_builtin_by_name(func_name, &args, bytecode) {
+                                Ok(result) => self.registers[dst] = result,
+                                Err(e) => match self.try_catch_error(e) {
+                                    Ok(catch_pc) => { pc = catch_pc; continue; }
+                                    Err(e) => return Err(e),
+                                },
+                            }
                         }
                     }
                 }
@@ -1798,7 +2025,8 @@ impl Vm {
                     let dst = bytecode.read_u8(&mut pc)? as usize;
 
                     // O(1) reverse lookup: pc → (param_count, name)
-                    let (param_count, callee_name) = self.functions_by_pc
+                    let (param_count, callee_name) = self
+                        .functions_by_pc
                         .get(&target_pc)
                         .map(|(params, name)| (*params, name.clone()))
                         .unwrap_or((0, String::from("<?>")));
@@ -1888,14 +2116,68 @@ impl Vm {
                         let args: Vec<Value> = (0..arg_count)
                             .map(|i| self.registers[arg_base + i].clone())
                             .collect();
-                        let result = self.call_builtin_by_name(&func_name, &args, bytecode)?;
-                        self.registers[dst] = result;
+                        match self.call_builtin_by_name(&func_name, &args, bytecode) {
+                            Ok(result) => self.registers[dst] = result,
+                            Err(e) => match self.try_catch_error(e) {
+                                Ok(catch_pc) => { pc = catch_pc; continue; }
+                                Err(e) => return Err(e),
+                            },
+                        }
+                    }
+                }
+
+                Opcode::Try => {
+                    let catch_pc = bytecode.read_u32(&mut pc)? as usize;
+                    let error_reg = bytecode.read_u8(&mut pc)? as usize;
+                    self.exception_handlers.push(ExceptionHandler {
+                        catch_pc,
+                        error_reg,
+                        call_depth: self.call_stack.len(),
+                        loop_depth: self.loop_stack.len(),
+                    });
+                }
+
+                Opcode::EndTry => {
+                    // Normal completion of try block — discard the handler
+                    self.exception_handlers.pop();
+                }
+
+                Opcode::Throw => {
+                    let err_reg = bytecode.read_u8(&mut pc)? as usize;
+                    let err_msg = match self.get_register_cloned(err_reg) {
+                        Value::String(s) => s,
+                        other => format!("{:?}", other),
+                    };
+                    if let Some(handler) = self.exception_handlers.pop() {
+                        // Unwind call/loop stacks to handler's depth
+                        self.call_stack.truncate(handler.call_depth);
+                        self.loop_stack.truncate(handler.loop_depth);
+                        self.set_register(handler.error_reg, Value::String(err_msg));
+                        pc = handler.catch_pc;
+                    } else {
+                        return Err(RuntimeError::new(
+                            format!("Uncaught exception: {}", err_msg),
+                            pc,
+                        ));
                     }
                 }
             }
         }
 
         Ok(self.registers[0].clone())
+    }
+
+    /// Route a non-fatal error to the nearest exception handler.
+    /// Returns Some(catch_pc) if handled, None if no handler or fatal.
+    fn try_catch_error(&mut self, err: RuntimeError) -> Result<usize, RuntimeError> {
+        if err.fatal || self.exception_handlers.is_empty() {
+            return Err(err);
+        }
+        let handler = self.exception_handlers.pop().unwrap();
+        self.call_stack.truncate(handler.call_depth);
+        self.loop_stack.truncate(handler.loop_depth);
+        self.set_register(handler.error_reg, Value::String(err.message));
+        Ok(handler.catch_pc)
     }
 
     fn binary_add(&self, a: &Value, b: &Value) -> RuntimeResult<Value> {
@@ -2013,7 +2295,8 @@ impl Vm {
 
     pub fn register_function(&mut self, name: &str, start_pc: usize, params: usize) {
         self.functions.insert(name.to_string(), (start_pc, params));
-        self.functions_by_pc.insert(start_pc, (params, name.to_string()));
+        self.functions_by_pc
+            .insert(start_pc, (params, name.to_string()));
     }
 
     /// Call an exported function by name with arguments.
@@ -2026,7 +2309,7 @@ impl Vm {
         args: &[Value],
     ) -> RuntimeResult<Value> {
         let is_nested = self.exec_nesting > 0;
-        
+
         if let Some(&(start_pc, param_count)) = self.functions.get(func_name) {
             if !is_nested {
                 // Reset state for top-level call
@@ -2085,7 +2368,8 @@ impl Vm {
         } else {
             Err(RuntimeError::new(
                 format!("Function '{}' not found", func_name),
-                0))
+                0,
+            ))
         }
     }
     pub fn call_value(
@@ -2110,7 +2394,12 @@ impl Vm {
         }
     }
 
-    fn call_builtin_by_name(&mut self, name: &str, args: &[Value], bytecode: &Bytecode) -> RuntimeResult<Value> {
+    fn call_builtin_by_name(
+        &mut self,
+        name: &str,
+        args: &[Value],
+        bytecode: &Bytecode,
+    ) -> RuntimeResult<Value> {
         match name {
             "map" => builtins::builtin_map(self, bytecode, args),
             "filter" => builtins::builtin_filter(self, bytecode, args),
@@ -2209,6 +2498,32 @@ impl Vm {
             // Tensor builtins for Bit
             "set_tensor" => builtins::builtin_set_tensor(self, bytecode, args),
             "get_tensor" => builtins::builtin_get_tensor(self, bytecode, args),
+            "tensor_blend" => builtins::builtin_tensor_blend(self, bytecode, args),
+            "mem_query_vec" => builtins::builtin_mem_query_vec(self, bytecode, args),
+            "mem_store_vec" => builtins::builtin_mem_store_vec(self, bytecode, args),
+            "__native_embed" => builtins::builtin_native_embed(self, bytecode, args),
+            "native_zeros" => builtins::builtin_native_zeros(self, bytecode, args),
+            "native_rand" => builtins::builtin_native_rand(self, bytecode, args),
+            "tensor_slice" => builtins::builtin_tensor_slice(self, bytecode, args),
+            "tensor_merge" => builtins::builtin_tensor_merge(self, bytecode, args),
+            "tensor_topology_score" => {
+                builtins::builtin_tensor_topology_score(self, bytecode, args)
+            }
+            "tensor_convolve" => builtins::builtin_tensor_convolve(self, bytecode, args),
+            "tensor_correlate" => builtins::builtin_tensor_correlate(self, bytecode, args),
+            "tensor_normalize" => builtins::builtin_tensor_normalize(self, bytecode, args),
+            "patch_module" => builtins::builtin_patch_module(self, bytecode, args),
+            "get_substrate_pressure" => {
+                builtins::builtin_get_substrate_pressure(self, bytecode, args)
+            }
+            "snapshot" => builtins::builtin_snapshot(self, bytecode, args),
+            "restore" => builtins::builtin_restore(self, bytecode, args),
+            // Phase 19: Symmetric Python→HLX tensor bridge
+            "tensor_from_json" => builtins::builtin_tensor_from_json(self, bytecode, args),
+            // Phase 21: Tether inbox async polling
+            "poll_inbox" => builtins::builtin_poll_inbox(self, bytecode, args),
+            // Phase 22: SMI SQLite sync — drain queued sync events
+            "drain_sync_events" => builtins::builtin_drain_sync_events(self, bytecode, args),
             _ => Err(RuntimeError::new(format!("Unknown function: {}", name), 0)),
         }
     }

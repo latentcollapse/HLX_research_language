@@ -93,6 +93,8 @@ pub fn walk_item(visitor: &mut impl Visitor, item: &Item) -> VisitResult {
             VisitResult::Continue
         }
         Item::Import(_) | Item::Export(_) | Item::Struct(_) => VisitResult::Continue,
+        Item::ExternFunction(func) => walk_function(visitor, func),
+        Item::Global(stmt) => walk_statement(visitor, stmt),
     };
 
     if result == VisitResult::Stop {
@@ -268,6 +270,24 @@ pub fn walk_statement(visitor: &mut impl Visitor, stmt: &Statement) -> VisitResu
             }
             VisitResult::Continue
         }
+        StmtKind::Match(m) => {
+            if walk_expression(visitor, &m.subject) == VisitResult::Stop {
+                return VisitResult::Stop;
+            }
+            for arm in &m.arms {
+                if let Some(guard) = &arm.guard {
+                    if walk_expression(visitor, guard) == VisitResult::Stop {
+                        return VisitResult::Stop;
+                    }
+                }
+                for s in &arm.body {
+                    if walk_statement(visitor, s) == VisitResult::Stop {
+                        return VisitResult::Stop;
+                    }
+                }
+            }
+            VisitResult::Continue
+        }
         StmtKind::Module(m) => {
             for item in &m.items {
                 if walk_item(visitor, item) == VisitResult::Stop {
@@ -398,6 +418,14 @@ pub fn walk_expression(visitor: &mut impl Visitor, expr: &Expression) -> VisitRe
         }
         ExprKind::Collapse(inner) | ExprKind::Resolve(inner) => walk_expression(visitor, inner),
         ExprKind::Cast { expr, .. } => walk_expression(visitor, expr),
+        ExprKind::Do { fields, .. } => {
+            for (_, value) in fields {
+                if walk_expression(visitor, value) == VisitResult::Stop {
+                    return VisitResult::Stop;
+                }
+            }
+            VisitResult::Continue
+        }
     };
 
     if result == VisitResult::Stop {

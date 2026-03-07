@@ -111,6 +111,12 @@ pub enum ExprKind {
         expr: Box<Expression>,
         target_type: String,
     },
+    /// Do expression: do IntentName { field: value, ... }
+    /// Invokes a named intent with field bindings.
+    Do {
+        intent_name: String,
+        fields: Vec<(String, Expression)>,
+    },
     /// Match expression: match val { pattern => body, ... }
     Match {
         value: Box<Expression>,
