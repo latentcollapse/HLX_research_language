@@ -144,6 +144,22 @@ module hlx_lexer {
         if word == "case" { return 111; }
         if word == "default" { return 112; }
         if word == "match" { return 113; }
+        // Phase 5 (Ouroboros): Axiomatic syntax backport
+        if word == "intent" { return 120; }
+        if word == "do" { return 121; }
+        if word == "contract" { return 122; }
+        if word == "try" { return 123; }
+        if word == "catch" { return 124; }
+        if word == "throw" { return 125; }
+        if word == "extern" { return 126; }
+        if word == "for" { return 127; }
+        if word == "while" { return 128; }
+        if word == "struct" { return 129; }
+        if word == "as" { return 130; }
+        if word == "spawn" { return 131; }
+        if word == "migrate" { return 132; }
+        if word == "to" { return 133; }
+        if word == "human" { return 134; }
         return 1;  // TOK_IDENT
     }
 

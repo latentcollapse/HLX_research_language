@@ -764,6 +764,23 @@ fn TOK_DEFAULT() -> i64 { return 112; }
 fn TOK_MATCH() -> i64 { return 113; }
 fn TOK_FAT_ARROW() -> i64 { return 114; }
 
+// Phase 5 (Ouroboros): Axiomatic syntax tokens
+fn TOK_INTENT() -> i64 { return 120; }
+fn TOK_DO() -> i64 { return 121; }
+fn TOK_CONTRACT() -> i64 { return 122; }
+fn TOK_TRY() -> i64 { return 123; }
+fn TOK_CATCH() -> i64 { return 124; }
+fn TOK_THROW() -> i64 { return 125; }
+fn TOK_EXTERN() -> i64 { return 126; }
+fn TOK_FOR() -> i64 { return 127; }
+fn TOK_WHILE() -> i64 { return 128; }
+fn TOK_STRUCT() -> i64 { return 129; }
+fn TOK_AS() -> i64 { return 130; }
+fn TOK_SPAWN() -> i64 { return 131; }
+fn TOK_MIGRATE() -> i64 { return 132; }
+fn TOK_TO() -> i64 { return 133; }
+fn TOK_HUMAN() -> i64 { return 134; }
+
 // ============================================================================
 // Type Parsing
 // ============================================================================
@@ -1653,6 +1670,192 @@ fn parse_statement(state: [i64]) -> [i64] {
         let dissolvable_result = parse_dissolvable_agent(state);
         stmt = get_at(dissolvable_result, 0);
         state = int_to_ptr(get_at(dissolvable_result, 1));
+    }
+    // ============================================================================
+    // PHASE 5 (OUROBOROS): AXIOMATIC SYNTAX
+    // ============================================================================
+    // try/catch statement
+    else if kind == TOK_TRY() {
+        state = advance(state);
+        state = expect(state, TOK_LBRACE());
+
+        let try_body = [];
+        loop(peek_kind(state) != TOK_RBRACE(), 1000) {
+            if peek_kind(state) == TOK_RBRACE() { break; }
+            let stmt_result = parse_statement(state);
+            let s = get_at(stmt_result, 0);
+            state = int_to_ptr(get_at(stmt_result, 1));
+            try_body = push(try_body, s);
+        }
+        state = expect(state, TOK_RBRACE());
+
+        state = expect(state, TOK_CATCH());
+
+        // Optional error variable name
+        let error_var = 0;
+        if peek_kind(state) == TOK_IDENT() {
+            state = advance(state);
+            let tokens = parser_tokens(state);
+            let pos = parser_pos(state) - 1;
+            let tok = get_at(tokens, pos);
+            error_var = get_at(tok, 1);
+        }
+
+        state = expect(state, TOK_LBRACE());
+
+        let catch_body = [];
+        loop(peek_kind(state) != TOK_RBRACE(), 1000) {
+            if peek_kind(state) == TOK_RBRACE() { break; }
+            let stmt_result = parse_statement(state);
+            let s = get_at(stmt_result, 0);
+            state = int_to_ptr(get_at(stmt_result, 1));
+            catch_body = push(catch_body, s);
+        }
+        state = expect(state, TOK_RBRACE());
+
+        // Represent as a block containing try_body (node type 50 = try/catch)
+        let try_node = [50, error_var, 0, 0];
+        try_node = set_at(try_node, 2, ptr_to_int(try_body));
+        try_node = set_at(try_node, 3, ptr_to_int(catch_body));
+        stmt = ptr_to_int(try_node);
+    }
+    // throw statement
+    else if kind == TOK_THROW() {
+        state = advance(state);
+        let value_result = parse_expression(state);
+        let value = get_at(value_result, 0);
+        state = int_to_ptr(get_at(value_result, 1));
+        state = expect(state, TOK_SEMICOLON());
+
+        let throw_node = [51, value, 0, 0];
+        stmt = ptr_to_int(throw_node);
+    }
+    // intent declaration
+    else if kind == TOK_INTENT() {
+        state = advance(state);
+        state = expect(state, TOK_IDENT());
+        let tokens = parser_tokens(state);
+        let pos = parser_pos(state) - 1;
+        let tok = get_at(tokens, pos);
+        let intent_name = get_at(tok, 1);
+
+        state = expect(state, TOK_LBRACE());
+
+        let intent_body = [];
+        loop(peek_kind(state) != TOK_RBRACE(), 1000) {
+            if peek_kind(state) == TOK_RBRACE() { break; }
+            let stmt_result = parse_statement(state);
+            let s = get_at(stmt_result, 0);
+            state = int_to_ptr(get_at(stmt_result, 1));
+            intent_body = push(intent_body, s);
+        }
+        state = expect(state, TOK_RBRACE());
+
+        let intent_node = [52, intent_name, 0, 0];
+        intent_node = set_at(intent_node, 2, ptr_to_int(intent_body));
+        stmt = ptr_to_int(intent_node);
+    }
+    // for loop: for x in iterable { ... }
+    else if kind == TOK_FOR() {
+        state = advance(state);
+        state = expect(state, TOK_IDENT());
+        let tokens = parser_tokens(state);
+        let pos = parser_pos(state) - 1;
+        let tok = get_at(tokens, pos);
+        let var_name = get_at(tok, 1);
+
+        // Expect "in" keyword (parsed as ident)
+        state = advance(state);
+
+        let iter_result = parse_expression(state);
+        let iterable = get_at(iter_result, 0);
+        state = int_to_ptr(get_at(iter_result, 1));
+
+        state = expect(state, TOK_LBRACE());
+
+        let for_body = [];
+        loop(peek_kind(state) != TOK_RBRACE(), 1000) {
+            if peek_kind(state) == TOK_RBRACE() { break; }
+            let stmt_result = parse_statement(state);
+            let s = get_at(stmt_result, 0);
+            state = int_to_ptr(get_at(stmt_result, 1));
+            for_body = push(for_body, s);
+        }
+        state = expect(state, TOK_RBRACE());
+
+        let for_node = [53, var_name, iterable, 0];
+        for_node = set_at(for_node, 3, ptr_to_int(for_body));
+        stmt = ptr_to_int(for_node);
+    }
+    // while loop: while condition { ... }
+    else if kind == TOK_WHILE() {
+        state = advance(state);
+        let cond_result = parse_expression(state);
+        let cond = get_at(cond_result, 0);
+        state = int_to_ptr(get_at(cond_result, 1));
+
+        state = expect(state, TOK_LBRACE());
+
+        let while_body = [];
+        loop(peek_kind(state) != TOK_RBRACE(), 1000) {
+            if peek_kind(state) == TOK_RBRACE() { break; }
+            let stmt_result = parse_statement(state);
+            let s = get_at(stmt_result, 0);
+            state = int_to_ptr(get_at(stmt_result, 1));
+            while_body = push(while_body, s);
+        }
+        state = expect(state, TOK_RBRACE());
+
+        let while_node = [54, cond, 0, 0];
+        while_node = set_at(while_node, 2, ptr_to_int(while_body));
+        stmt = ptr_to_int(while_node);
+    }
+    // struct definition
+    else if kind == TOK_STRUCT() {
+        state = advance(state);
+        state = expect(state, TOK_IDENT());
+        let tokens = parser_tokens(state);
+        let pos = parser_pos(state) - 1;
+        let tok = get_at(tokens, pos);
+        let struct_name = get_at(tok, 1);
+
+        state = expect(state, TOK_LBRACE());
+
+        let fields = [];
+        loop(peek_kind(state) != TOK_RBRACE(), 100) {
+            if peek_kind(state) == TOK_RBRACE() { break; }
+            state = expect(state, TOK_IDENT());
+            let ftokens = parser_tokens(state);
+            let fpos = parser_pos(state) - 1;
+            let ftok = get_at(ftokens, fpos);
+            let field_name = get_at(ftok, 1);
+
+            state = expect(state, TOK_COLON());
+            let type_result = parse_type(state);
+            state = int_to_ptr(get_at(type_result, 1));
+
+            fields = push(fields, field_name);
+
+            if peek_kind(state) == TOK_COMMA() {
+                state = advance(state);
+            }
+        }
+        state = expect(state, TOK_RBRACE());
+
+        let struct_node = [55, struct_name, 0, 0];
+        struct_node = set_at(struct_node, 2, ptr_to_int(fields));
+        stmt = ptr_to_int(struct_node);
+    }
+    // extern function declaration
+    else if kind == TOK_EXTERN() {
+        state = advance(state);
+        // Parse the function that follows
+        let fn_result = parse_statement(state);
+        let fn_stmt = get_at(fn_result, 0);
+        state = int_to_ptr(get_at(fn_result, 1));
+
+        let extern_node = [56, fn_stmt, 0, 0];
+        stmt = ptr_to_int(extern_node);
     }
     // Expression statement or assignment
     else {
